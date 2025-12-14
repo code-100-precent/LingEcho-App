@@ -1,0 +1,79 @@
+# 开发环境 Docker Compose 配置
+version: '3.8'
+
+services:
+  # 主应用服务（开发模式）
+  lingecho:
+    build: .
+    container_name: lingecho-dev
+    ports:
+      - "7072:7072"
+      - "8000:8000"
+    environment:
+      - APP_ENV=development
+      - MODE=dev
+      - ADDR=:7072
+      - VOICE_SERVER_ADDR=:8000
+      - DB_DRIVER=sqlite
+      - DSN=./data/ling.db
+      - LOG_LEVEL=debug
+    volumes:
+      - .:/app
+      - ./data:/app/data
+      - ./logs:/app/logs
+      - ./uploads:/app/uploads
+    restart: unless-stopped
+    networks:
+      - lingecho-dev-network
+
+  # 前端开发服务器
+  frontend:
+    image: node:18-alpine
+    container_name: lingecho-frontend-dev
+    working_dir: /app
+    ports:
+      - "5173:5173"
+    volumes:
+      - ./ui:/app
+    command: sh -c "npm install && npm run dev -- --host 0.0.0.0"
+    environment:
+      - VITE_API_URL=http://localhost:7072
+      - VITE_VOICE_SERVER_URL=http://localhost:8000
+    depends_on:
+      - lingecho
+    networks:
+      - lingecho-dev-network
+
+  # PostgreSQL 开发数据库
+  postgres:
+    image: postgres:15-alpine
+    container_name: lingecho-postgres-dev
+    environment:
+      POSTGRES_DB: lingecho_dev
+      POSTGRES_USER: lingecho
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+    volumes:
+      - postgres_dev_data:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"
+    networks:
+      - lingecho-dev-network
+
+  # Redis 开发缓存
+  redis:
+    image: redis:7-alpine
+    container_name: lingecho-redis-dev
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_dev_data:/data
+    networks:
+      - lingecho-dev-network
+
+volumes:
+  postgres_dev_data:
+  redis_dev_data:
+
+networks:
+  lingecho-dev-network:
+    driver: bridge

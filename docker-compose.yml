@@ -1,0 +1,191 @@
+version: '3.8'
+
+services:
+  # 主应用服务
+  lingecho:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: lingecho-app
+    ports:
+      - "7072:7072"  # 主服务器端口
+      - "8000:8000"  # 语音服务器端口
+    environment:
+      # 基础配置
+      - APP_ENV=production
+      - MODE=production
+      - ADDR=:7072
+      - VOICE_SERVER_ADDR=:8000
+      
+      # 数据库配置
+      - DB_DRIVER=${DB_DRIVER:-sqlite}
+      - DSN=${DSN:-./data/ling.db}
+      
+      # API配置
+      - API_PREFIX=/api
+      - ADMIN_PREFIX=/admin
+      - AUTH_PREFIX=/auth
+      - DOCS_PREFIX=/api/docs
+      
+      # 会话配置
+      - SESSION_SECRET=${SESSION_SECRET:-change-this-secret-key-in-production}
+      - SESSION_EXPIRE_DAYS=${SESSION_EXPIRE_DAYS:-7}
+      
+      # LLM配置
+      - LLM_API_KEY=${LLM_API_KEY}
+      - LLM_BASE_URL=${LLM_BASE_URL:-https://api.openai.com/v1}
+      - LLM_MODEL=${LLM_MODEL:-deepseek-v3.1}
+      
+      # 七牛云配置（可选）
+      - QINIU_ASR_API_KEY=${QINIU_ASR_API_KEY:-}
+      - QINIU_ASR_BASE_URL=${QINIU_ASR_BASE_URL:-https://openai.qiniu.com/v1}
+      - QINIU_TTS_API_KEY=${QINIU_TTS_API_KEY:-}
+      - QINIU_TTS_BASE_URL=${QINIU_TTS_BASE_URL:-https://openai.qiniu.com/v1}
+      - QINIU_TTS_VOICE_TYPE=${QINIU_TTS_VOICE_TYPE:-qiniu_zh_female_tmjxxy}
+      
+      # 腾讯云配置（可选）
+      - QCLOUD_APP_ID=${QCLOUD_APP_ID:-}
+      - QCLOUD_SECRET_ID=${QCLOUD_SECRET_ID:-}
+      - QCLOUD_SECRET=${QCLOUD_SECRET:-}
+      - QCLOUD_VOICE_TYPE=${QCLOUD_VOICE_TYPE:-602003}
+      - QCLOUD_SPEED=${QCLOUD_SPEED:-1.2}
+      - QCLOUD_VOLUME=${QCLOUD_VOLUME:-1.0}
+      - QCLOUD_PITCH=${QCLOUD_PITCH:-1.0}
+      
+      # 日志配置
+      - LOG_LEVEL=${LOG_LEVEL:-info}
+      - LOG_FILENAME=./logs/app.log
+      - LOG_MAX_SIZE=${LOG_MAX_SIZE:-100}
+      - LOG_MAX_AGE=${LOG_MAX_AGE:-30}
+      - LOG_MAX_BACKUPS=${LOG_MAX_BACKUPS:-5}
+      
+      # 搜索配置
+      - SEARCH_ENABLED=${SEARCH_ENABLED:-true}
+      - SEARCH_PATH=./search
+      - SEARCH_BATCH_SIZE=${SEARCH_BATCH_SIZE:-100}
+      
+      # 备份配置
+      - BACKUP_ENABLED=${BACKUP_ENABLED:-true}
+      - BACKUP_PATH=./backups
+      - BACKUP_SCHEDULE=${BACKUP_SCHEDULE:-0 2 * * *}
+      
+      # 监控配置
+      - MONITOR_PREFIX=/metrics
+      - LANGUAGE_ENABLED=${LANGUAGE_ENABLED:-true}
+      - API_SECRET_KEY=${API_SECRET_KEY:-}
+      
+      # SSL/TLS配置（可选）
+      - SSL_ENABLED=${SSL_ENABLED:-false}
+      - SSL_CERT_FILE=${SSL_CERT_FILE:-./ssl/lingecho.com_bundle.pem}
+      - SSL_KEY_FILE=${SSL_KEY_FILE:-./ssl/lingecho.com.key}
+    volumes:
+      - ./data:/app/data
+      - ./logs:/app/logs
+      - ./uploads:/app/uploads
+      - ./backups:/app/backups
+      - ./media_cache:/app/media_cache
+      - ./recorddata:/app/recorddata
+      - ./tracedata:/app/tracedata
+      - ./ssl:/app/ssl:ro  # SSL证书目录（只读）
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:7072/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    networks:
+      - lingecho-network
+
+  # PostgreSQL 数据库服务（可选，使用 profile 启用）
+  postgres:
+    image: postgres:15-alpine
+    container_name: lingecho-postgres
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-lingecho}
+      POSTGRES_USER: ${POSTGRES_USER:-lingecho}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-lingecho123}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    ports:
+      - "${POSTGRES_PORT:-5432}:5432"
+    restart: unless-stopped
+    networks:
+      - lingecho-network
+    profiles:
+      - postgres
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-lingecho}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # Redis 缓存服务（可选，使用 profile 启用）
+  redis:
+    image: redis:7-alpine
+    container_name: lingecho-redis
+    command: redis-server --appendonly yes --requirepass ${REDIS_PASSWORD:-}
+    ports:
+      - "${REDIS_PORT:-6379}:6379"
+    volumes:
+      - redis_data:/data
+    restart: unless-stopped
+    networks:
+      - lingecho-network
+    profiles:
+      - redis
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+
+  # Nginx 反向代理（可选，使用 profile 启用）
+  nginx:
+    image: nginx:alpine
+    container_name: lingecho-nginx
+    ports:
+      - "${NGINX_HTTP_PORT:-80}:80"
+      - "${NGINX_HTTPS_PORT:-443}:443"
+    volumes:
+      - ./nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./ssl:/etc/nginx/ssl:ro
+      - ./server/static:/usr/share/nginx/html/static:ro
+    depends_on:
+      - lingecho
+    restart: unless-stopped
+    networks:
+      - lingecho-network
+    profiles:
+      - nginx
+
+  # 前端开发服务器（开发环境，使用 profile 启用）
+  frontend-dev:
+    image: node:18-alpine
+    container_name: lingecho-frontend-dev
+    working_dir: /app
+    volumes:
+      - ./web:/app
+      - /app/node_modules  # 防止覆盖容器内的 node_modules
+    ports:
+      - "${FRONTEND_DEV_PORT:-5173}:5173"
+    command: sh -c "npm install && npm run dev -- --host 0.0.0.0 --port 5173"
+    environment:
+      - VITE_API_URL=${VITE_API_URL:-http://localhost:7072}
+      - VITE_VOICE_SERVER_URL=${VITE_VOICE_SERVER_URL:-http://localhost:8000}
+    depends_on:
+      - lingecho
+    networks:
+      - lingecho-network
+    profiles:
+      - dev
+
+volumes:
+  postgres_data:
+    driver: local
+  redis_data:
+    driver: local
+
+networks:
+  lingecho-network:
+    driver: bridge

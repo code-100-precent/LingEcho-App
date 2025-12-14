@@ -1,0 +1,22 @@
+# Docker安装全模块
+
+version: '3'
+services:
+  # MCP 接入点服务
+  voiceprint-api:
+    image: ghcr.nju.edu.cn/xinnan-tech/voiceprint-api:latest
+    container_name: voiceprint-api
+    restart: always
+    networks:
+      - default
+    ports:
+      - "8005:8005"
+    security_opt:
+      - seccomp:unconfined
+    environment:
+      - TZ=Asia/Shanghai
+    volumes:
+      # 配置文件目录
+      - ./data:/app/data
+networks:
+  default:

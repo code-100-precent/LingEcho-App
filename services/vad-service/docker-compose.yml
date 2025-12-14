@@ -1,0 +1,18 @@
+version: '3.8'
+
+services:
+  vad-service:
+    build: .
+    ports:
+      - "7073:7073"
+    volumes:
+      - ./rtcmedia:/app/rtcmedia  # 挂载模型目录
+    environment:
+      - PYTHONUNBUFFERED=1
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:7073/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+

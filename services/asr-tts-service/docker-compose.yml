@@ -1,0 +1,21 @@
+version: '3.8'
+
+services:
+  asr-tts-service:
+    build: .
+    container_name: asr-tts-service
+    ports:
+      - "7075:7075"
+    environment:
+      - HOST=0.0.0.0
+      - PORT=7075
+      - LOG_LEVEL=INFO
+    volumes:
+      - ./app:/app/app
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:7075/api/v1/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+

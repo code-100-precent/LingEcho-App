@@ -1,0 +1,35 @@
+# EAS Build ignore file
+# This file tells EAS Build which files to exclude from the build
+
+# Dependencies
+node_modules/
+**/node_modules/
+
+# Build outputs
+dist/
+build/
+*.log
+
+# Environment files
+.env
+.env.*
+
+# IDE files
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# React Native
+.expo/
+.expo-shared/
+
+# Other
+*.pem
+*.key
+*.cert
+

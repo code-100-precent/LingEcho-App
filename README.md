@@ -1,237 +1,228 @@
-# LingEcho React Native App
+# LingEcho - Intelligent Voice Interaction Platform
 
-这是 LingEcho 平台的移动端应用，使用 React Native 和 Expo 构建。
+<div align="center">
+<div align="center">
+  <img src="docs/logo.png" alt="LingEcho Logo" width="100" height="110">
+</div>
 
-## 快速开始
+**Intelligent Voice Interaction Platform - Giving AI a Real Voice**
 
-### 前置要求
+[![Go Version](https://img.shields.io/badge/Go-1.24.0-blue.svg)](https://golang.org/)
+[![React](https://img.shields.io/badge/React-18.2.0-61dafb.svg)](https://reactjs.org/)
+[![TypeScript](https://img.shields.io/badge/TypeScript-5.2.2-3178c6.svg)](https://www.typescriptlang.org/)
+[![License](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
+[![Build Status](https://img.shields.io/badge/Build-Passing-brightgreen.svg)]()
+[![Live Demo](https://img.shields.io/badge/Live%20Demo-lingecho.com-brightgreen.svg)](https://lingecho.com)
 
-- Node.js (推荐使用 v18 或更高版本)
-- npm 或 yarn
-- Expo CLI (会自动安装)
-- Expo Go 应用 (SDK 52 版本)
+[English](README.md) | [中文](README_CN.md)
 
-### 安装依赖
+### 🌐 Live Demo
+
+**Experience LingEcho online**: [https://lingecho.com](https://lingecho.com)
+
+</div>
+
+---
+
+## 📖 Project Overview
+
+LingEcho is an enterprise-grade intelligent voice interaction platform based on Go + React, providing a complete AI voice interaction solution. It integrates advanced speech recognition (ASR), text-to-speech (TTS), large language models (LLM), and real-time communication technologies, supporting real-time calls, voice cloning, knowledge base management, workflow automation, device management, alerting, billing, and other enterprise-level features.
+
+### ✨ Core Features
+
+-  **AI Character Real-time Calls** - Real-time voice calls with AI characters based on WebRTC technology, supporting high-quality audio transmission and low-latency interaction
+-  **Voice Cloning & Training** - Support for custom voice training and cloning, allowing AI assistants to have exclusive voice characteristics for personalized voice experiences
+-  **Workflow Automation** - Visual workflow designer with multiple trigger types (API, Event, Schedule, Webhook, Assistant), supporting complex business process automation
+-  **Knowledge Base Management** - Powerful knowledge base management system supporting document storage, retrieval, and AI analysis, providing intelligent knowledge services
+-  **Application Integration** - Quick integration of new applications through JS injection, API gateway, and key management, enabling seamless integration
+-  **Device Management** - Complete device management system with OTA firmware updates, device monitoring, and remote control
+-  **Alert System** - Comprehensive alerting system with rule-based monitoring, multi-channel notifications, and alert management
+-  **Billing System** - Flexible billing and usage tracking system with detailed usage records, bill generation, and quota management
+-  **Organization Management** - Multi-tenant organization management with group collaboration, member management, and resource sharing
+-  **Call Record Storage** - Call records stored in object storage, supporting subsequent review and analysis
+-  **Key Management & API Platform** - Enterprise-level key management system and API development platform
+-  **VAD Voice Activity Detection** - Standalone SileroVAD service supporting PCM and OPUS formats
+- ️ **Voiceprint Recognition Service** - ModelScope-based voiceprint recognition service supporting speaker identification
+-  **Hardware Device Support** - Support for xiaozhi protocol hardware devices with complete WebSocket communication
+
+---
+
+### Workflow Automation
+<div align="center">
+  <img src="docs/page-workflow.png" alt="Workflow Designer" width="800">
+  <p><em>Visual workflow designer with drag-and-drop interface</em></p>
+</div>
+
+### Voice Cloning
+<div align="center">
+  <img src="docs/page-voice-clone.png" alt="Voice Cloning" width="800">
+  <p><em>Voice cloning and training interface</em></p>
+</div>
+
+### Assistant Debug
+<div align="center">
+  <img src="docs/page-debug-assistant.png" alt="Assistant Debug" width="800">
+  <p><em>AI assistant debugging and testing interface</em></p>
+</div>
+
+### JS Template Integration
+<div align="center">
+  <img src="docs/page-js-template.png" alt="JS Template" width="800">
+  <p><em>JavaScript template for application integration</em></p>
+</div>
+
+---
+
+## 🏗️ Technical Architecture
+
+<div align="center">
+  <img src="docs/core.png" alt="LingEcho Core Architecture" width="800">
+</div>
+
+### Service Architecture
+
+| Service | Port | Tech Stack | Description |
+|---------|------|------------|-------------|
+| **Main Service** | 7072 | Go + Gin | Core backend service |
+| **Voice Service** | 8000 | Go | WebSocket voice service |
+| **VAD Service** | 7073 | Python + FastAPI | Voice activity detection service |
+| **Voiceprint Service** | 7074 | Python + FastAPI | Voiceprint recognition service |
+| **Frontend Service** | 3000 | React + Vite | Development frontend |
+
+For detailed architecture documentation, see [Architecture Documentation](docs/architecture.md).
+
+---
+
+## 🚀 Quick Start
+
+### Requirements
+
+- **Go** >= 1.24.0
+- **Node.js** >= 18.0.0
+- **npm** >= 8.0.0
+- **Git**
+- **Python** >= 3.10 (for optional services)
+- **Docker** & **Docker Compose** (for containerized deployment)
+
+### Installation Methods
+
+#### Method 1: Docker Compose (Recommended)
+
+The easiest way to get started with LingEcho is using Docker Compose:
 
 ```bash
-cd app
+# Clone the project
+git clone https://github.com/your-username/LingEcho.git
+cd LingEcho
+
+# Copy environment configuration
+cp server/env.example .env
+
+# Edit .env file and configure your settings
+# At minimum, set: SESSION_SECRET, LLM_API_KEY
+
+# Start services with Docker Compose
+docker-compose up -d
+
+# View logs
+docker-compose logs -f lingecho
+```
+
+**Access the Application:**
+- **Frontend Interface**: http://localhost:7072
+- **Backend API**: http://localhost:7072/api
+- **API Documentation**: http://localhost:7072/api/docs
+
+**Optional Services:**
+```bash
+# Start with PostgreSQL database
+docker-compose --profile postgres up -d
+
+# Start with Redis cache
+docker-compose --profile redis up -d
+
+# Start with Nginx reverse proxy
+docker-compose --profile nginx up -d
+
+# Start frontend development server
+docker-compose --profile dev up -d
+```
+
+#### Method 2: Manual Installation
+
+```bash
+# Clone the project
+git clone https://github.com/your-username/LingEcho.git
+cd LingEcho
+
+# Backend setup
+cd server
+go mod tidy
+cp env.example .env
+# Edit .env file with your configuration
+
+# Frontend setup
+cd ../web
 npm install
+npm run build  # For production
+# OR
+npm run dev    # For development
+
+# Start backend (from server directory)
+cd ../server
+go run ./cmd/server/main.go -mode=dev
 ```
 
-### 修复依赖版本（重要）
+**Access the Application:**
+- **Frontend Interface**: http://localhost:3000 (dev) or http://localhost:7072 (production)
+- **Backend API**: http://localhost:7072/api
+- **API Documentation**: http://localhost:7072/api/docs
 
-升级到 SDK 52 后，建议运行以下命令确保所有依赖版本正确：
+For detailed installation instructions, see [Installation Guide](docs/installation.md).
 
-```bash
-npx expo install --fix
-```
+---
 
-或者使用 yarn:
+## 📚 Documentation
 
-```bash
-cd app
-yarn install
-```
+- **[Installation Guide](docs/installation.md)** - Detailed installation and configuration instructions
+- **[Features Documentation](docs/features.md)** - Complete feature list with screenshots and examples
+- **[Architecture Documentation](docs/architecture.md)** - System architecture and design
+- **[Development Guide](docs/development.md)** - Development setup and contribution guidelines
+- **[Services Documentation](docs/services.md)** - Detailed service component documentation
 
-### 运行应用
+---
 
-#### 在 iOS 模拟器上运行
+## 🤝 Contributing
 
-```bash
-npm run ios
-```
+We welcome all forms of contributions! Please check our [Development Guide](docs/development.md) for details.
 
-#### 在 Android 模拟器上运行
+### Quick Contribution Steps
 
-```bash
-npm run android
-```
+1. **Fork the Project** - Click the Fork button in the top right corner
+2. **Create a Branch** - `git checkout -b feature/your-feature`
+3. **Commit Changes** - `git commit -m 'Add some feature'`
+4. **Push Branch** - `git push origin feature/your-feature`
+5. **Create PR** - Create a Pull Request on GitHub
 
-#### 在 Web 浏览器上运行
+---
 
-```bash
-npm run web
-```
+##  Our Team
 
-#### 启动开发服务器
+A core team of two full-stack engineers focused on innovation and application of AI voice technology.
 
-```bash
-npm start
-```
+| Member | Role | Responsibilities |
+|--------|------|------------------|
+| **chenting** | Full-stack Engineer + Project Manager | Responsible for overall project architecture design and full-stack development, leading product direction and technology selection |
+| **wangyueran** | Full-stack Engineer | Responsible for frontend interface development and user experience optimization, ensuring product usability |
 
-然后：
-- 按 `i` 在 iOS 模拟器上运行
-- 按 `a` 在 Android 模拟器上运行
-- 按 `w` 在 Web 浏览器上运行
-- 扫描二维码在真实设备上运行（需要安装 Expo Go 应用）
+## 📧 Contact Us
 
-### 使用 Expo Go 在真实设备上运行
+- **Email**: 19511899044@163.com
 
-1. 在 iOS App Store 或 Google Play Store 下载 **Expo Go** 应用
-2. 确保手机和电脑在同一 WiFi 网络下
-3. 运行 `npm start`
-4. 使用 Expo Go 扫描终端中显示的二维码
+---
 
-## 项目结构
+## ⭐ Star History
 
-```
-app/
-├── App.tsx                    # 主应用入口
-├── package.json               # 项目依赖配置
-├── tsconfig.json              # TypeScript 配置
-├── app.json                   # Expo 配置
-├── babel.config.js            # Babel 配置
-└── src/
-    ├── config/                # 配置文件
-    │   └── api.ts             # API配置
-    ├── context/               # React Context
-    │   └── AuthContext.tsx    # 认证上下文
-    ├── navigation/            # 导航配置
-    │   └── AppNavigator.tsx   # 主导航器
-    ├── screens/               # 页面组件
-    │   ├── HomeScreen.tsx     # 首页
-    │   ├── AssistantsScreen.tsx # 助手列表
-    │   ├── ChatScreen.tsx     # 聊天页面
-    │   ├── SettingsScreen.tsx # 设置页面
-    │   └── LoginScreen.tsx    # 登录页面
-    ├── services/              # API服务
-    │   ├── auth.ts            # 认证服务
-    │   └── assistant.ts      # 助手服务
-    └── utils/                 # 工具函数
-        └── request.ts         # HTTP请求封装
-```
+[![Star History Chart](https://api.star-history.com/svg?repos=code-100-precent/LingEcho&type=Date)](https://star-history.com/#your-username/LingEcho&Date)
 
-## 开发说明
-
-这是一个功能完整的 React Native 应用，包含：
-
-- ✅ 完整的导航系统（底部标签 + 堆栈导航）
-- ✅ 用户认证（登录/注册）
-- ✅ 助手管理（列表、创建、查看）
-- ✅ 聊天功能（实时对话界面）
-- ✅ 设置页面（用户信息、偏好设置）
-- ✅ API服务层（与后端集成）
-- ✅ 状态管理（Context API）
-- ✅ TypeScript 支持
-- ✅ Expo 框架集成
-
-## 功能特性
-
-### 已实现
-- ✅ 用户认证（登录/注册）
-- ✅ 助手列表和管理
-- ✅ 聊天界面
-- ✅ 设置页面
-- ✅ API集成
-- ✅ 导航系统
-
-### 待实现
-- [ ] WebSocket实时通信
-- [ ] 语音输入/输出
-- [ ] 语音克隆功能
-- [ ] 工作流管理
-- [ ] 知识库管理
-- [ ] 推送通知
-- [ ] 离线支持
-
-## 技术栈
-
-- **React Native**: 跨平台移动应用框架
-- **Expo**: React Native 开发工具链
-- **TypeScript**: 类型安全的 JavaScript
-- **React Navigation**: 导航库（已配置但未使用）
-
-## 配置说明
-
-### API地址配置
-
-API地址在 `src/config/api.ts` 中配置：
-
-- 开发环境：默认使用 `http://localhost:7072/api`
-- 生产环境：需要修改为实际的API地址
-
-如果后端运行在不同的地址，请修改 `src/config/api.ts` 中的配置。
-
-### 认证Token存储
-
-应用使用 `@react-native-async-storage/async-storage` 存储认证token和用户信息。
-
-## 缓存清理和热更新
-
-### 为什么 Expo Go 显示旧版本？
-
-如果更新代码后 Expo Go 还是显示旧版本，可能是缓存问题。以下是几种解决方案：
-
-#### 方法 1: 清除缓存启动（推荐）
-
-```bash
-npm run start:clear
-# 或
-npm start -- --clear
-```
-
-#### 方法 2: 完全清理缓存
-
-```bash
-# 清理 Expo 和 Metro 缓存
-npm run clean
-
-# 完全清理（包括 watchman，如果已安装）
-npm run clean:all
-
-# 清理后重新启动
-npm run reset
-```
-
-#### 方法 3: 在 Expo Go 中手动重新加载
-
-1. 在 Expo Go 应用中，**摇一摇手机**（或按快捷键）
-2. 选择 **"Reload"** 或 **"重新加载"**
-3. 或者按 `Cmd+R` (iOS) / `R+R` (Android) 在开发菜单中
-
-#### 方法 4: 清除 Expo Go 应用缓存
-
-**iOS:**
-- 长按 Expo Go 应用图标
-- 选择 "卸载应用" 或删除后重新安装
-
-**Android:**
-- 设置 → 应用 → Expo Go → 存储 → 清除缓存
-
-#### 方法 5: 使用开发菜单强制刷新
-
-在 Expo Go 中：
-1. 摇一摇手机打开开发菜单
-2. 选择 **"Enable Fast Refresh"**（如果未启用）
-3. 选择 **"Reload"**
-
-### 热更新说明
-
-Expo 支持 Fast Refresh（快速刷新）：
-- **自动刷新**: 修改代码后会自动刷新（需要启用 Fast Refresh）
-- **手动刷新**: 摇一摇手机 → Reload
-- **清除缓存刷新**: 使用 `npm run start:clear` 启动
-
-### 常见问题排查
-
-1. **代码更新但界面没变化**
-   - 运行 `npm run start:clear` 清除缓存
-   - 在 Expo Go 中手动 Reload
-
-2. **Metro bundler 报错**
-   - 运行 `npm run clean` 清理缓存
-   - 重启开发服务器
-
-3. **依赖问题**
-   - 删除 `node_modules` 和 `yarn.lock`/`package-lock.json`
-   - 重新运行 `yarn install` 或 `npm install`
-
-## 注意事项
-
-- 确保已安装 Xcode (macOS) 或 Android Studio 用于模拟器
-- 首次运行可能需要下载一些依赖，请耐心等待
-- 如果遇到问题，可以尝试清除缓存：`npm run start:clear`
-- 确保后端API服务正在运行（默认端口7072）
-- 如果使用真实设备测试，确保手机和电脑在同一WiFi网络下
-- **开发时建议使用 `npm run start:clear` 启动，避免缓存问题**
-
+---
