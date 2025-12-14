@@ -1,0 +1,89 @@
+{
+  "build": {
+    "beforeDevCommand": "npm run dev",
+    "beforeBuildCommand": "npm run build",
+    "devPath": "http://localhost:3535",
+    "distDir": "../dist",
+    "withGlobalTauri": false
+  },
+  "package": {
+    "productName": "VoicePilotCore",
+    "version": "0.0.0"
+  },
+  "tauri": {
+    "allowlist": {
+      "all": true
+    },
+    "cli": {
+      "args": []
+    },
+    "bundle": {
+      "active": true,
+      "targets": "all",
+      "identifier": "com.cetiprobe.desktop",
+      "icon": [
+        "icons/32x32.png",
+        "icons/128x128.png",
+        "icons/128x128@2x.png",
+        "icons/icon.icns",
+        "icons/icon.ico"
+      ],
+      "resources": [],
+      "externalBin": [],
+      "copyright": "",
+      "category": "DeveloperTool",
+      "shortDescription": "声驭智核 - 智能语音助手",
+      "longDescription": "声驭智核是一款强大的智能语音助手，提供语音交互、桌面宠物、知识管理等功能",
+      "macOS": {
+        "frameworks": [],
+        "minimumSystemVersion": "10.13",
+        "exceptionDomain": "",
+        "signingIdentity": null,
+        "providerShortName": null,
+        "entitlements": null
+      },
+      "windows": {
+        "certificateThumbprint": null,
+        "digestAlgorithm": "sha256",
+        "timestampUrl": ""
+      }
+    },
+    "security": {
+      "csp": null
+    },
+    "macOSPrivateApi": true,
+    "windows": [
+      {
+        "fullscreen": false,
+        "resizable": true,
+        "title": "声驭智核",
+        "width": 1200,
+        "height": 800,
+        "minWidth": 800,
+        "minHeight": 600
+      },
+              {
+                "label": "desktop-pet",
+                "title": "",
+                "url": "/desktop-pet-window",
+                "width": 250,
+                "height": 280,
+                "fullscreen": false,
+                "transparent": true,
+                "alwaysOnTop": true,
+                "skipTaskbar": true,
+                "decorations": false,
+                "resizable": false,
+                "visible": true,
+                "x": 1200,
+                "y": 600,
+                "focus": false,
+                "center": false,
+                "minWidth": 250,
+                "minHeight": 280,
+                "maxWidth": 250,
+                "maxHeight": 280
+              }
+    ]
+  }
+}

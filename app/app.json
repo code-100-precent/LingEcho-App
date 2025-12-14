@@ -1,0 +1,51 @@
+{
+  "expo": {
+    "name": "LingEcho App",
+    "slug": "lingecho-app",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "icon": "./assets/logo192.png",
+    "userInterfaceStyle": "light",
+    "splash": {
+      "image": "./assets/logo192.png",
+      "resizeMode": "contain",
+      "backgroundColor": "#f3e8ff"
+    },
+    "assetBundlePatterns": [
+      "**/*"
+    ],
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "com.lingecho.app",
+      "icon": "./assets/logo192.png"
+    },
+    "android": {
+      "package": "com.lingecho.app",
+      "icon": "./assets/logo192.png",
+      "permissions": [
+        "android.permission.RECORD_AUDIO",
+        "android.permission.READ_EXTERNAL_STORAGE",
+        "android.permission.WRITE_EXTERNAL_STORAGE"
+      ],
+      "compileSdkVersion": 35,
+      "targetSdkVersion": 35,
+      "minSdkVersion": 24
+    },
+    "web": {
+      "favicon": "./assets/logo192.png"
+    },
+    "plugins": [
+      "expo-av",
+      "expo-secure-store"
+    ],
+    "newArchEnabled": true,
+    "extra": {
+      "eas": {
+        "projectId": "3b3f91a3-48e2-4370-83bd-e6e5863e795d"
+      },
+      "apiBaseURL": "https://lingecho.com/api",
+      "wsBaseURL": "wss://lingecho.com",
+      "uploadsBaseURL": "https://lingecho.com/uploads"
+    }
+  }
+}

@@ -1,0 +1,40 @@
+syntax = "proto3";
+
+package vad;
+
+// VAD 服务定义
+service VADService {
+  // 检测语音活动
+  rpc Detect(VADRequest) returns (VADResponse);
+  
+  // 重置会话状态
+  rpc ResetSession(ResetRequest) returns (ResetResponse);
+}
+
+// VAD 请求
+message VADRequest {
+  bytes audio_data = 1;        // 音频数据（PCM 或 OPUS）
+  string audio_format = 2;     // 音频格式："pcm" 或 "opus"
+  int32 sample_rate = 3;       // 采样率（默认 16000）
+  int32 channels = 4;          // 声道数（默认 1）
+  string session_id = 5;       // 会话 ID（用于状态管理）
+}
+
+// VAD 响应
+message VADResponse {
+  bool have_voice = 1;        // 当前帧是否有人说话
+  bool voice_stop = 2;        // 是否判断为这句话结束（静默超阈值）
+  float speech_prob = 3;      // 语音概率（可选）
+}
+
+// 重置请求
+message ResetRequest {
+  string session_id = 1;      // 会话 ID
+}
+
+// 重置响应
+message ResetResponse {
+  bool success = 1;
+  string message = 2;
+}
+

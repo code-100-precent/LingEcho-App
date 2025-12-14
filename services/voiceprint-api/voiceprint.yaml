@@ -1,0 +1,19 @@
+server:
+  # 服务监听地址，0.0.0.0 表示所有网卡
+  host: 0.0.0.0
+  # 服务监听端口   
+  port: 8005
+  # 接口访问令牌，会随机生成，如果为空，会自动生成
+  authorization: 
+
+mysql:
+  # MySQL数据库主机地址
+  host: "127.0.0.1"
+  # 端口  
+  port: 3306
+  # 用户名          
+  user: "root"
+  # 用户密码         
+  password: "123456"
+  # 数据库名
+  database: "voiceprint_db"

@@ -1,0 +1,380 @@
+package voicev3
+
+import (
+	"context"
+	"sync"
+	"time"
+
+	"github.com/code-100-precent/LingEcho/internal/models"
+	"github.com/code-100-precent/LingEcho/pkg/recognizer"
+	"github.com/code-100-precent/LingEcho/pkg/voicev3/asr"
+	"github.com/code-100-precent/LingEcho/pkg/voicev3/errhandler"
+	"github.com/code-100-precent/LingEcho/pkg/voicev3/factory"
+	"github.com/code-100-precent/LingEcho/pkg/voicev3/filter"
+	"github.com/code-100-precent/LingEcho/pkg/voicev3/llm"
+	"github.com/code-100-precent/LingEcho/pkg/voicev3/message"
+	"github.com/code-100-precent/LingEcho/pkg/voicev3/state"
+	"github.com/code-100-precent/LingEcho/pkg/voicev3/tts"
+	"github.com/gorilla/websocket"
+	"go.uber.org/zap"
+	"gorm.io/gorm"
+)
+
+const (
+	// AudioSampleRate 音频采样率，用于计算音频大小
+	AudioSampleRate = 32000
+	// ASRUsageRecordTimeout ASR使用量记录超时时间
+	ASRUsageRecordTimeout = 5 * time.Second
+	// ASRConnectionWaitDelay ASR连接建立后的等待时间
+	ASRConnectionWaitDelay = 500 * time.Millisecond
+)
+
+// Session 语音会话实现
+type Session struct {
+	config        *SessionConfig
+	ctx           context.Context
+	cancel        context.CancelFunc
+	stateManager  *state.Manager
+	errorHandler  *errhandler.Handler
+	asrService    *asr.Service
+	ttsService    *tts.Service
+	llmService    *llm.Service
+	messageWriter *message.Writer
+	processor     *message.Processor
+	mu            sync.RWMutex
+	active        bool
+}
+
+// NewSession 创建新的语音会话
+func NewSession(config *SessionConfig) (*Session, error) {
+	if config == nil {
+		return nil, errhandler.NewRecoverableError("Session", "配置不能为空", nil)
+	}
+
+	if config.Conn == nil {
+		return nil, errhandler.NewRecoverableError("Session", "WebSocket连接不能为空", nil)
+	}
+
+	if config.Logger == nil {
+		config.Logger = zap.L()
+	}
+
+	if config.Context == nil {
+		config.Context = context.Background()
+	}
+
+	ctx, cancel := context.WithCancel(config.Context)
+
+	// 创建状态管理器
+	stateManager := state.NewManager()
+
+	// 创建错误处理器
+	errorHandler := errhandler.NewHandler(config.Logger)
+
+	// 创建服务工厂
+	transcriberFactory := recognizer.GetGlobalFactory()
+	serviceFactory := factory.NewServiceFactory(transcriberFactory, config.Logger)
+
+	// 创建消息写入器
+	messageWriter := message.NewWriter(config.Conn, config.Logger)
+
+	// 创建ASR服务
+	transcriber, err := serviceFactory.CreateASR(config.Credential, config.Language)
+	if err != nil {
+		cancel()
+		return nil, errhandler.NewRecoverableError("Session", "创建ASR服务失败", err)
+	}
+
+	asrService := asr.NewService(
+		ctx,
+		config.Credential,
+		config.Language,
+		transcriber,
+		errorHandler,
+		config.Logger,
+	)
+
+	// 如果提供了连接池，设置到ASR服务
+	if config.ASRPool != nil {
+		asrService.SetPool(config.ASRPool)
+	}
+
+	// 创建TTS服务
+	synthesizer, err := serviceFactory.CreateTTS(config.Credential, config.Speaker)
+	if err != nil {
+		cancel()
+		return nil, errhandler.NewRecoverableError("Session", "创建TTS服务失败", err)
+	}
+
+	ttsService := tts.NewService(
+		ctx,
+		config.Credential,
+		config.Speaker,
+		synthesizer,
+		errorHandler,
+		config.Logger,
+	)
+
+	// 创建LLM服务
+	llmProvider, err := serviceFactory.CreateLLM(ctx, config.Credential, config.SystemPrompt)
+	if err != nil {
+		cancel()
+		return nil, errhandler.NewRecoverableError("Session", "创建LLM服务失败", err)
+	}
+
+	llmService := llm.NewService(
+		ctx,
+		config.Credential,
+		config.SystemPrompt,
+		config.LLMModel,
+		config.Temperature,
+		config.MaxTokens,
+		llmProvider,
+		errorHandler,
+		config.Logger,
+	)
+
+	// 创建过滤词管理器
+	filterManager, err := filter.NewManager("scripts/filter_blacklist.txt", config.Logger)
+	if err != nil {
+		config.Logger.Warn("创建过滤词管理器失败，将不使用过滤功能", zap.Error(err))
+		filterManager = nil
+	}
+
+	// 创建消息处理器
+	processor := message.NewProcessor(
+		stateManager,
+		llmService,
+		ttsService,
+		messageWriter,
+		errorHandler,
+		config.Logger,
+		synthesizer,   // 传递synthesizer以获取音频格式
+		filterManager, // 传递过滤词管理器
+	)
+
+	// 设置ASR回调
+	asrService.SetCallbacks(
+		func(text string, isLast bool, duration time.Duration, uuid string) {
+			// 记录ASR使用量
+			if isLast && config.DB != nil && config.Credential != nil && duration > 0 {
+				go recordASRUsage(ctx, config, duration, uuid, config.Logger)
+			}
+
+			// 处理ASR结果
+			incremental := stateManager.UpdateASRText(text, isLast)
+			if incremental != "" {
+				processor.ProcessASRResult(ctx, incremental)
+			}
+		},
+		func(err error) {
+			classified := errorHandler.HandleError(err, "ASR")
+			if classifiedErr, ok := classified.(*errhandler.Error); ok && classifiedErr.Type == errhandler.ErrorTypeFatal {
+				stateManager.SetFatalError(true)
+				messageWriter.SendError("ASR错误: "+err.Error(), true)
+			}
+		},
+	)
+
+	session := &Session{
+		config:        config,
+		ctx:           ctx,
+		cancel:        cancel,
+		stateManager:  stateManager,
+		errorHandler:  errorHandler,
+		asrService:    asrService,
+		ttsService:    ttsService,
+		llmService:    llmService,
+		messageWriter: messageWriter,
+		processor:     processor,
+		active:        false,
+	}
+
+	return session, nil
+}
+
+// Start 启动会话
+func (s *Session) Start() error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	if s.active {
+		return nil
+	}
+
+	// 连接ASR服务
+	if err := s.asrService.Connect(); err != nil {
+		return errhandler.NewRecoverableError("Session", "连接ASR服务失败", err)
+	}
+
+	// 等待ASR连接建立
+	time.Sleep(ASRConnectionWaitDelay)
+
+	// 发送连接成功消息
+	if err := s.messageWriter.SendConnected(); err != nil {
+		s.config.Logger.Error("发送连接成功消息失败", zap.Error(err))
+	}
+
+	s.active = true
+
+	// 启动消息处理循环
+	go s.messageLoop()
+
+	return nil
+}
+
+// Stop 停止会话
+func (s *Session) Stop() error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	if !s.active {
+		return nil
+	}
+
+	s.cancel()
+
+	// 断开ASR服务
+	if s.asrService != nil {
+		s.asrService.Disconnect()
+	}
+
+	// 关闭TTS服务
+	if s.ttsService != nil {
+		s.ttsService.Close()
+	}
+
+	// 关闭LLM服务
+	if s.llmService != nil {
+		s.llmService.Close()
+	}
+
+	// 关闭消息写入器
+	if s.messageWriter != nil {
+		s.messageWriter.Close()
+	}
+
+	// 清空状态
+	if s.stateManager != nil {
+		s.stateManager.Clear()
+	}
+
+	s.active = false
+
+	return nil
+}
+
+// HandleAudio 处理音频数据
+func (s *Session) HandleAudio(data []byte) error {
+	s.mu.RLock()
+	active := s.active
+	s.mu.RUnlock()
+
+	if !active {
+		return errhandler.NewRecoverableError("Session", "会话未激活", nil)
+	}
+
+	// 快速状态检查：如果正在播放TTS或致命错误，忽略音频输入
+	if s.stateManager.IsFatalError() || s.stateManager.IsTTSPlaying() {
+		return nil
+	}
+
+	// 发送音频到ASR
+	return s.asrService.SendAudio(data)
+}
+
+// HandleText 处理文本消息
+func (s *Session) HandleText(data []byte) error {
+	s.mu.RLock()
+	active := s.active
+	processor := s.processor
+	ctx := s.ctx
+	s.mu.RUnlock()
+
+	if !active {
+		return errhandler.NewRecoverableError("Session", "会话未激活", nil)
+	}
+
+	processor.HandleTextMessage(ctx, data)
+	return nil
+}
+
+// IsActive 检查会话是否活跃
+func (s *Session) IsActive() bool {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	return s.active
+}
+
+// messageLoop 消息处理循环
+func (s *Session) messageLoop() {
+	for {
+		select {
+		case <-s.ctx.Done():
+			s.config.Logger.Info("消息循环退出")
+			return
+		default:
+		}
+
+		messageType, message, err := s.config.Conn.ReadMessage()
+		if err != nil {
+			s.config.Logger.Debug("读取WebSocket消息失败", zap.Error(err))
+			break
+		}
+
+		switch messageType {
+		case websocket.BinaryMessage:
+			// 音频消息
+			if err := s.HandleAudio(message); err != nil {
+				s.config.Logger.Warn("处理音频消息失败", zap.Error(err))
+			}
+		case websocket.TextMessage:
+			// 文本消息
+			if err := s.HandleText(message); err != nil {
+				s.config.Logger.Warn("处理文本消息失败", zap.Error(err))
+			}
+		}
+	}
+}
+
+// recordASRUsage 记录ASR使用量
+func recordASRUsage(ctx context.Context, config *SessionConfig, duration time.Duration, uuid string, logger *zap.Logger) {
+	// 创建带超时的上下文
+	recordCtx, cancel := context.WithTimeout(ctx, ASRUsageRecordTimeout)
+	defer cancel()
+
+	// 计算音频大小
+	audioSize := int64(duration.Seconds() * AudioSampleRate)
+
+	// 准备助手ID
+	var assistantID *uint
+	if config.AssistantID > 0 {
+		aid := uint(config.AssistantID)
+		assistantID = &aid
+	}
+
+	// 获取组织ID（如果助手属于组织）
+	var groupID *uint
+	if assistantID != nil && config.DB != nil {
+		var assistant models.Assistant
+		if err := config.DB.WithContext(recordCtx).Where("id = ?", *assistantID).First(&assistant).Error; err == nil {
+			groupID = assistant.GroupID
+		} else if err != gorm.ErrRecordNotFound {
+			logger.Warn("查询助手信息失败", zap.Error(err))
+		}
+	}
+
+	// 记录使用量
+	if err := models.RecordASRUsage(
+		config.DB,
+		config.Credential.UserID,
+		config.Credential.ID,
+		assistantID,
+		groupID,
+		uuid,
+		int(duration.Seconds()),
+		audioSize,
+	); err != nil {
+		logger.Warn("记录ASR使用量失败", zap.Error(err))
+	}
+}
