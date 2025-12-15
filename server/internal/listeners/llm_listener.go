@@ -5,6 +5,7 @@ import (
 	"time"
 
 	"github.com/code-100-precent/LingEcho/internal/models"
+	"github.com/code-100-precent/LingEcho/internal/task"
 	"github.com/code-100-precent/LingEcho/pkg/constants"
 	"github.com/code-100-precent/LingEcho/pkg/llm"
 	"github.com/code-100-precent/LingEcho/pkg/logger"
@@ -14,11 +15,6 @@ import (
 )
 
 var llmListenerDB *gorm.DB
-
-// InitLLMListener Initialize LLM usage listener
-func InitLLMListener() {
-	InitLLMListenerWithDB(nil)
-}
 
 // InitLLMListenerWithDB Initialize LLM usage listener (with database connection)
 func InitLLMListenerWithDB(db *gorm.DB) {
@@ -127,6 +123,15 @@ func InitLLMListenerWithDB(db *gorm.DB) {
 					logger.Error("Failed to save chat log", zap.Error(err))
 				} else {
 					logger.Info("Chat log saved", zap.String("sessionID", sessionID))
+
+					// Trigger async graph processing for conversation
+					// This will summarize the conversation and store knowledge in Neo4j
+					task.ProcessConversationAsync(
+						llmListenerDB,
+						*usageInfo.AssistantID,
+						sessionID,
+						*usageInfo.UserID,
+					)
 				}
 
 				// Record LLM usage in billing system

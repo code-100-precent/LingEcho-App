@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/code-100-precent/LingEcho/pkg/media/signal"
+	"github.com/code-100-precent/LingEcho/pkg/media"
 	"github.com/code-100-precent/LingEcho/pkg/synthesizer"
 	"github.com/gorilla/websocket"
 	"go.uber.org/zap"
@@ -23,7 +23,7 @@ func (h *TTSStreamHandler) OnMessage(data []byte) {
 	}
 }
 
-func (h *TTSStreamHandler) OnTimestamp(timestamp synthesis.SentenceTimestamp) {
+func (h *TTSStreamHandler) OnTimestamp(timestamp synthesizer.SentenceTimestamp) {
 	// 可以处理时间戳信息，如果需要可以发送到前端
 }
 
@@ -323,7 +323,7 @@ func (tp *TextProcessor) processTTSTask(client *VoiceClient, task *TTSTask) {
 // calculatePlayDuration 计算音频播放时长
 func (tp *TextProcessor) calculatePlayDuration(
 	totalAudioBytes int64,
-	format audio.StreamFormat,
+	format media.StreamFormat,
 	text string,
 ) time.Duration {
 	var estimatedPlayDuration time.Duration

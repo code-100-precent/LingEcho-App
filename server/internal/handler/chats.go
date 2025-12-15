@@ -11,6 +11,8 @@ import (
 	"time"
 
 	"github.com/code-100-precent/LingEcho/internal/models"
+	"github.com/code-100-precent/LingEcho/pkg/config"
+	"github.com/code-100-precent/LingEcho/pkg/graph"
 	"github.com/code-100-precent/LingEcho/pkg/response"
 	"github.com/code-100-precent/LingEcho/pkg/webrtc/constants"
 	"github.com/code-100-precent/LingEcho/pkg/webrtc/rtcmedia"
@@ -431,6 +433,25 @@ func (h *Handlers) handleConnection(c *gin.Context) {
 	systemPrompt := assistant.SystemPrompt
 	if systemPrompt == "" {
 		systemPrompt = "你是一个友好的AI助手，请用简洁明了的语言回答问题。"
+	}
+
+	// 如果开启了图记忆功能，则尝试从 Neo4j 中获取该用户的长期偏好主题，并拼接到系统提示词中
+	if config.GlobalConfig.Neo4jEnabled && assistant.EnableGraphMemory {
+		if store := graph.GetDefaultStore(); store != nil {
+			ctx := c.Request.Context()
+			if userCtx, err := store.GetUserContext(ctx, cred.UserID, assistantID); err == nil {
+				if len(userCtx.Topics) > 0 {
+					// 构建一段自然语言描述用户长期偏好
+					preferenceText := fmt.Sprintf("该用户在历史对话中经常讨论这些主题：%s。请在回答时优先从这些兴趣和习惯的角度来组织内容，让风格尽量贴近他的偏好。",
+						strings.Join(userCtx.Topics, "、"))
+					if systemPrompt == "" {
+						systemPrompt = preferenceText
+					} else {
+						systemPrompt = systemPrompt + "\n\n" + preferenceText
+					}
+				}
+			}
+		}
 	}
 
 	maxTokens := assistant.MaxTokens

@@ -210,9 +210,36 @@ func (h *LLMHandler) QueryWithOptions(text string, options QueryOptions) (string
 		}
 
 		// Construct the OpenAI request with current messages
+		// 确保所有消息的 Content 字段都是有效的字符串类型（避免 DashScope 等兼容模式 API 报错）
+		// DashScope 兼容模式要求 Content 必须是 string 或 array，不能是 null 或 object
+		sanitizedMessages := make([]openai.ChatCompletionMessage, 0, len(h.messages))
+		for _, msg := range h.messages {
+			// 创建一个新的消息副本，确保 Content 字段是字符串类型
+			sanitizedMsg := openai.ChatCompletionMessage{
+				Role:      msg.Role,
+				Content:   "", // 初始化为空字符串
+				ToolCalls: msg.ToolCalls,
+			}
+
+			// 确保 Content 是字符串类型（不能是 nil）
+			if msg.Content != "" {
+				sanitizedMsg.Content = msg.Content
+			} else if msg.Role == openai.ChatMessageRoleSystem {
+				// System 消息的 Content 不能为空，至少需要一个占位符
+				sanitizedMsg.Content = "You are a helpful assistant."
+			}
+
+			// 复制 ToolCallID（如果有）
+			if msg.ToolCallID != "" {
+				sanitizedMsg.ToolCallID = msg.ToolCallID
+			}
+
+			sanitizedMessages = append(sanitizedMessages, sanitizedMsg)
+		}
+
 		request := openai.ChatCompletionRequest{
 			Model:    options.Model,
-			Messages: h.messages,
+			Messages: sanitizedMessages,
 			Tools:    tools,
 		}
 
@@ -258,6 +285,22 @@ func (h *LLMHandler) QueryWithOptions(text string, options QueryOptions) (string
 		// Set default model if not provided
 		if request.Model == "" {
 			request.Model = openai.GPT4o
+		}
+
+		// 调试：打印第一条消息的 Content 类型和内容（用于排查 DashScope 兼容模式问题）
+		if len(request.Messages) > 0 {
+			firstMsg := request.Messages[0]
+			logger.Debug("First message details",
+				zap.String("role", firstMsg.Role),
+				zap.String("content_type", fmt.Sprintf("%T", firstMsg.Content)),
+				zap.String("content_preview", func() string {
+					if len(firstMsg.Content) > 100 {
+						return firstMsg.Content[:100] + "..."
+					}
+					return firstMsg.Content
+				}()),
+				zap.Bool("content_is_empty", firstMsg.Content == ""),
+			)
 		}
 
 		// Send the request to OpenAI

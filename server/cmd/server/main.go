@@ -17,6 +17,7 @@ import (
 	"github.com/code-100-precent/LingEcho/pkg/cache"
 	"github.com/code-100-precent/LingEcho/pkg/config"
 	"github.com/code-100-precent/LingEcho/pkg/constants"
+	"github.com/code-100-precent/LingEcho/pkg/graph"
 	"github.com/code-100-precent/LingEcho/pkg/logger"
 	"github.com/code-100-precent/LingEcho/pkg/metrics"
 	"github.com/code-100-precent/LingEcho/pkg/middleware"
@@ -180,7 +181,37 @@ func main() {
 	monitor.Start()
 	defer monitor.Stop()
 
-	// 14. Start Timed task
+	// 14. Initialize Neo4j Graph Database (if enabled)
+	if config.GlobalConfig.Neo4jEnabled {
+		graphStore, err := graph.NewNeo4jStore(
+			config.GlobalConfig.Neo4jURI,
+			config.GlobalConfig.Neo4jUsername,
+			config.GlobalConfig.Neo4jPassword,
+			config.GlobalConfig.Neo4jDatabase,
+		)
+		if err != nil {
+			logger.Error("Failed to initialize Neo4j", zap.Error(err))
+			logger.Warn("Graph processing will be disabled")
+			task.InitGraphProcessor(nil, false)
+			graph.SetDefaultStore(nil)
+		} else {
+			logger.Info("Neo4j graph database initialized successfully")
+			task.InitGraphProcessor(graphStore, true)
+			// 设置全局默认的图存储实例，供实时助手等组件读取用户画像
+			graph.SetDefaultStore(graphStore)
+			defer func() {
+				if err := graphStore.Close(); err != nil {
+					logger.Error("Failed to close Neo4j connection", zap.Error(err))
+				}
+			}()
+		}
+	} else {
+		logger.Info("Neo4j is disabled, graph processing will be skipped")
+		task.InitGraphProcessor(nil, false)
+		graph.SetDefaultStore(nil)
+	}
+
+	// 15. Start Timed task
 	go task.StartOfflineChecker(db)
 	// Start Email Cleaner Task
 	task.StartEmailCleaner(db)

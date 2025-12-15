@@ -111,6 +111,10 @@ For detailed architecture documentation, see [Architecture Documentation](docs/a
 The easiest way to get started with LingEcho is using Docker Compose:
 
 ```bash
+docker run -d --name neo4j \
+  -p 7474:7474 -p 7687:7687 \
+  -e NEO4J_AUTH=neo4j/admin123 \
+  neo4j:latest
 # Clone the project
 git clone https://github.com/your-username/LingEcho.git
 cd LingEcho
@@ -223,6 +227,6 @@ A core team of two full-stack engineers focused on innovation and application of
 
 ## ⭐ Star History
 
-[![Star History Chart](https://api.star-history.com/svg?repos=code-100-precent/LingEcho&type=Date)](https://star-history.com/#your-username/LingEcho&Date)
+[![Star History Chart](https://api.star-history.com/svg?repos=code-100-precent/LingEcho-App&type=Date)](https://star-history.com/#your-username/LingEcho&Date)
 
 ---

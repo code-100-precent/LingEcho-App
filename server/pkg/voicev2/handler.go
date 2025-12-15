@@ -153,7 +153,7 @@ func (h *VoiceWebSocketHandler) HandleWebSocket(
 
 // initializeServices 初始化所有服务
 func (h *VoiceWebSocketHandler) initializeServices(client *VoiceClient) error {
-	factory := transcribers.GetGlobalFactory()
+	factory := recognizer.GetGlobalFactory()
 
 	// 初始化ASR服务
 	asrService, err := h.serviceInitializer.InitializeASR(client.credential, client.language, factory)
@@ -201,6 +201,7 @@ func (h *VoiceWebSocketHandler) setupASRConnection(client *VoiceClient) {
 						client.credential.UserID,
 						client.credential.ID,
 						assistantID,
+						nil,
 						uuid,
 						int(duration.Seconds()),
 						audioSize,
