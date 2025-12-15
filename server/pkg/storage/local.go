@@ -10,7 +10,10 @@ import (
 )
 
 var UploadDir string = "./uploads"
-var MediaPrefix string = "/media"
+
+// MediaPrefix defines the public URL prefix for locally stored files.
+// Default to "/uploads" to align with other upload endpoints.
+var MediaPrefix string = "/uploads"
 
 type LocalStore struct {
 	Root       string

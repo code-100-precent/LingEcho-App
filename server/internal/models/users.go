@@ -171,7 +171,6 @@ func AuthRequired(c *gin.Context) {
 		LingEcho.AbortWithJSONError(c, http.StatusUnauthorized, errors.New("authorization required"))
 		return
 	}
-	logger.Info("token:", zap.String("token", token))
 	db := c.MustGet(constants.DbField).(*gorm.DB)
 	// split bearer
 	token = strings.TrimPrefix(token, "Bearer ")

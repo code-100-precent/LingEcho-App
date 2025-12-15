@@ -242,7 +242,8 @@ func main() {
 			"/health",
 			"/metrics",
 			"/static/",
-			"/media/",
+			"/uploads/",
+			"/media/", // keep for backward compatibility
 		},
 	})
 	r.Use(middleware.RateLimiterMiddleware())
@@ -255,12 +256,14 @@ func main() {
 	if uploadDir == "" {
 		uploadDir = "./uploads"
 	}
-	// 同时注册 /media 和 /api/media 以支持反向代理
+	// 注册 /uploads（主路径）并保留 /media 兼容历史
+	r.Static("/uploads", uploadDir)
 	r.Static("/media", uploadDir)
 	apiPrefix := config.GlobalConfig.APIPrefix
 	if apiPrefix == "" {
 		apiPrefix = "/api"
 	}
+	r.Static(apiPrefix+"/uploads", uploadDir)
 	r.Static(apiPrefix+"/media", uploadDir)
 
 	// Add /api/static route to serve static files under API prefix

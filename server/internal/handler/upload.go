@@ -33,9 +33,6 @@ func (h *UploadHandler) Register(r *gin.Engine) {
 
 	// Audio file upload route
 	r.POST("/api/upload/audio", h.UploadAudio)
-
-	// Static file service
-	r.Static("/uploads", "./uploads")
 }
 
 // UploadAudio uploads audio file

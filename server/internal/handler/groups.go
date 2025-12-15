@@ -1055,7 +1055,10 @@ func (h *Handlers) UploadGroupAvatar(c *gin.Context) {
 	// 获取头像URL
 	avatarURL := store.PublicURL(fileName)
 
-	// 如果是相对路径，转换为完整URL
+	// 保存相对路径用于返回
+	avatarRelativePath := avatarURL
+
+	// 如果是相对路径，转换为完整URL用于数据库存储
 	if strings.HasPrefix(avatarURL, "/") {
 		scheme := "http"
 		if c.Request.TLS != nil {
@@ -1075,8 +1078,9 @@ func (h *Handlers) UploadGroupAvatar(c *gin.Context) {
 		return
 	}
 
+	// 返回相对路径，方便反向代理
 	response.Success(c, "头像上传成功", gin.H{
-		"avatar": avatarURL,
+		"avatar": avatarRelativePath,
 	})
 }
 

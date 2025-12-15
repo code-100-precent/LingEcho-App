@@ -13,7 +13,6 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// ---------- 辅助：构建 gin 路由 ----------
 func newGin() *gin.Engine {
 	gin.SetMode(gin.TestMode)
 	return gin.New()
