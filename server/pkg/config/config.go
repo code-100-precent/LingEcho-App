@@ -100,6 +100,13 @@ type Config struct {
 	SSLEnabled  bool   `env:"SSL_ENABLED"`
 	SSLCertFile string `env:"SSL_CERT_FILE"`
 	SSLKeyFile  string `env:"SSL_KEY_FILE"`
+
+	// Neo4j 图数据库配置
+	Neo4jEnabled  bool   `env:"NEO4J_ENABLED"`  // 是否启用 Neo4j
+	Neo4jURI      string `env:"NEO4J_URI"`      // Neo4j 连接 URI（默认: bolt://localhost:7687）
+	Neo4jUsername string `env:"NEO4J_USERNAME"` // Neo4j 用户名（默认: neo4j）
+	Neo4jPassword string `env:"NEO4J_PASSWORD"` // Neo4j 密码
+	Neo4jDatabase string `env:"NEO4J_DATABASE"` // Neo4j 数据库名称（默认: neo4j）
 }
 
 var GlobalConfig *Config
@@ -206,6 +213,12 @@ func Load() error {
 		SSLEnabled:  getBoolOrDefault("SSL_ENABLED", false),
 		SSLCertFile: getStringOrDefault("SSL_CERT_FILE", ""),
 		SSLKeyFile:  getStringOrDefault("SSL_KEY_FILE", ""),
+		// Neo4j 图数据库配置（默认禁用）
+		Neo4jEnabled:  getBoolOrDefault("NEO4J_ENABLED", false),
+		Neo4jURI:      getStringOrDefault("NEO4J_URI", "bolt://localhost:7687"),
+		Neo4jUsername: getStringOrDefault("NEO4J_USERNAME", "neo4j"),
+		Neo4jPassword: getStringOrDefault("NEO4J_PASSWORD", ""),
+		Neo4jDatabase: getStringOrDefault("NEO4J_DATABASE", "neo4j"),
 	}
 	return nil
 }

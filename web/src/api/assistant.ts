@@ -26,6 +26,7 @@ export interface UpdateAssistantForm {
   apiKey?: string
   apiSecret?: string
   llmModel?: string // LLM模型名称
+  enableGraphMemory?: boolean
 }
 
 // 助手信息 - 对应后端Assistant模型的完整字段

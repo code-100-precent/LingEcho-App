@@ -141,21 +141,22 @@ func (h *Handlers) UpdateAssistant(c *gin.Context) {
 	id, _ := strconv.ParseInt(c.Param("id"), 10, 64)
 
 	var input struct {
-		Name            string  `json:"name"`
-		Description     string  `json:"description"`
-		Icon            string  `json:"icon"`
-		SystemPrompt    string  `json:"systemPrompt"`
-		PersonaTag      string  `json:"persona_tag"`
-		Temperature     float32 `json:"temperature"`
-		MaxTokens       int     `json:"maxTokens"`
-		Language        string  `json:"language"`
-		Speaker         string  `json:"speaker"`
-		VoiceCloneId    *int    `json:"voiceCloneId"`
-		KnowledgeBaseId *string `json:"knowledgeBaseId"`
-		TtsProvider     string  `json:"ttsProvider"`
-		ApiKey          string  `json:"apiKey"`
-		ApiSecret       string  `json:"apiSecret"`
-		LLMModel        string  `json:"llmModel"` // LLM model name
+		Name              string  `json:"name"`
+		Description       string  `json:"description"`
+		Icon              string  `json:"icon"`
+		SystemPrompt      string  `json:"systemPrompt"`
+		PersonaTag        string  `json:"persona_tag"`
+		Temperature       float32 `json:"temperature"`
+		MaxTokens         int     `json:"maxTokens"`
+		Language          string  `json:"language"`
+		Speaker           string  `json:"speaker"`
+		VoiceCloneId      *int    `json:"voiceCloneId"`
+		KnowledgeBaseId   *string `json:"knowledgeBaseId"`
+		TtsProvider       string  `json:"ttsProvider"`
+		ApiKey            string  `json:"apiKey"`
+		ApiSecret         string  `json:"apiSecret"`
+		LLMModel          string  `json:"llmModel"` // LLM model name
+		EnableGraphMemory *bool   `json:"enableGraphMemory"`
 	}
 	if err := c.ShouldBindJSON(&input); err != nil {
 		response.Fail(c, "invalid request", "parameter error")
@@ -223,6 +224,9 @@ func (h *Handlers) UpdateAssistant(c *gin.Context) {
 	}
 	if input.LLMModel != "" {
 		updateData["llm_model"] = input.LLMModel
+	}
+	if input.EnableGraphMemory != nil {
+		updateData["enable_graph_memory"] = *input.EnableGraphMemory
 	}
 
 	if err := h.db.Model(&assistant).Where("id = ?", id).Updates(updateData).Error; err != nil {

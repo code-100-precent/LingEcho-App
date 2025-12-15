@@ -1,12 +1,15 @@
 package handlers
 
 import (
-	"strconv"
-
+	"fmt"
 	"log"
 	"net/http"
+	"strconv"
+	"strings"
 
 	"github.com/code-100-precent/LingEcho/internal/models"
+	"github.com/code-100-precent/LingEcho/pkg/config"
+	"github.com/code-100-precent/LingEcho/pkg/graph"
 	"github.com/code-100-precent/LingEcho/pkg/hardware"
 	"github.com/code-100-precent/LingEcho/pkg/logger"
 	"github.com/code-100-precent/LingEcho/pkg/response"
@@ -88,6 +91,29 @@ func (h *Handlers) HandleWebSocketVoice(c *gin.Context) {
 	}
 	if assistant.Speaker != "" {
 		speaker = assistant.Speaker
+	}
+
+	// 如果开启了图记忆功能，则尝试从 Neo4j 中获取该用户的长期偏好主题，并拼接到系统提示词中
+	if config.GlobalConfig.Neo4jEnabled && assistant.EnableGraphMemory {
+		if store := graph.GetDefaultStore(); store != nil {
+			// 通过凭证反查用户
+			var user models.User
+			if err := h.db.First(&user, cred.UserID).Error; err == nil {
+				ctx := c.Request.Context()
+				if userCtx, err := store.GetUserContext(ctx, user.ID, int64(assistantID)); err == nil {
+					if len(userCtx.Topics) > 0 {
+						// 构建一段自然语言描述用户长期偏好
+						preferenceText := fmt.Sprintf("该用户在历史对话中经常讨论这些主题：%s。请在回答时优先从这些兴趣和习惯的角度来组织内容，让风格尽量贴近他的偏好。",
+							strings.Join(userCtx.Topics, "、"))
+						if systemPrompt == "" {
+							systemPrompt = preferenceText
+						} else {
+							systemPrompt = systemPrompt + "\n\n" + preferenceText
+						}
+					}
+				}
+			}
+		}
 	}
 
 	// Get knowledge base key from assistant

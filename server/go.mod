@@ -188,6 +188,7 @@ require (
 	github.com/mohae/deepcopy v0.0.0-20170929034955-c48cc78d4826 // indirect
 	github.com/mozillazg/go-httpheader v0.2.1 // indirect
 	github.com/mschoch/smat v0.2.0 // indirect
+	github.com/neo4j/neo4j-go-driver/v5 v5.28.4 // indirect
 	github.com/oasdiff/yaml v0.0.0-20250309154309-f31be36b4037 // indirect
 	github.com/oasdiff/yaml3 v0.0.0-20250309153720-d2182401db90 // indirect
 	github.com/pelletier/go-toml/v2 v2.2.4 // indirect

@@ -165,6 +165,7 @@ const VoiceAssistant = () => {
     const [assistantName, setAssistantName] = useState('')
     const [assistantDescription, setAssistantDescription] = useState('')
     const [assistantIcon, setAssistantIcon] = useState('Bot')
+    const [enableGraphMemory, setEnableGraphMemory] = useState(false)
 
     // 模态框状态
     const [showAddAssistantModal, setShowAddAssistantModal] = useState(false)
@@ -181,12 +182,17 @@ const VoiceAssistant = () => {
     // 获取选中助手的 jsSourceId
     const jsSourceId = assistants.find(a => a.id === assistantId)?.jsSourceId || ''
 
-    // 当选中助手变化时，更新JS模板选择
+    // 当选中助手变化时，更新JS模板选择和基础配置
     useEffect(() => {
         if (assistantId && assistants.length > 0) {
             const currentAssistant = assistants.find(a => a.id === assistantId)
             if (currentAssistant) {
                 setSelectedJSTemplate(currentAssistant.jsSourceId || null)
+                // 同步助手基础配置（包括图记忆开关）
+                setAssistantName(currentAssistant.name || '')
+                setAssistantDescription(currentAssistant.description || '')
+                setAssistantIcon(currentAssistant.icon || 'Bot')
+                setEnableGraphMemory(!!(currentAssistant as any).enableGraphMemory)
             }
         }
     }, [assistantId, assistants])
@@ -1245,7 +1251,7 @@ const VoiceAssistant = () => {
                             })
 
                             // 检查连接状态，避免在已关闭的连接上添加
-                            if (localPeerConnection.connectionState === 'closed' || 
+                            if (localPeerConnection.connectionState === 'closed' ||
                                 localPeerConnection.connectionState === 'failed') {
                                 console.warn('[WebRTC] 连接已关闭或失败，跳过添加 ICE 候选')
                                 break
@@ -1255,7 +1261,7 @@ const VoiceAssistant = () => {
                             console.log('[WebRTC] 添加服务器 ICE 候选成功:', cleanCandidate.substring(0, 50))
                         } catch (err: any) {
                             // 某些错误是可以忽略的（如 candidate 已过期、重复等）
-                            if (err?.message?.includes('already been added') || 
+                            if (err?.message?.includes('already been added') ||
                                 err?.message?.includes('InvalidStateError') ||
                                 err?.message?.includes('candidate')) {
                                 console.warn('[WebRTC] ICE 候选添加失败（可忽略）:', err.message)
@@ -1271,7 +1277,7 @@ const VoiceAssistant = () => {
                     for (const candidate of pendingCandidates) {
                         try {
                             // 检查连接状态
-                            if (localPeerConnection.connectionState === 'closed' || 
+                            if (localPeerConnection.connectionState === 'closed' ||
                                 localPeerConnection.connectionState === 'failed') {
                                 break
                             }
@@ -1279,7 +1285,7 @@ const VoiceAssistant = () => {
                             await localPeerConnection.addIceCandidate(new RTCIceCandidate(candidate))
                             console.log('[WebRTC] 添加缓存 ICE 候选成功')
                         } catch (err: any) {
-                            if (err?.message?.includes('already been added') || 
+                            if (err?.message?.includes('already been added') ||
                                 err?.message?.includes('InvalidStateError')) {
                                 console.warn('[WebRTC] 缓存 ICE 候选添加失败（可忽略）:', err.message)
                             } else {
@@ -1322,7 +1328,7 @@ const VoiceAssistant = () => {
                     // 服务器可能单独发送 ICE 候选（虽然当前后端使用 bundling 模式）
                     if (localPeerConnection && data.candidate) {
                         // 检查连接状态
-                        if (localPeerConnection.connectionState === 'closed' || 
+                        if (localPeerConnection.connectionState === 'closed' ||
                             localPeerConnection.connectionState === 'failed') {
                             console.warn('[WebRTC] 连接已关闭或失败，跳过 ICE 候选')
                             break
@@ -1338,7 +1344,7 @@ const VoiceAssistant = () => {
                                 console.log('[WebRTC] 缓存 ICE 候选，等待 remoteDescription 设置')
                             }
                         } catch (err: any) {
-                            if (err?.message?.includes('already been added') || 
+                            if (err?.message?.includes('already been added') ||
                                 err?.message?.includes('InvalidStateError')) {
                                 console.warn('[WebRTC] ICE 候选添加失败（可忽略）:', err.message)
                             } else {
@@ -1494,7 +1500,7 @@ const VoiceAssistant = () => {
             handleSelectAgent(assistantId)
         }
     }, [assistantId, assistants.length])
-    
+
 
     // 键盘快捷键支持
     useEffect(() => {
@@ -1659,7 +1665,7 @@ const VoiceAssistant = () => {
         setCurrentSessionId(null)
         setChatMessages([])
         showAlert('已开始新会话', 'success')
-        
+
         // 刷新聊天记录
         try {
             if (assistantId && assistantId > 0) {
@@ -1815,6 +1821,7 @@ const VoiceAssistant = () => {
                 apiKey,
                 apiSecret,
                 llmModel,
+                enableGraphMemory,
             })
 
             // 更新JS模板
@@ -2097,9 +2104,11 @@ const VoiceAssistant = () => {
                                 assistantName={assistantName}
                                 assistantDescription={assistantDescription}
                                 assistantIcon={assistantIcon}
+                                enableGraphMemory={enableGraphMemory}
                                 onAssistantNameChange={setAssistantName}
                                 onAssistantDescriptionChange={setAssistantDescription}
                                 onAssistantIconChange={setAssistantIcon}
+                                onEnableGraphMemoryChange={setEnableGraphMemory}
                                 onSaveSettings={handleSaveSettings}
                                 onDeleteAssistant={() => setShowDeleteConfirm(true)}
                                 searchKeyword={searchKeyword}

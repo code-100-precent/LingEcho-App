@@ -7,7 +7,7 @@ import (
 	"path/filepath"
 	"time"
 
-	"github.com/code-100-precent/LingEcho/pkg/media/signal"
+	"github.com/code-100-precent/LingEcho/pkg/media"
 	"github.com/youpy/go-wav"
 	"go.uber.org/zap"
 )
@@ -56,7 +56,7 @@ func playQuotaWarning(writer *MessageWriter, logger *zap.Logger) (time.Duration,
 		zap.Int("bitDepth", int(format.BitsPerSample)))
 
 	// 发送TTS开始消息（使用WAV文件的格式信息）
-	audioFormat := audio.StreamFormat{
+	audioFormat := media.StreamFormat{
 		SampleRate: int(format.SampleRate),
 		Channels:   int(format.NumChannels),
 		BitDepth:   int(format.BitsPerSample),

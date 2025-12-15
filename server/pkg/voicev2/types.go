@@ -15,8 +15,8 @@ import (
 type VoiceClient struct {
 	conn         *websocket.Conn
 	credential   *models.UserCredential
-	asrService   transcribers.TranscribeService
-	ttsService   synthesis.SynthesisService
+	asrService   recognizer.TranscribeService
+	ttsService   synthesizer.SynthesisService
 	llmHandler   v2.LLMProvider
 	assistantID  int
 	language     string

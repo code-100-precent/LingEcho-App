@@ -92,12 +92,18 @@ func (h *Handlers) RegisterAdmin(router *gin.RouterGroup) {
 		},
 		// AI Assistant management
 		{
-			Model:       &models.Assistant{},
-			Group:       "AI Assistant",
-			Name:        "Assistants",
-			Desc:        "AI assistants and their configurations.",
-			Shows:       []string{"ID", "Name", "Description", "CreatedAt"},
-			Editables:   []string{"Name", "Description", "SystemPrompt", "Temperature"},
+			Model: &models.Assistant{},
+			Group: "AI Assistant",
+			Name:  "Assistants",
+			Desc:  "AI assistants and their configurations.",
+			Shows: []string{"ID", "Name", "Description", "EnableGraphMemory", "CreatedAt"},
+			Editables: []string{
+				"Name",
+				"Description",
+				"SystemPrompt",
+				"Temperature",
+				"EnableGraphMemory", // 是否启用基于图数据库的长期记忆
+			},
 			Orderables:  []string{"CreatedAt", "Name"},
 			Searchables: []string{"Name", "Description"},
 			Icon:        &models.AdminIcon{SVG: string(iconChatSessionLog)},

@@ -11,14 +11,15 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
 
-	"strconv"
-
 	"github.com/code-100-precent/LingEcho/internal/models"
+	"github.com/code-100-precent/LingEcho/pkg/config"
 	"github.com/code-100-precent/LingEcho/pkg/constants"
+	"github.com/code-100-precent/LingEcho/pkg/graph"
 	v2 "github.com/code-100-precent/LingEcho/pkg/llm"
 	"github.com/code-100-precent/LingEcho/pkg/response"
 	stores "github.com/code-100-precent/LingEcho/pkg/storage"
@@ -1249,6 +1250,20 @@ func (h *Handlers) OneShotText(c *gin.Context) {
 			}
 		}
 
+		// 如果开启了图记忆功能，则尝试从 Neo4j 中获取该用户的长期偏好主题，并拼接到系统提示词中
+		if config.GlobalConfig.Neo4jEnabled && assistant.EnableGraphMemory {
+			if store := graph.GetDefaultStore(); store != nil {
+				ctx := c.Request.Context()
+				if userCtx, err := store.GetUserContext(ctx, user.ID, int64(req.AssistantID)); err == nil {
+					if len(userCtx.Topics) > 0 {
+						preferenceText := fmt.Sprintf("该用户在历史对话中经常讨论这些主题：%s。请在回答时优先从这些兴趣和习惯的角度来组织内容，让风格尽量贴近他的偏好。",
+							strings.Join(userCtx.Topics, "、"))
+						systemPrompt = systemPrompt + "\n\n" + preferenceText
+					}
+				}
+			}
+		}
+
 		// 如果设置了 maxTokens，在系统提示词中添加回复长度指导
 		// 让 AI 知道要在限制内完整回答，避免被截断
 		if maxTokens != nil && *maxTokens > 0 {
@@ -1409,6 +1424,20 @@ func (h *Handlers) PlainText(c *gin.Context) {
 			systemPrompt = assistant.SystemPrompt
 			if systemPrompt == "" {
 				systemPrompt = "请用中文回复用户。"
+			}
+		}
+
+		// 如果开启了图记忆功能，则尝试从 Neo4j 中获取该用户的长期偏好主题，并拼接到系统提示词中
+		if config.GlobalConfig.Neo4jEnabled && assistant.EnableGraphMemory {
+			if store := graph.GetDefaultStore(); store != nil {
+				ctx := c.Request.Context()
+				if userCtx, err := store.GetUserContext(ctx, user.ID, int64(req.AssistantID)); err == nil {
+					if len(userCtx.Topics) > 0 {
+						preferenceText := fmt.Sprintf("该用户在历史对话中经常讨论这些主题：%s。请在回答时优先从这些兴趣和习惯的角度来组织内容，让风格尽量贴近他的偏好。",
+							strings.Join(userCtx.Topics, "、"))
+						systemPrompt = systemPrompt + "\n\n" + preferenceText
+					}
+				}
 			}
 		}
 

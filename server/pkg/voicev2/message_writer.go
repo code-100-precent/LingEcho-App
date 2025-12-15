@@ -3,7 +3,7 @@ package voicev2
 import (
 	"sync"
 
-	"github.com/code-100-precent/LingEcho/pkg/media/signal"
+	"github.com/code-100-precent/LingEcho/pkg/media"
 	"github.com/gorilla/websocket"
 )
 
@@ -68,7 +68,7 @@ func (w *MessageWriter) SendLLMResponse(text string) error {
 }
 
 // SendTTSStart 发送TTS开始消息（线程安全）
-func (w *MessageWriter) SendTTSStart(format audio.StreamFormat) error {
+func (w *MessageWriter) SendTTSStart(format media.StreamFormat) error {
 	return w.SendJSON(MessageTypeTTSStart, map[string]interface{}{
 		"sampleRate": format.SampleRate,
 		"channels":   format.Channels,

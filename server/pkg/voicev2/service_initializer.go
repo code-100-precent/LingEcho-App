@@ -23,14 +23,14 @@ func NewServiceInitializer() *ServiceInitializer {
 func (si *ServiceInitializer) InitializeASR(
 	credential *models.UserCredential,
 	language string,
-	factory *transcribers.DefaultTranscriberFactory,
-) (transcribers.TranscribeService, error) {
+	factory *recognizer.DefaultTranscriberFactory,
+) (recognizer.TranscribeService, error) {
 	asrProvider := credential.GetASRProvider()
 	if asrProvider == "" {
 		return nil, fmt.Errorf("ASR provider not configured")
 	}
 
-	normalizedProvider := transcribers.NormalizeProvider(asrProvider)
+	normalizedProvider := recognizer.NormalizeProvider(asrProvider)
 
 	// Build configuration
 	asrConfig := make(map[string]interface{})
@@ -43,15 +43,8 @@ func (si *ServiceInitializer) InitializeASR(
 		}
 	}
 
-	// Validate vendor support
-	vendor := transcribers.GetVendor(normalizedProvider)
-	if !factory.IsVendorSupported(vendor) {
-		supported := factory.GetSupportedVendors()
-		return nil, fmt.Errorf("unsupported ASR provider: %s, supported vendors: %v", asrProvider, supported)
-	}
-
-	// Parse configuration using transcribers package
-	config, err := transcribers.NewTranscriberConfigFromMap(normalizedProvider, asrConfig, language)
+	// Parse configuration using recognizer package
+	config, err := recognizer.NewTranscriberConfigFromMap(normalizedProvider, asrConfig, language)
 	if err != nil {
 		return nil, fmt.Errorf("failed to parse ASR configuration: %w", err)
 	}
@@ -69,15 +62,15 @@ func (si *ServiceInitializer) InitializeASR(
 func (si *ServiceInitializer) InitializeTTS(
 	credential *models.UserCredential,
 	speaker string,
-) (synthesis.SynthesisService, error) {
+) (synthesizer.SynthesisService, error) {
 	ttsProvider := credential.GetTTSProvider()
 	if ttsProvider == "" {
 		return nil, fmt.Errorf("TTS provider not configured")
 	}
 
-	normalizedProvider := transcribers.NormalizeProvider(ttsProvider)
+	normalizedProvider := recognizer.NormalizeProvider(ttsProvider)
 
-	ttsConfig := make(synthesis.TTSCredentialConfig)
+	ttsConfig := make(synthesizer.TTSCredentialConfig)
 	ttsConfig["provider"] = normalizedProvider
 
 	if credential.TtsConfig != nil {
@@ -114,7 +107,7 @@ func (si *ServiceInitializer) InitializeTTS(
 		}
 	}
 
-	ttsService, err := synthesis.NewSynthesisServiceFromCredential(ttsConfig)
+	ttsService, err := synthesizer.NewSynthesisServiceFromCredential(ttsConfig)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create TTS service: %w", err)
 	}
