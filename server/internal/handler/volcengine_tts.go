@@ -70,7 +70,8 @@ func (h *Handlers) VolcengineSynthesize(c *gin.Context) {
 	// 生成存储路径（使用 .wav 格式，浏览器可以播放）
 	key := req.Key
 	if key == "" {
-		key = "uploads/volcengine/" + req.AssetID + "_" + strconv.FormatInt(int64(len(req.Text)), 10) + ".wav"
+		// 只生成相对存储 key，统一由存储层决定对外前缀
+		key = "volcengine/" + req.AssetID + "_" + strconv.FormatInt(int64(len(req.Text)), 10)
 	}
 
 	// 调用火山引擎合成（使用 voiceclone）
