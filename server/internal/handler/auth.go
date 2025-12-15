@@ -958,7 +958,10 @@ func (h *Handlers) handleUploadAvatar(c *gin.Context) {
 	// 更新用户头像URL
 	avatarURL := store.PublicURL(fileName)
 
-	// 如果是相对路径，转换为完整URL
+	// 保存相对路径用于返回
+	avatarRelativePath := avatarURL
+
+	// 如果是相对路径，转换为完整URL用于数据库存储
 	if strings.HasPrefix(avatarURL, "/") {
 		// 获取请求的Host和Scheme
 		scheme := "http"
@@ -991,8 +994,9 @@ func (h *Handlers) handleUploadAvatar(c *gin.Context) {
 		logger.Warn("Failed to update profile complete", zap.Error(err))
 	}
 
+	// 返回相对路径，方便反向代理
 	response.Success(c, "Avatar uploaded successfully", gin.H{
-		"avatar": avatarURL,
+		"avatar": avatarRelativePath,
 	})
 }
 
