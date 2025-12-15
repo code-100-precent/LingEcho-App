@@ -1,9 +1,11 @@
 package handlers
 
 import (
+	"crypto/md5"
 	"encoding/json"
 	"errors"
 	"fmt"
+	"net/http"
 	"path/filepath"
 	"sort"
 	"strconv"
@@ -1150,6 +1152,8 @@ func (h *Handlers) GetOverviewConfig(c *gin.Context) {
 
 	if config == nil {
 		// 返回null表示没有配置
+		// 返回空配置也可以被短时间缓存
+		c.Header("Cache-Control", "private, max-age=60")
 		response.Success(c, "查询成功", nil)
 		return
 	}
@@ -1158,6 +1162,19 @@ func (h *Handlers) GetOverviewConfig(c *gin.Context) {
 	var configData map[string]interface{}
 	if err := json.Unmarshal(config.Config, &configData); err != nil {
 		response.Fail(c, "解析配置失败", err.Error())
+		return
+	}
+
+	// 生成基于配置更新时间的 ETag，便于浏览器缓存
+	etagSource := fmt.Sprintf("overview-%d-%d", config.ID, config.UpdatedAt.Unix())
+	etagBytes := md5.Sum([]byte(etagSource))
+	etag := fmt.Sprintf(`W"%x"`, etagBytes) // 弱 ETag
+
+	// 如果浏览器带了相同的 ETag，则直接返回 304，避免重复传输
+	if match := c.GetHeader("If-None-Match"); match != "" && match == etag {
+		c.Header("ETag", etag)
+		c.Header("Cache-Control", "private, max-age=60")
+		c.Status(http.StatusNotModified)
 		return
 	}
 
@@ -1179,6 +1196,11 @@ func (h *Handlers) GetOverviewConfig(c *gin.Context) {
 	if footer, ok := configData["footer"]; ok {
 		result["footer"] = footer
 	}
+
+	// 设置浏览器缓存头，减少 sidebar 数据概览重复加载的延迟
+	c.Header("Cache-Control", "private, max-age=60")
+	c.Header("ETag", etag)
+	c.Header("Vary", "Authorization")
 
 	response.Success(c, "查询成功", result)
 }

@@ -3,6 +3,7 @@ package stores
 import (
 	"io"
 	"os"
+	"path"
 	"path/filepath"
 	"strings"
 
@@ -111,7 +112,11 @@ func (l *LocalStore) PublicURL(key string) string {
 	if mediaPrefix == "" {
 		mediaPrefix = MediaPrefix
 	}
-	return filepath.Join(mediaPrefix, key)
+	// 使用 path.Join 而不是 filepath.Join，确保 URL 路径始终使用正斜杠
+	// 同时规范化路径，移除多余斜杠
+	mediaPrefix = strings.TrimSuffix(mediaPrefix, "/")
+	key = strings.TrimPrefix(key, "/")
+	return path.Join("/", mediaPrefix, key)
 }
 
 func NewLocalStore() Store {

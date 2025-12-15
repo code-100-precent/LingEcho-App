@@ -72,7 +72,8 @@ func (h *Handlers) XunfeiSynthesize(c *gin.Context) {
 	// 生成存储路径
 	key := req.Key
 	if key == "" {
-		key = "uploads/xunfei/" + req.AssetID + "_" + strconv.FormatInt(int64(len(req.Text)), 10) + ".wav"
+		// 只生成相对存储 key，统一由存储层决定对外前缀
+		key = "xunfei/" + req.AssetID + "_" + strconv.FormatInt(int64(len(req.Text)), 10) + ".wav"
 	}
 
 	// 调用讯飞合成（使用 voiceclone）
