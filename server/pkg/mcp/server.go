@@ -2,6 +2,7 @@ package mcp
 
 import (
 	"context"
+	"fmt"
 
 	"github.com/mark3labs/mcp-go/mcp"
 	"github.com/mark3labs/mcp-go/server"
@@ -155,6 +156,30 @@ func (s *MCPServer) GetRegisteredTools() []string {
 		tools = append(tools, name)
 	}
 	return tools
+}
+
+// CallToolInternal 内部调用工具（用于Agent系统）
+func (s *MCPServer) CallToolInternal(ctx context.Context, toolName string, arguments map[string]any) (*mcp.CallToolResult, error) {
+	handler, exists := s.tools[toolName]
+	if !exists {
+		return ErrorResponse(404, fmt.Sprintf("Tool %s not found", toolName)), nil
+	}
+
+	// 构建MCP请求
+	request := mcp.CallToolRequest{
+		Params: mcp.CallToolParams{
+			Name:      toolName,
+			Arguments: arguments,
+		},
+	}
+
+	// 调用工具处理器
+	result, err := SafeToolHandler(toolName, s.logger, handler)(ctx, request)
+	if err != nil {
+		return ErrorResponse(500, fmt.Sprintf("Tool execution failed: %v", err)), nil
+	}
+
+	return result, nil
 }
 
 // getHooks 创建 MCP 服务器钩子
