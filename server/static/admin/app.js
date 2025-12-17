@@ -317,12 +317,12 @@ class QueryResult {
 }
 class EditObject {
     constructor({ mode, title, fields, names, primaryValue, row }) {
-        this.mode = mode
-        this.title = title
-        this.fields = fields
-        this.names = names
-        this.primaryValue = primaryValue
-        this.row = row
+        this.mode = mode || undefined
+        this.title = title || ''
+        this.fields = fields || []
+        this.names = names || {}
+        this.primaryValue = primaryValue || undefined
+        this.row = row || undefined
     }
 
     get apiUrl() {
@@ -659,9 +659,15 @@ const adminapp = () => ({
     loadScripts: {},
     loadStyles: {},
     async init() {
+        // Initialize all stores with proper default values
         Alpine.store('toasts', new Toasts())
         Alpine.store('queryresult', new QueryResult())
-        Alpine.store('current', {})
+        Alpine.store('current', {
+            active: false,
+            pluralName: '',
+            desc: '',
+            name: ''
+        })
         Alpine.store('switching', false)
         Alpine.store('loading', true)
         Alpine.store('confirmAction', new ConfirmAction())
@@ -698,8 +704,105 @@ const adminapp = () => ({
         this.loadSidebar()
         this.loadAllScripts(objects)
 
+        // Make adminApp instance globally accessible for profile page
+        window.adminAppInstance = this
+
         this.$store.loading = false
         this.onLoad()
+    },
+    
+    showProfile(event) {
+        if (event) {
+            event.preventDefault()
+        }
+        this.$store.switching = false
+        if (this.$store.editobj) {
+            this.$store.editobj.mode = undefined
+        }
+        
+        requestAnimationFrame(() => {
+            let elm = document.getElementById('query_content')
+            if (!elm) {
+                setTimeout(() => this.showProfile(), 200)
+                return
+            }
+            
+            let user = this.user || {}
+            let html = '<div class="space-y-6">'
+            
+            // Profile Header
+            html += '<div class="bg-white border border-gray-200 rounded-lg shadow-sm p-6">'
+            html += '<div class="flex items-center gap-4">'
+            if (user.avatar) {
+                html += '<img src="' + user.avatar + '" alt="Avatar" class="w-16 h-16 rounded-full border border-gray-200">'
+            } else {
+                html += '<div class="w-16 h-16 rounded-full border border-gray-200 bg-gray-100 flex items-center justify-center text-xl font-semibold text-gray-600">' + (user.name?.[0] || 'U').toUpperCase() + '</div>'
+            }
+            html += '<div>'
+            html += '<h1 class="text-xl font-semibold text-gray-900 mb-1">' + (user.name || '用户') + '</h1>'
+            html += '<p class="text-sm text-gray-500">' + (user.email || '') + '</p>'
+            html += '</div>'
+            html += '</div>'
+            html += '</div>'
+            
+            // User Info Cards
+            html += '<div class="grid grid-cols-1 md:grid-cols-2 gap-4">'
+            
+            // Basic Info
+            html += '<div class="bg-white border border-gray-200 rounded-lg shadow-sm p-5">'
+            html += '<h3 class="text-sm font-semibold text-gray-900 mb-3">基本信息</h3>'
+            html += '<div class="space-y-2">'
+            html += '<div class="flex justify-between py-2 border-b border-gray-100">'
+            html += '<span class="text-xs text-gray-600">用户ID</span>'
+            html += '<span class="text-xs font-medium text-gray-900">' + (user.id || 'N/A') + '</span>'
+            html += '</div>'
+            html += '<div class="flex justify-between py-2 border-b border-gray-100">'
+            html += '<span class="text-xs text-gray-600">邮箱</span>'
+            html += '<span class="text-xs font-medium text-gray-900">' + (user.email || 'N/A') + '</span>'
+            html += '</div>'
+            html += '<div class="flex justify-between py-2 border-b border-gray-100">'
+            html += '<span class="text-xs text-gray-600">角色</span>'
+            html += '<span class="text-xs font-medium text-gray-900">' + (user.role || 'Administrator') + '</span>'
+            html += '</div>'
+            html += '<div class="flex justify-between py-2">'
+            html += '<span class="text-xs text-gray-600">状态</span>'
+            html += '<span class="text-xs font-medium px-2 py-0.5 rounded bg-gray-100 text-gray-700">' + (user.enabled ? '已启用' : '已禁用') + '</span>'
+            html += '</div>'
+            html += '</div>'
+            html += '</div>'
+            
+            // Account Stats
+            html += '<div class="bg-white border border-gray-200 rounded-lg shadow-sm p-5">'
+            html += '<h3 class="text-sm font-semibold text-gray-900 mb-3">账户统计</h3>'
+            html += '<div class="grid grid-cols-2 gap-3">'
+            html += '<div class="text-center p-3 border border-gray-200 rounded">'
+            html += '<div class="text-base font-semibold text-gray-900 mb-1">' + (user.createdAt ? new Date(user.createdAt).toLocaleDateString('zh-CN') : 'N/A') + '</div>'
+            html += '<div class="text-xs text-gray-500">注册日期</div>'
+            html += '</div>'
+            html += '<div class="text-center p-3 border border-gray-200 rounded">'
+            html += '<div class="text-base font-semibold text-gray-900 mb-1">' + (user.lastLogin ? new Date(user.lastLogin).toLocaleDateString('zh-CN') : '从未') + '</div>'
+            html += '<div class="text-xs text-gray-500">最后登录</div>'
+            html += '</div>'
+            html += '</div>'
+            html += '</div>'
+            
+            html += '</div>'
+            
+            // Actions
+            html += '<div class="bg-white border border-gray-200 rounded-lg shadow-sm p-5">'
+            html += '<h3 class="text-sm font-semibold text-gray-900 mb-3">账户操作</h3>'
+            html += '<div class="flex flex-wrap gap-2">'
+            html += '<button class="px-3 py-1.5 text-sm font-medium text-gray-700 bg-gray-50 border border-gray-300 rounded hover:bg-gray-100 transition-colors">修改密码</button>'
+            html += '<button class="px-3 py-1.5 text-sm font-medium text-gray-700 bg-gray-50 border border-gray-300 rounded hover:bg-gray-100 transition-colors">编辑资料</button>'
+            html += '<a href="/api/auth/logout?next=/api/auth/login" class="px-3 py-1.5 text-sm font-medium text-gray-700 bg-gray-50 border border-gray-300 rounded hover:bg-gray-100 transition-colors">退出登录</a>'
+            html += '</div>'
+            html += '</div>'
+            
+            html += '</div>'
+            
+            elm.innerHTML = html
+            elm.style.display = 'block'
+        })
     },
 
     loadAllScripts(objects) {
@@ -743,15 +846,276 @@ const adminapp = () => ({
                 }).then(resp => {
                     this.$store.switching = true
                     resp.text().then(text => {
-                        if (text) {
+                        if (text && text.trim()) {
                             let elm = document.getElementById('query_content')
                             this.injectHtml(elm, text, null)
+                            this.$store.switching = false
+                        } else {
+                            // Dashboard returned empty, show default image
+                            this.showDefaultImage()
                         }
-                        this.$store.switching = false
                     })
+                }).catch(() => {
+                    // If dashboard fetch fails, show default image
+                    this.showDefaultImage()
                 })
+            } else {
+                // No dashboard configured, show default image
+                this.showDefaultImage()
             }
         }
+    },
+    showDefaultImage() {
+        this.$store.switching = false
+        // Ensure editobj.mode is undefined so query_content is visible
+        if (this.$store.editobj) {
+            this.$store.editobj.mode = undefined
+        }
+        
+        // Use requestAnimationFrame to ensure DOM is ready
+        requestAnimationFrame(() => {
+            let elm = document.getElementById('query_content')
+            if (!elm) {
+                // Retry after a short delay
+                setTimeout(() => this.showDefaultImage(), 200)
+                return
+            }
+            
+            // Get monitor URL from site config
+            let monitorUrl = (this.site?.Site?.monitor_url) || (this.site?.monitor_url) || ''
+            
+            // Mock data for dashboard
+            let mockData = {
+                pv: { today: 12580, yesterday: 11234, change: 12.0 },
+                uv: { today: 3245, yesterday: 2987, change: 8.6 },
+                apiCalls: { today: 45678, yesterday: 43210, change: 5.7 },
+                activeUsers: { today: 892, yesterday: 856, change: 4.2 },
+                responseTime: { avg: 125, p95: 234, p99: 456 },
+                errorRate: { today: 0.12, yesterday: 0.15, change: -20.0 },
+                throughput: { today: 1250, yesterday: 1180, change: 5.9 }
+            }
+            
+            // Get user info
+            let userName = this.user?.name || this.user?.firstName || this.user?.email || '管理员'
+            let userEmail = this.user?.email || ''
+            let currentTime = new Date().toLocaleString('zh-CN', { 
+                year: 'numeric', 
+                month: 'long', 
+                day: 'numeric', 
+                hour: '2-digit', 
+                minute: '2-digit',
+                weekday: 'long'
+            })
+            
+            let html = '<div class="space-y-6">'
+            
+            // Welcome Section
+            html += '<div class="bg-white border border-gray-200 rounded-lg shadow-sm p-6">'
+            html += '<div class="flex items-center justify-between flex-wrap gap-4">'
+            html += '<div>'
+            html += '<h1 class="text-2xl font-semibold text-gray-900 mb-1">欢迎回来，' + userName + '</h1>'
+            html += '<p class="text-sm text-gray-500">' + currentTime + '</p>'
+            html += '</div>'
+            html += '<a href="#" onclick="if(window.adminAppInstance){window.adminAppInstance.showProfile(event);} return false;" class="inline-flex items-center gap-2 px-4 py-2 text-sm font-medium text-gray-700 bg-gray-50 border border-gray-300 rounded-md hover:bg-gray-100 transition-colors">'
+            html += '<svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"></path></svg>'
+            html += '<span>个人中心</span>'
+            html += '</a>'
+            html += '</div>'
+            html += '</div>'
+            
+            // Quick Actions Section
+            html += '<div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">'
+            // Always show monitor link, construct URL if not provided
+            let finalMonitorUrl = monitorUrl || '/api/metrics/ui'
+            html += '<a href="' + finalMonitorUrl + '" target="_blank" class="group bg-white border border-gray-200 rounded-lg shadow-sm p-6 hover:border-gray-300 hover:shadow-md transition-all">'
+            html += '<div class="flex items-center justify-between mb-4">'
+            html += '<div class="p-2 bg-gray-100 rounded-md">'
+            html += '<svg class="w-5 h-5 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"></path></svg>'
+            html += '</div>'
+            html += '<svg class="w-4 h-4 text-gray-400 group-hover:text-gray-600 transition-colors" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14"></path></svg>'
+            html += '</div>'
+            html += '<h3 class="text-base font-semibold text-gray-900 mb-1">性能监控</h3>'
+            html += '<p class="text-sm text-gray-500">查看系统性能指标和监控数据</p>'
+            html += '</a>'
+            html += '</div>'
+            
+            // Recent Activity Section
+            html += '<div class="bg-white border border-gray-200 rounded-lg shadow-sm p-6">'
+            html += '<h3 class="text-base font-semibold text-gray-900 mb-4">最近活动</h3>'
+            html += '<div class="space-y-2">'
+            let activities = [
+                { type: 'user', text: '新用户注册', time: '2分钟前', icon: 'M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z' },
+                { type: 'api', text: 'API调用量达到峰值', time: '15分钟前', icon: 'M8 9l3 3-3 3m5 0h3M5 20h14a2 2 0 002-2V6a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z' },
+                { type: 'system', text: '系统备份完成', time: '1小时前', icon: 'M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z' },
+                { type: 'alert', text: '性能监控告警已处理', time: '2小时前', icon: 'M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z' }
+            ]
+            activities.forEach(activity => {
+                html += '<div class="flex items-center gap-3 p-3 rounded border border-gray-100 hover:bg-gray-50 transition-colors">'
+                html += '<div class="p-1.5 bg-gray-100 rounded">'
+                html += '<svg class="w-4 h-4 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="' + activity.icon + '"></path></svg>'
+                html += '</div>'
+                html += '<div class="flex-1 min-w-0">'
+                html += '<p class="text-sm text-gray-900">' + activity.text + '</p>'
+                html += '<p class="text-xs text-gray-500">' + activity.time + '</p>'
+                html += '</div>'
+                html += '</div>'
+            })
+            html += '</div>'
+            html += '</div>'
+            
+            // Key Metrics Section
+            html += '<div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">'
+            
+            // PV Card
+            html += '<div class="bg-white border border-gray-200 rounded-lg shadow-sm p-5 hover:border-gray-300 transition-colors">'
+            html += '<div class="flex items-center justify-between mb-3">'
+            html += '<div class="p-1.5 bg-gray-100 rounded">'
+            html += '<svg class="w-4 h-4 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"></path><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"></path></svg>'
+            html += '</div>'
+            html += '<span class="text-xs font-medium px-2 py-0.5 rounded ' + (mockData.pv.change > 0 ? 'bg-gray-100 text-gray-700' : 'bg-gray-100 text-gray-700') + '">' + (mockData.pv.change > 0 ? '+' : '') + mockData.pv.change.toFixed(1) + '%</span>'
+            html += '</div>'
+            html += '<div class="text-xl font-semibold text-gray-900 mb-1">' + mockData.pv.today.toLocaleString() + '</div>'
+            html += '<div class="text-xs text-gray-500">页面浏览量 (PV)</div>'
+            html += '<div class="text-xs text-gray-400 mt-1">昨日: ' + mockData.pv.yesterday.toLocaleString() + '</div>'
+            html += '</div>'
+            
+            // UV Card
+            html += '<div class="bg-white border border-gray-200 rounded-lg shadow-sm p-5 hover:border-gray-300 transition-colors">'
+            html += '<div class="flex items-center justify-between mb-3">'
+            html += '<div class="p-1.5 bg-gray-100 rounded">'
+            html += '<svg class="w-4 h-4 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z"></path></svg>'
+            html += '</div>'
+            html += '<span class="text-xs font-medium px-2 py-0.5 rounded ' + (mockData.uv.change > 0 ? 'bg-gray-100 text-gray-700' : 'bg-gray-100 text-gray-700') + '">' + (mockData.uv.change > 0 ? '+' : '') + mockData.uv.change.toFixed(1) + '%</span>'
+            html += '</div>'
+            html += '<div class="text-xl font-semibold text-gray-900 mb-1">' + mockData.uv.today.toLocaleString() + '</div>'
+            html += '<div class="text-xs text-gray-500">独立访客 (UV)</div>'
+            html += '<div class="text-xs text-gray-400 mt-1">昨日: ' + mockData.uv.yesterday.toLocaleString() + '</div>'
+            html += '</div>'
+            
+            // API Calls Card
+            html += '<div class="bg-white border border-gray-200 rounded-lg shadow-sm p-5 hover:border-gray-300 transition-colors">'
+            html += '<div class="flex items-center justify-between mb-3">'
+            html += '<div class="p-1.5 bg-gray-100 rounded">'
+            html += '<svg class="w-4 h-4 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 9l3 3-3 3m5 0h3M5 20h14a2 2 0 002-2V6a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"></path></svg>'
+            html += '</div>'
+            html += '<span class="text-xs font-medium px-2 py-0.5 rounded ' + (mockData.apiCalls.change > 0 ? 'bg-gray-100 text-gray-700' : 'bg-gray-100 text-gray-700') + '">' + (mockData.apiCalls.change > 0 ? '+' : '') + mockData.apiCalls.change.toFixed(1) + '%</span>'
+            html += '</div>'
+            html += '<div class="text-xl font-semibold text-gray-900 mb-1">' + mockData.apiCalls.today.toLocaleString() + '</div>'
+            html += '<div class="text-xs text-gray-500">API 调用次数</div>'
+            html += '<div class="text-xs text-gray-400 mt-1">昨日: ' + mockData.apiCalls.yesterday.toLocaleString() + '</div>'
+            html += '</div>'
+            
+            // Active Users Card
+            html += '<div class="bg-white border border-gray-200 rounded-lg shadow-sm p-5 hover:border-gray-300 transition-colors">'
+            html += '<div class="flex items-center justify-between mb-3">'
+            html += '<div class="p-1.5 bg-gray-100 rounded">'
+            html += '<svg class="w-4 h-4 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z"></path></svg>'
+            html += '</div>'
+            html += '<span class="text-xs font-medium px-2 py-0.5 rounded ' + (mockData.activeUsers.change > 0 ? 'bg-gray-100 text-gray-700' : 'bg-gray-100 text-gray-700') + '">' + (mockData.activeUsers.change > 0 ? '+' : '') + mockData.activeUsers.change.toFixed(1) + '%</span>'
+            html += '</div>'
+            html += '<div class="text-xl font-semibold text-gray-900 mb-1">' + mockData.activeUsers.today.toLocaleString() + '</div>'
+            html += '<div class="text-xs text-gray-500">活跃用户</div>'
+            html += '<div class="text-xs text-gray-400 mt-1">昨日: ' + mockData.activeUsers.yesterday.toLocaleString() + '</div>'
+            html += '</div>'
+            
+            html += '</div>'
+            
+            // Performance Metrics Section
+            html += '<div class="grid grid-cols-1 lg:grid-cols-3 gap-4">'
+            
+            // Response Time Card
+            html += '<div class="bg-white border border-gray-200 rounded-lg shadow-sm p-5">'
+            html += '<h3 class="text-sm font-semibold text-gray-900 mb-3">响应时间</h3>'
+            html += '<div class="space-y-2.5">'
+            html += '<div class="flex items-center justify-between py-1.5 border-b border-gray-100">'
+            html += '<span class="text-xs text-gray-600">平均响应</span>'
+            html += '<span class="text-sm font-semibold text-gray-900">' + mockData.responseTime.avg + 'ms</span>'
+            html += '</div>'
+            html += '<div class="flex items-center justify-between py-1.5 border-b border-gray-100">'
+            html += '<span class="text-xs text-gray-600">P95</span>'
+            html += '<span class="text-sm font-semibold text-gray-700">' + mockData.responseTime.p95 + 'ms</span>'
+            html += '</div>'
+            html += '<div class="flex items-center justify-between py-1.5">'
+            html += '<span class="text-xs text-gray-600">P99</span>'
+            html += '<span class="text-sm font-semibold text-gray-700">' + mockData.responseTime.p99 + 'ms</span>'
+            html += '</div>'
+            html += '</div>'
+            html += '</div>'
+            
+            // Error Rate Card
+            html += '<div class="bg-white border border-gray-200 rounded-lg shadow-sm p-5">'
+            html += '<h3 class="text-sm font-semibold text-gray-900 mb-3">错误率</h3>'
+            html += '<div class="flex items-baseline gap-2 mb-2">'
+            html += '<div class="text-2xl font-semibold text-gray-900">' + mockData.errorRate.today.toFixed(2) + '%</div>'
+            html += '<span class="text-xs text-gray-500">' + (mockData.errorRate.change < 0 ? '↓' : '↑') + ' ' + Math.abs(mockData.errorRate.change).toFixed(1) + '%</span>'
+            html += '</div>'
+            html += '<div class="text-xs text-gray-500">较昨日 ' + (mockData.errorRate.change < 0 ? '下降' : '上升') + '</div>'
+            html += '</div>'
+            
+            // Throughput Card
+            html += '<div class="bg-white border border-gray-200 rounded-lg shadow-sm p-5">'
+            html += '<h3 class="text-sm font-semibold text-gray-900 mb-3">吞吐量</h3>'
+            html += '<div class="flex items-baseline gap-2 mb-2">'
+            html += '<div class="text-2xl font-semibold text-gray-900">' + mockData.throughput.today.toLocaleString() + '</div>'
+            html += '<span class="text-xs text-gray-500">req/s</span>'
+            html += '<span class="text-xs text-gray-500 ml-auto">' + (mockData.throughput.change > 0 ? '↑' : '↓') + ' ' + Math.abs(mockData.throughput.change).toFixed(1) + '%</span>'
+            html += '</div>'
+            html += '<div class="text-xs text-gray-500">较昨日 ' + (mockData.throughput.change > 0 ? '上升' : '下降') + '</div>'
+            html += '</div>'
+            
+            html += '</div>'
+            
+            // System Status Section
+            html += '<div class="grid grid-cols-1 lg:grid-cols-2 gap-4">'
+            html += '<div class="bg-white border border-gray-200 rounded-lg shadow-sm p-5">'
+            html += '<h3 class="text-sm font-semibold text-gray-900 mb-3">系统状态</h3>'
+            html += '<div class="space-y-2">'
+            let systemStatus = [
+                { name: '数据库', status: '正常', value: '99.9%', color: 'green' },
+                { name: '缓存服务', status: '正常', value: '98.5%', color: 'green' },
+                { name: 'API服务', status: '正常', value: '99.2%', color: 'green' },
+                { name: '存储服务', status: '正常', value: '97.8%', color: 'green' }
+            ]
+            systemStatus.forEach(item => {
+                html += '<div class="flex items-center justify-between py-2 border-b border-gray-100 last:border-0">'
+                html += '<div class="flex items-center gap-2">'
+                html += '<div class="w-1.5 h-1.5 rounded-full bg-gray-400"></div>'
+                html += '<span class="text-xs text-gray-700">' + item.name + '</span>'
+                html += '</div>'
+                html += '<div class="flex items-center gap-3">'
+                html += '<span class="text-xs text-gray-500">' + item.status + '</span>'
+                html += '<span class="text-xs font-medium text-gray-900">' + item.value + '</span>'
+                html += '</div>'
+                html += '</div>'
+            })
+            html += '</div>'
+            html += '</div>'
+            
+            html += '<div class="bg-white border border-gray-200 rounded-lg shadow-sm p-5">'
+            html += '<h3 class="text-sm font-semibold text-gray-900 mb-3">快速操作</h3>'
+            html += '<div class="grid grid-cols-2 gap-2">'
+            let quickActions = [
+                { name: '查看日志', icon: 'M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z' },
+                { name: '系统设置', icon: 'M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z' },
+                { name: '数据备份', icon: 'M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12' },
+                { name: '用户管理', icon: 'M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z' }
+            ]
+            quickActions.forEach(action => {
+                html += '<button class="flex flex-col items-center gap-1.5 p-3 rounded border border-gray-200 hover:border-gray-300 hover:bg-gray-50 transition-all">'
+                html += '<svg class="w-4 h-4 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="' + action.icon + '"></path></svg>'
+                html += '<span class="text-xs text-gray-700">' + action.name + '</span>'
+                html += '</button>'
+            })
+            html += '</div>'
+            html += '</div>'
+            html += '</div>'
+            
+            html += '</div>'
+            
+            elm.innerHTML = html
+            // Force display in case x-show is hiding it
+            elm.style.display = 'block'
+        })
     },
     loadSidebar() {
         fetch('sidebar.html', {
@@ -899,3 +1263,6 @@ const adminapp = () => ({
         }
     },
 })
+
+// Make adminapp globally accessible for Alpine.js
+window.adminapp = adminapp

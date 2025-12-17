@@ -60,42 +60,30 @@
       </template>
     </ul>
 
-    <!-- Fixed Bottom Section: Monitor Link & User Info -->
+    <!-- Fixed Bottom Section: User Info & Logout -->
     <div class="mt-auto shrink-0 border-t border-gray-200 bg-white">
-      <!-- Monitor Link -->
-      <div class="-mx-4 px-4 pt-4" x-show="site.Site.monitor_url">
-        <a :href="site.Site.monitor_url" 
-           target="_blank"
-           class="group flex items-center gap-x-3 rounded-md px-3 py-2 text-sm font-semibold leading-6 transition-all duration-150 border-l-4 border-transparent text-gray-700 hover:text-indigo-600 hover:bg-gray-50 min-w-0 overflow-hidden">
-          <svg class="h-6 w-6 shrink-0 text-gray-400 group-hover:text-indigo-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"></path>
-          </svg>
-          <span class="hidden md:inline truncate">性能监控</span>
-          <svg class="h-4 w-4 ml-auto text-gray-400 group-hover:text-indigo-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14"></path>
+      <!-- User Info & Logout -->
+      <div class="-mx-4 px-4 pt-6 pb-4 overflow-x-hidden mt-4">
+        <a href="#" @click="if(window.adminAppInstance){window.adminAppInstance.showProfile($event);} $event.preventDefault();" class="flex items-center gap-x-2 min-w-0 flex-1 overflow-hidden p-2 rounded-lg hover:bg-gray-50 transition-colors group">
+          <template x-if="user.avatar">
+            <img class="h-10 w-10 rounded-full bg-gray-100 border-2 border-gray-200 object-cover shrink-0 group-hover:border-indigo-300 transition-colors" :src="user.avatar" alt="" />
+          </template>
+          <template x-if="!user.avatar">
+            <span
+                    class="uppercase h-10 w-10 flex items-center justify-center rounded-full bg-gradient-to-br from-indigo-100 to-purple-100 text-indigo-700 border-2 border-indigo-200 font-bold text-base shrink-0 group-hover:border-indigo-400 group-hover:from-indigo-200 group-hover:to-purple-200 transition-colors"
+                    x-text="user.name[0]"></span>
+          </template>
+          <div class="hidden md:block min-w-0 flex-1 overflow-hidden">
+            <div class="text-sm font-semibold text-gray-800 truncate group-hover:text-indigo-600 transition-colors" x-text="user.name"></div>
+            <div class="text-xs text-gray-500 truncate">点击查看个人中心</div>
+          </div>
+          <svg class="w-5 h-5 text-gray-400 group-hover:text-indigo-600 shrink-0 transition-colors" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"></path>
           </svg>
         </a>
-      </div>
-
-      <!-- User Info & Logout -->
-      <div class="-mx-4 px-4 pt-4 pb-4 overflow-x-hidden">
-        <div class="flex items-center justify-between py-2 min-w-0">
-          <div class="flex items-center gap-x-2 min-w-0 flex-1 overflow-hidden">
-            <template x-if="user.avatar">
-              <img class="h-8 w-8 rounded-full bg-gray-100 border-2 border-gray-200 object-cover shrink-0" :src="user.avatar" alt="" />
-            </template>
-            <template x-if="!user.avatar">
-              <span
-                      class="uppercase h-8 w-8 flex items-center justify-center rounded-full bg-gradient-to-br from-indigo-100 to-purple-100 text-indigo-700 border-2 border-indigo-200 font-bold text-base shrink-0"
-                      x-text="user.name[0]"></span>
-            </template>
-            <div class="hidden md:block min-w-0 flex-1 overflow-hidden">
-              <div class="text-sm font-semibold text-gray-800 truncate" x-text="user.name"></div>
-              <div class="text-xs text-gray-500 truncate">Administrator</div>
-            </div>
-          </div>
+        <div class="mt-3 pt-3 border-t border-gray-200">
           <a href="/api/auth/logout?next=/api/auth/login"
-             class="p-1 rounded-lg hover:bg-red-50 text-gray-500 hover:text-red-600 transition-colors duration-200 shrink-0 ml-2"
+             class="flex items-center gap-x-2 p-2 rounded-lg hover:bg-red-50 text-gray-500 hover:text-red-600 transition-colors duration-200"
              title="Logout">
             <svg xmlns="http://www.w3.org/2000/svg"
                  fill="none"
@@ -106,6 +94,7 @@
               <path stroke-linecap="round" stroke-linejoin="round"
                     d="M15.75 9V5.25A2.25 2.25 0 0013.5 3h-6a2.25 2.25 0 00-2.25 2.25v13.5A2.25 2.25 0 007.5 21h6a2.25 2.25 0 002.25-2.25V15m3 0l3-3m0 0l-3-3m3 3H9" />
             </svg>
+            <span class="hidden md:inline text-sm font-medium">退出登录</span>
           </a>
         </div>
       </div>

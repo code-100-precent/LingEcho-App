@@ -242,15 +242,21 @@
             </template>
 
             <template x-if="!$store.switching">
-              <div class="admin-header admin-hover-card">
+              <div class="admin-header admin-hover-card" x-show="$store.current && ($store.current.active || (!$store.current.active && !$store.current.pluralName))">
                 <div class="sm:flex sm:items-center">
                   <div class="sm:flex-auto">
-                    <h1 class="admin-section-title" x-text="$store.current.pluralName"></h1>
-                    <p class="admin-section-desc" x-text="$store.current.desc"></p>
+                    <template x-if="$store.current && $store.current.active">
+                      <h1 class="admin-section-title" x-text="$store.current.pluralName || ''"></h1>
+                      <p class="admin-section-desc" x-text="$store.current.desc || ''"></p>
+                    </template>
+                    <template x-if="!$store.current || !$store.current.active">
+                      <h1 class="admin-section-title">管理后台</h1>
+                      <p class="admin-section-desc">系统管理控制台</p>
+                    </template>
                   </div>
-                  <template x-if="!$store.editobj.mode && $store.current.active">
+                  <template x-if="$store.editobj && !$store.editobj.mode && $store.current && $store.current.active">
                     <div class="admin-action-bar">
-                      <button type="button" x-text="'Add '+ $store.current.name" @click="addObject($event)"
+                      <button type="button" x-text="'Add '+ ($store.current.name || '')" @click="addObject($event)"
                               class="admin-btn-primary admin-hover-button"></button>
                     </div>
                   </template>
@@ -258,9 +264,9 @@
               </div>
             </template>
 
-            <div x-show="!$store.editobj.mode" id="query_content" class="admin-content admin-hover-card mb-6"></div>
+            <div x-show="!$store.editobj || !$store.editobj.mode" id="query_content" class="admin-content admin-hover-card mb-6"></div>
 
-            <div x-show="$store.editobj.mode" id="edit_content" class="admin-content admin-hover-card">
+            <div x-show="$store.editobj && $store.editobj.mode" id="edit_content" class="admin-content admin-hover-card">
               <div class="px-4 py-4">
                 <div class="admin-edit-header">
                   <a href="#" @click="closeEdit($event, true)" class="admin-back-link">← Back</a>
@@ -277,21 +283,21 @@
     </div>
   </template>
 
-  <template x-if="$store.toasts.show">
+  <template x-if="$store.toasts && $store.toasts.show">
     <div class="admin-toast-container">
       <div class="admin-toast-content">
         <div class="admin-toast-box" role="alert">
-          <template x-if="!$store.toasts.pending">
-            <div class="admin-alert admin-hover-toast admin-toast-message" :class="$store.toasts.class">
+          <template x-if="$store.toasts && !$store.toasts.pending">
+            <div class="admin-alert admin-hover-toast admin-toast-message" :class="$store.toasts && $store.toasts.class">
               <div>
-                <template x-if="$store.toasts.level == 'info'">
+                <template x-if="$store.toasts && $store.toasts.level == 'info'">
                   <svg class="admin-icon-success" xmlns="http://www.w3.org/2000/svg" width="20" height="20"
                        fill="currentColor" viewBox="0 0 16 16">
                     <path
                             d="M16 8A8 8 0 1 1 0 8a8 8 0 0 1 16 0zm-3.97-3.03a.75.75 0 0 0-1.08.022L7.477 9.417 5.384 7.323a.75.75 0 0 0-1.06 1.06L6.97 11.03a.75.75 0 0 0 1.079-.02l3.992-4.99a.75.75 0 0 0-.01-1.05z" />
                   </svg>
                 </template>
-                <template x-if="$store.toasts.level == 'error'">
+                <template x-if="$store.toasts && $store.toasts.level == 'error'">
                   <svg class="admin-icon-error" xmlns="http://www.w3.org/2000/svg" width="20" height="20"
                        fill="currentColor" viewBox="0 0 16 16">
                     <path
@@ -299,9 +305,9 @@
                   </svg>
                 </template>
               </div>
-              <div class="flex-grow text-base font-semibold" x-text="$store.toasts.text"></div>
+              <div class="flex-grow text-base font-semibold" x-text="$store.toasts && $store.toasts.text || ''"></div>
               <div class="flex flex-end">
-                <button type="button" @click="$store.toasts.reset()"
+                <button type="button" @click="$store.toasts && $store.toasts.reset()"
                         class="admin-close-button">
                   <span class="sr-only">Close</span>
                   <svg class="w-4 h-4" width="16" height="16" viewBox="0 0 16 16" fill="none"
@@ -314,13 +320,13 @@
               </div>
             </div>
           </template>
-          <template x-if="$store.toasts.pending">
-            <div class="admin-alert admin-hover-toast admin-toast-pending" :class="$store.toasts.class">
+          <template x-if="$store.toasts && $store.toasts.pending">
+            <div class="admin-alert admin-hover-toast admin-toast-pending" :class="$store.toasts && $store.toasts.class">
               <div
                       class="animate-spin inline-block w-5 h-5 border-[3px] border-indigo-600 border-t-transparent rounded-full"
                       role="status" aria-label="loading">
               </div>
-              <span x-text="$store.toasts.text" class="font-semibold text-base"></span>
+              <span x-text="$store.toasts && $store.toasts.text || ''" class="font-semibold text-base"></span>
             </div>
           </template>
         </div>
@@ -328,7 +334,7 @@
     </div>
   </template>
 
-  <template x-if="$store.confirmAction.show">
+  <template x-if="$store.confirmAction && $store.confirmAction.show">
     <div class="fixed inset-0 z-50 overflow-y-auto" x-transition:enter="ease-out duration-300" x-transition:enter-start="opacity-0" x-transition:enter-end="opacity-100" x-transition:leave="ease-in duration-200" x-transition:leave-start="opacity-100" x-transition:leave-end="opacity-0">
       <!-- Backdrop -->
       <div class="fixed inset-0 bg-gray-500 bg-opacity-75 transition-opacity" aria-hidden="true"></div>
@@ -350,23 +356,23 @@
               <!-- Content -->
               <div class="mt-3 text-center sm:ml-4 sm:mt-0 sm:text-left">
                 <h3 class="text-lg font-semibold leading-6 text-gray-900" id="modal-title">
-                  <template x-if="!$store.confirmAction.action.title">
-                    <span x-text="$store.confirmAction.action.label"></span> records
+                  <template x-if="$store.confirmAction && $store.confirmAction.action && !$store.confirmAction.action.title">
+                    <span x-text="$store.confirmAction.action.label || ''"></span> records
                   </template>
-                  <template x-if="$store.confirmAction.action.title">
+                  <template x-if="$store.confirmAction && $store.confirmAction.action && $store.confirmAction.action.title">
                     <span x-text="$store.confirmAction.action.title"></span>
                   </template>
                 </h3>
                 
                 <div class="mt-2">
                   <p class="text-sm text-gray-600">
-                    <template x-if="!$store.confirmAction.action.text">
+                    <template x-if="$store.confirmAction && $store.confirmAction.action && !$store.confirmAction.action.text">
                       <div class="space-y-2">
-                        <p>Are you sure you want to <span x-text="$store.confirmAction.action.label.toLowerCase()" class="font-medium text-red-600"></span> <strong x-text="$store.confirmAction.keys.length" class="font-semibold"></strong> records?</p>
+                        <p>Are you sure you want to <span x-text="($store.confirmAction && $store.confirmAction.action && $store.confirmAction.action.label ? $store.confirmAction.action.label.toLowerCase() : '')" class="font-medium text-red-600"></span> <strong x-text="$store.confirmAction && $store.confirmAction.keys ? $store.confirmAction.keys.length : 0" class="font-semibold"></strong> records?</p>
                         <p class="text-xs text-gray-500 italic">This action will be executed immediately on the server and cannot be undone.</p>
                       </div>
                     </template>
-                    <template x-if="$store.confirmAction.action.text">
+                    <template x-if="$store.confirmAction && $store.confirmAction.action && $store.confirmAction.action.text">
                       <div x-html="$store.confirmAction.action.text" class="text-gray-600"></div>
                     </template>
                   </p>
@@ -377,10 +383,10 @@
           
           <!-- Footer -->
           <div class="bg-gray-50 px-4 py-3 sm:flex sm:flex-row-reverse sm:px-6">
-            <button type="button" @click="$store.queryresult.doAction($event)"
-                    :class="$store.confirmAction.action.class"
+            <button type="button" @click="$store.queryresult && $store.queryresult.doAction($event)"
+                    :class="$store.confirmAction && $store.confirmAction.action && $store.confirmAction.action.class"
                     class="inline-flex w-full justify-center rounded-md bg-red-600 px-3 py-2 text-sm font-semibold text-white shadow-sm hover:bg-red-500 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-red-600 sm:ml-3 sm:w-auto">
-              <span x-text="$store.confirmAction.action.name"></span>
+              <span x-text="$store.confirmAction && $store.confirmAction.action && $store.confirmAction.action.name || 'Confirm'"></span>
             </button>
             
             <button type="button" @click="$store.confirmAction.cancel($event)"
