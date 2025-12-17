@@ -27,10 +27,6 @@ type VoiceTrainingTask struct {
 	CreatedAt     time.Time      `json:"created_at"`
 	UpdatedAt     time.Time      `json:"updated_at"`
 	DeletedAt     gorm.DeletedAt `json:"deleted_at" gorm:"index"`
-
-	// 关联
-	User        User         `json:"user" gorm:"foreignKey:UserID"`
-	VoiceClones []VoiceClone `json:"voice_clones" gorm:"foreignKey:TrainingTaskID"`
 }
 
 // VoiceClone 音色克隆（训练成功后的音色资源）
@@ -50,11 +46,6 @@ type VoiceClone struct {
 	CreatedAt        time.Time      `json:"created_at"`
 	UpdatedAt        time.Time      `json:"updated_at"`
 	DeletedAt        gorm.DeletedAt `json:"deleted_at" gorm:"index"`
-
-	// 关联
-	User             User              `json:"user" gorm:"foreignKey:UserID"`
-	TrainingTask     VoiceTrainingTask `json:"training_task" gorm:"foreignKey:TrainingTaskID"`
-	SynthesisRecords []VoiceSynthesis  `json:"synthesis_records" gorm:"foreignKey:VoiceCloneID"`
 }
 
 // VoiceSynthesis 语音合成记录
@@ -72,10 +63,6 @@ type VoiceSynthesis struct {
 	CreatedAt     time.Time      `json:"created_at"`
 	UpdatedAt     time.Time      `json:"updated_at"`
 	DeletedAt     gorm.DeletedAt `json:"deleted_at" gorm:"index"`
-
-	// 关联
-	User       User       `json:"user" gorm:"foreignKey:UserID"`
-	VoiceClone VoiceClone `json:"voice_clone" gorm:"foreignKey:VoiceCloneID"`
 }
 
 // VoiceTrainingText 训练文本（缓存讯飞的训练文本）
@@ -88,9 +75,6 @@ type VoiceTrainingText struct {
 	CreatedAt time.Time      `json:"created_at"`
 	UpdatedAt time.Time      `json:"updated_at"`
 	DeletedAt gorm.DeletedAt `json:"deleted_at" gorm:"index"`
-
-	// 关联
-	TextSegments []VoiceTrainingTextSegment `json:"text_segments" gorm:"foreignKey:TextID"`
 }
 
 // TableName 指定表名
@@ -107,9 +91,6 @@ type VoiceTrainingTextSegment struct {
 	CreatedAt time.Time      `json:"created_at"`
 	UpdatedAt time.Time      `json:"updated_at"`
 	DeletedAt gorm.DeletedAt `json:"deleted_at" gorm:"index"`
-
-	// 关联
-	TrainingText VoiceTrainingText `json:"training_text" gorm:"foreignKey:TextID"`
 }
 
 // TableName 指定表名

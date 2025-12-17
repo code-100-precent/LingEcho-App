@@ -89,10 +89,10 @@ func TestWithAdminAuth_NotStaff(t *testing.T) {
 	user, err := CreateUser(db, "test@example.com", "password123")
 	require.NoError(t, err)
 	user.IsStaff = false
-	user.IsSuperUser = false
+	user.Role = RoleUser
 	err = UpdateUserFields(db, user, map[string]any{
-		"IsStaff":     false,
-		"IsSuperUser": false,
+		"IsStaff": false,
+		"Role":    RoleUser,
 	})
 	require.NoError(t, err)
 
@@ -295,12 +295,11 @@ func TestAdminObject_BuildPermissions(t *testing.T) {
 	db := setupAdminsTestDB(t)
 
 	superUser := &User{
-		IsSuperUser: true,
+		Role: RoleSuperAdmin,
 	}
 
 	regularUser := &User{
-		IsSuperUser: false,
-		Role:        "user",
+		Role: RoleUser,
 	}
 
 	obj := AdminObject{
@@ -328,8 +327,9 @@ func TestHandleAdminJson(t *testing.T) {
 
 	user, err := CreateUser(db, "test@example.com", "password123")
 	require.NoError(t, err)
-	user.IsSuperUser = true
-	err = UpdateUserFields(db, user, map[string]any{"IsSuperUser": true})
+	user.Role = RoleSuperAdmin
+	user.Permissions = `["*"]`
+	err = UpdateUserFields(db, user, map[string]any{"Role": RoleSuperAdmin, "Permissions": `["*"]`})
 	require.NoError(t, err)
 
 	objects := GetLingEchoAdminObjects()
@@ -707,8 +707,9 @@ func TestAdminObject_handleCreate(t *testing.T) {
 
 	user, err := CreateUser(db, "admin@example.com", "password123")
 	require.NoError(t, err)
-	user.IsSuperUser = true
-	err = UpdateUserFields(db, user, map[string]any{"IsSuperUser": true})
+	user.Role = RoleSuperAdmin
+	user.Permissions = `["*"]`
+	err = UpdateUserFields(db, user, map[string]any{"Role": RoleSuperAdmin, "Permissions": `["*"]`})
 	require.NoError(t, err)
 
 	obj := AdminObject{
@@ -746,8 +747,9 @@ func TestAdminObject_handleUpdate(t *testing.T) {
 
 	user, err := CreateUser(db, "admin@example.com", "password123")
 	require.NoError(t, err)
-	user.IsSuperUser = true
-	err = UpdateUserFields(db, user, map[string]any{"IsSuperUser": true})
+	user.Role = RoleSuperAdmin
+	user.Permissions = `["*"]`
+	err = UpdateUserFields(db, user, map[string]any{"Role": RoleSuperAdmin, "Permissions": `["*"]`})
 	require.NoError(t, err)
 
 	targetUser, err := CreateUser(db, "target@example.com", "password123")
@@ -790,8 +792,9 @@ func TestAdminObject_handleDelete(t *testing.T) {
 
 	user, err := CreateUser(db, "admin@example.com", "password123")
 	require.NoError(t, err)
-	user.IsSuperUser = true
-	err = UpdateUserFields(db, user, map[string]any{"IsSuperUser": true})
+	user.Role = RoleSuperAdmin
+	user.Permissions = `["*"]`
+	err = UpdateUserFields(db, user, map[string]any{"Role": RoleSuperAdmin, "Permissions": `["*"]`})
 	require.NoError(t, err)
 
 	targetUser, err := CreateUser(db, "target@example.com", "password123")
@@ -831,8 +834,9 @@ func TestAdminObject_handleAction(t *testing.T) {
 
 	user, err := CreateUser(db, "admin@example.com", "password123")
 	require.NoError(t, err)
-	user.IsSuperUser = true
-	err = UpdateUserFields(db, user, map[string]any{"IsSuperUser": true})
+	user.Role = RoleSuperAdmin
+	user.Permissions = `["*"]`
+	err = UpdateUserFields(db, user, map[string]any{"Role": RoleSuperAdmin, "Permissions": `["*"]`})
 	require.NoError(t, err)
 
 	obj := AdminObject{
@@ -876,8 +880,9 @@ func TestRegisterAdmins(t *testing.T) {
 
 	user, err := CreateUser(db, "admin@example.com", "password123")
 	require.NoError(t, err)
-	user.IsSuperUser = true
-	err = UpdateUserFields(db, user, map[string]any{"IsSuperUser": true})
+	user.Role = RoleSuperAdmin
+	user.Permissions = `["*"]`
+	err = UpdateUserFields(db, user, map[string]any{"Role": RoleSuperAdmin, "Permissions": `["*"]`})
 	require.NoError(t, err)
 
 	router.Use(func(c *gin.Context) {

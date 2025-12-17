@@ -151,8 +151,9 @@ type AdminObject struct {
 func GetLingEchoAdminObjects() []AdminObject {
 
 	superAccessCheck := func(c *gin.Context, obj *AdminObject) error {
-		if !CurrentUser(c).IsSuperUser {
-			return errors.New("only superuser can access")
+		user := CurrentUser(c)
+		if !user.IsSuperAdmin() {
+			return errors.New("only superadmin can access")
 		}
 		return nil
 	}
@@ -168,9 +169,9 @@ func GetLingEchoAdminObjects() []AdminObject {
 			Group:       "Settings",
 			Name:        "User",
 			Desc:        "Builtin user management system",
-			Shows:       []string{"ID", "Email", "Username", "FirstName", "LastName", "IsStaff", "IsSuperUser", "Enabled", "Activated", "UpdatedAt", "LastLogin", "LastLoginIP", "Source"},
-			Editables:   []string{"Email", "Password", "Username", "FirstName", "LastName", "IsStaff", "IsSuperUser", "Enabled", "Activated", "Profile", "Source"},
-			Filterables: []string{"CreatedAt", "UpdatedAt", "Username", "IsStaff", "IsSuperUser", "Enabled", "Activated "},
+			Shows:       []string{"ID", "Email", "Username", "FirstName", "LastName", "IsStaff", "Role", "Enabled", "Activated", "UpdatedAt", "LastLogin", "LastLoginIP", "Source"},
+			Editables:   []string{"Email", "Password", "Username", "FirstName", "LastName", "IsStaff", "Role", "Permissions", "Enabled", "Activated", "Profile", "Source"},
+			Filterables: []string{"CreatedAt", "UpdatedAt", "Username", "IsStaff", "Role", "Enabled", "Activated "},
 			Orderables:  []string{"CreatedAt", "UpdatedAt", "Enabled", "Activated"},
 			Searchables: []string{"Username", "Email", "FirstName", "ListName"},
 			Orders:      []LingEcho.Order{{"UpdatedAt", LingEcho.OrderOpDesc}},
@@ -286,7 +287,7 @@ func WithAdminAuth() gin.HandlerFunc {
 			return
 		}
 
-		if !user.IsStaff && !user.IsSuperUser {
+		if !user.IsStaff && !user.IsAdmin() {
 			LingEcho.AbortWithJSONError(ctx, http.StatusForbidden, errors.New("forbidden"))
 			return
 		}
@@ -423,7 +424,9 @@ func HandleAdminJson(c *gin.Context, objects []*AdminObject, buildContext AdminB
 
 func (obj *AdminObject) BuildPermissions(db *gorm.DB, user *User) {
 	obj.Permissions = map[string]bool{}
-	if user.IsSuperUser {
+
+	// 超级管理员或管理员拥有所有权限
+	if user.IsAdmin() {
 		obj.Permissions["can_create"] = true
 		obj.Permissions["can_update"] = true
 		obj.Permissions["can_delete"] = true
@@ -431,11 +434,20 @@ func (obj *AdminObject) BuildPermissions(db *gorm.DB, user *User) {
 		return
 	}
 
-	//TODO: build permissions with group settings
-	obj.Permissions["can_create"] = true
-	obj.Permissions["can_update"] = true
-	obj.Permissions["can_delete"] = true
-	obj.Permissions["can_action"] = true
+	// 根据权限列表设置权限
+	// 检查是否有 admin.write 权限
+	if user.HasPermission("admin.write") {
+		obj.Permissions["can_create"] = true
+		obj.Permissions["can_update"] = true
+		obj.Permissions["can_delete"] = true
+		obj.Permissions["can_action"] = true
+	} else {
+		// 默认普通用户只有读取权限
+		obj.Permissions["can_create"] = false
+		obj.Permissions["can_update"] = false
+		obj.Permissions["can_delete"] = false
+		obj.Permissions["can_action"] = false
+	}
 }
 
 // RegisterAdmin registers admin routes

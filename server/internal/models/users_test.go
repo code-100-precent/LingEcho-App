@@ -506,9 +506,10 @@ func TestUpdateNotificationSettings(t *testing.T) {
 	require.NoError(t, err)
 
 	settings := map[string]bool{
-		"emailNotifications": false,
-		"pushNotifications":  true,
-		"smsNotifications":   true,
+		"emailNotifications":    false,
+		"pushNotifications":     true,
+		"systemNotifications":   true,
+		"autoCleanUnreadEmails": false,
 	}
 
 	err = UpdateNotificationSettings(db, user, settings)
@@ -519,7 +520,8 @@ func TestUpdateNotificationSettings(t *testing.T) {
 	require.NoError(t, err)
 	assert.False(t, retrieved.EmailNotifications)
 	assert.True(t, retrieved.PushNotifications)
-	assert.True(t, retrieved.SMSNotifications)
+	assert.True(t, retrieved.SystemNotifications)
+	assert.False(t, retrieved.AutoCleanUnreadEmails)
 }
 
 func TestUpdatePreferences(t *testing.T) {
@@ -529,10 +531,8 @@ func TestUpdatePreferences(t *testing.T) {
 	require.NoError(t, err)
 
 	preferences := map[string]string{
-		"theme":      "dark",
-		"language":   "en",
-		"timezone":   "UTC",
-		"dateFormat": "YYYY-MM-DD",
+		"timezone": "UTC",
+		"locale":   "en-US",
 	}
 
 	err = UpdatePreferences(db, user, preferences)
@@ -541,10 +541,8 @@ func TestUpdatePreferences(t *testing.T) {
 	// Verify preferences were updated
 	retrieved, err := GetUserByUID(db, user.ID)
 	require.NoError(t, err)
-	assert.Equal(t, "dark", retrieved.Theme)
-	assert.Equal(t, "en", retrieved.Language)
 	assert.Equal(t, "UTC", retrieved.Timezone)
-	assert.Equal(t, "YYYY-MM-DD", retrieved.DateFormat)
+	assert.Equal(t, "en-US", retrieved.Locale)
 }
 
 func TestCalculateProfileComplete(t *testing.T) {
@@ -647,16 +645,16 @@ func TestUser_IsAdmin(t *testing.T) {
 		want bool
 	}{
 		{
-			name: "super user",
+			name: "superadmin role",
 			user: &User{
-				IsSuperUser: true,
+				Role: RoleSuperAdmin,
 			},
 			want: true,
 		},
 		{
 			name: "admin role",
 			user: &User{
-				Role: "admin",
+				Role: RoleAdmin,
 			},
 			want: true,
 		},
@@ -684,9 +682,18 @@ func TestUser_HasPermission(t *testing.T) {
 		want       bool
 	}{
 		{
-			name: "super user has all permissions",
+			name: "superadmin has all permissions",
 			user: &User{
-				IsSuperUser: true,
+				Role: RoleSuperAdmin,
+			},
+			permission: "any.permission",
+			want:       true,
+		},
+		{
+			name: "superadmin with all permissions in JSON",
+			user: &User{
+				Role:        RoleSuperAdmin,
+				Permissions: `["*"]`,
 			},
 			permission: "any.permission",
 			want:       true,
@@ -694,34 +701,43 @@ func TestUser_HasPermission(t *testing.T) {
 		{
 			name: "admin has admin permissions",
 			user: &User{
-				Role: "admin",
+				Role: RoleAdmin,
 			},
-			permission: "admin.read",
+			permission: PermissionAdminRead,
 			want:       true,
 		},
 		{
 			name: "admin has user permissions",
 			user: &User{
-				Role: "admin",
+				Role: RoleAdmin,
 			},
-			permission: "user.read",
+			permission: PermissionUserRead,
 			want:       true, // Admin has all permissions including user permissions
 		},
 		{
 			name: "regular user has user permissions",
 			user: &User{
-				Role: "user",
+				Role: RoleUser,
 			},
-			permission: "user.read",
+			permission: PermissionUserRead,
 			want:       true,
 		},
 		{
 			name: "regular user doesn't have admin permissions",
 			user: &User{
-				Role: "user",
+				Role: RoleUser,
 			},
-			permission: "admin.read",
+			permission: PermissionAdminRead,
 			want:       false,
+		},
+		{
+			name: "user with custom permissions",
+			user: &User{
+				Role:        RoleUser,
+				Permissions: `["search.config"]`,
+			},
+			permission: PermissionSearchConfig,
+			want:       true,
 		},
 	}
 
@@ -804,8 +820,7 @@ func TestUpdatePreferences_Partial(t *testing.T) {
 	require.NoError(t, err)
 
 	preferences := map[string]string{
-		"theme":    "dark",
-		"language": "en",
+		"timezone": "Asia/Shanghai",
 	}
 
 	err = UpdatePreferences(db, user, preferences)
@@ -814,8 +829,7 @@ func TestUpdatePreferences_Partial(t *testing.T) {
 	// Verify updates
 	retrieved, err := GetUserByUID(db, user.ID)
 	require.NoError(t, err)
-	assert.Equal(t, "dark", retrieved.Theme)
-	assert.Equal(t, "en", retrieved.Language)
+	assert.Equal(t, "Asia/Shanghai", retrieved.Timezone)
 }
 
 func TestUpdateNotificationSettings_Empty(t *testing.T) {
@@ -836,12 +850,10 @@ func TestUpdateNotificationSettings_AllSettings(t *testing.T) {
 	require.NoError(t, err)
 
 	settings := map[string]bool{
-		"emailNotifications":  false,
-		"pushNotifications":   true,
-		"smsNotifications":    true,
-		"marketingEmails":     false,
-		"systemNotifications": true,
-		"securityAlerts":      true,
+		"emailNotifications":    false,
+		"pushNotifications":     true,
+		"systemNotifications":   true,
+		"autoCleanUnreadEmails": false,
 	}
 
 	err = UpdateNotificationSettings(db, user, settings)
@@ -852,10 +864,8 @@ func TestUpdateNotificationSettings_AllSettings(t *testing.T) {
 	require.NoError(t, err)
 	assert.False(t, retrieved.EmailNotifications)
 	assert.True(t, retrieved.PushNotifications)
-	assert.True(t, retrieved.SMSNotifications)
-	assert.False(t, retrieved.MarketingEmails)
 	assert.True(t, retrieved.SystemNotifications)
-	assert.True(t, retrieved.SecurityAlerts)
+	assert.False(t, retrieved.AutoCleanUnreadEmails)
 }
 
 // Note: TestInTimezone is tested in users_handlers_test.go
@@ -898,9 +908,9 @@ func TestUser_HasPermission_EdgeCases(t *testing.T) {
 		want       bool
 	}{
 		{
-			name: "super user with any permission",
+			name: "superadmin with any permission",
 			user: &User{
-				IsSuperUser: true,
+				Role: RoleSuperAdmin,
 			},
 			permission: "any.permission",
 			want:       true,

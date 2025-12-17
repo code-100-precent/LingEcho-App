@@ -23,8 +23,8 @@ func (h *Handlers) GetObjs() []LingEcho.WebObject {
 			Desc:        "User",
 			Model:       models.User{},
 			Name:        "user",
-			Filterables: []string{"UpdateAt", "CreatedAt"},
-			Editables:   []string{"Email", "Phone", "FirstName", "LastName", "DisplayName", "IsSuperUser", "Enabled"},
+			Filterables: []string{"UpdatedAt", "CreatedAt"},
+			Editables:   []string{"Email", "Phone", "FirstName", "LastName", "DisplayName", "Role", "Permissions", "Enabled"},
 			Searchables: []string{},
 			Orderables:  []string{"UpdatedAt"},
 			GetDB: func(c *gin.Context, isCreate bool) *gorm.DB {
@@ -51,22 +51,22 @@ func (h *Handlers) RegisterAdmin(router *gin.RouterGroup) {
 			Group:       "System",
 			Name:        "InternalNotification",
 			Desc:        "This is a notification used to notify the user of the system.",
-			Shows:       []string{"ID", "Title", "Read", "CreatedAt"},
-			Editables:   []string{"ID", "UserID", "Title", "Content", "Read", "CreatedAt"},
+			Shows:       []string{"ID", "UserID", "Title", "Read", "CreatedAt"},
+			Editables:   []string{"UserID", "Title", "Content", "Read"},
 			Orderables:  []string{"CreatedAt"},
-			Searchables: []string{"Title"},
+			Searchables: []string{"Title", "Content"},
 			Icon:        &models.AdminIcon{SVG: string(iconInternalNotification)},
 		},
 		{
-			Model:       &middleware.OperationLog{},                                  // Related model OperationLog
-			Group:       "System",                                                    // Business group
-			Name:        "Operation Log",                                             // Display name in admin panel
-			Desc:        "Logs the operations performed by users in the system.",     // Description
-			Shows:       []string{"ID", "Username", "Action", "Target", "CreatedAt"}, // Displayed fields
-			Editables:   []string{"Action", "Target", "Details"},                     // Editable fields
-			Orderables:  []string{"CreatedAt"},                                       // Sortable fields
-			Searchables: []string{"Username", "Action", "Target"},                    // Searchable fields
-			Icon:        &models.AdminIcon{SVG: string(iconOperatorLog)},             // Icon
+			Model:       &middleware.OperationLog{},                                                                          // Related model OperationLog
+			Group:       "System",                                                                                            // Business group
+			Name:        "Operation Log",                                                                                     // Display name in admin panel
+			Desc:        "Logs the operations performed by users in the system.",                                             // Description
+			Shows:       []string{"ID", "UserID", "Username", "Action", "Target", "IPAddress", "RequestMethod", "CreatedAt"}, // Displayed fields
+			Editables:   []string{"Details"},                                                                                 // Editable fields (usually logs should not be edited, but details can be updated)
+			Orderables:  []string{"CreatedAt"},                                                                               // Sortable fields
+			Searchables: []string{"Username", "Action", "Target", "IPAddress"},                                               // Searchable fields
+			Icon:        &models.AdminIcon{SVG: string(iconOperatorLog)},                                                     // Icon
 		},
 		{
 			Model:       &models.ChatSessionLog{},                                                                                          // Related model ChatSessionLog
@@ -96,13 +96,21 @@ func (h *Handlers) RegisterAdmin(router *gin.RouterGroup) {
 			Group: "AI Assistant",
 			Name:  "Assistants",
 			Desc:  "AI assistants and their configurations.",
-			Shows: []string{"ID", "Name", "Description", "EnableGraphMemory", "CreatedAt"},
+			Shows: []string{"ID", "Name", "Description", "UserID", "LLMModel", "TtsProvider", "EnableGraphMemory", "CreatedAt"},
 			Editables: []string{
 				"Name",
 				"Description",
 				"SystemPrompt",
 				"Temperature",
-				"EnableGraphMemory", // 是否启用基于图数据库的长期记忆
+				"MaxTokens",
+				"LLMModel",
+				"TtsProvider",
+				"Language",
+				"Speaker",
+				"VoiceCloneID",
+				"KnowledgeBaseID",
+				"JsSourceID",
+				"EnableGraphMemory",
 			},
 			Orderables:  []string{"CreatedAt", "Name"},
 			Searchables: []string{"Name", "Description"},
@@ -113,10 +121,10 @@ func (h *Handlers) RegisterAdmin(router *gin.RouterGroup) {
 			Group:       "AI Assistant",
 			Name:        "JS Templates",
 			Desc:        "JavaScript templates for customizing AI assistant client interface.",
-			Shows:       []string{"ID", "Name", "Type", "AssistantID", "UserID", "CreatedAt"},
-			Editables:   []string{"Name", "Type", "AssistantID", "Content"},
+			Shows:       []string{"ID", "JsSourceID", "Name", "Type", "UserID", "GroupID", "CreatedAt"},
+			Editables:   []string{"JsSourceID", "Name", "Type", "Content", "Usage", "UserID", "GroupID"},
 			Orderables:  []string{"CreatedAt", "Name"},
-			Searchables: []string{"Name", "Type"},
+			Searchables: []string{"Name", "Type", "JsSourceID"},
 			Icon:        &models.AdminIcon{SVG: string(iconChatSessionLog)},
 		},
 		// Prompt management
@@ -124,11 +132,11 @@ func (h *Handlers) RegisterAdmin(router *gin.RouterGroup) {
 			Model:       &models.PromptModel{},
 			Group:       "Prompt Management",
 			Name:        "Prompt Models",
-			Desc:        "AI prompt templates and rtcmedia.",
-			Shows:       []string{"ID", "Name", "Type", "CreatedAt"},
-			Editables:   []string{"Name", "Content", "Type"},
+			Desc:        "AI prompt templates and models.",
+			Shows:       []string{"ID", "Name", "Description", "CreatedAt"},
+			Editables:   []string{"Name", "Description"},
 			Orderables:  []string{"CreatedAt", "Name"},
-			Searchables: []string{"Name", "Content"},
+			Searchables: []string{"Name", "Description"},
 			Icon:        &models.AdminIcon{SVG: string(iconChatSessionLog)},
 		},
 		{
@@ -136,10 +144,10 @@ func (h *Handlers) RegisterAdmin(router *gin.RouterGroup) {
 			Group:       "Prompt Management",
 			Name:        "Prompt Arguments",
 			Desc:        "Prompt argument definitions and configurations.",
-			Shows:       []string{"ID", "PromptModelID", "Name", "Type", "CreatedAt"},
-			Editables:   []string{"PromptModelID", "Name", "Type", "Required"},
-			Orderables:  []string{"CreatedAt"},
-			Searchables: []string{"Name", "Type"},
+			Shows:       []string{"ID", "PromptID", "Name", "Required"},
+			Editables:   []string{"PromptID", "Name", "Description", "Required"},
+			Orderables:  []string{"ID"},
+			Searchables: []string{"Name", "Description"},
 			Icon:        &models.AdminIcon{SVG: string(iconChatSessionLog)},
 		},
 		{
@@ -147,8 +155,8 @@ func (h *Handlers) RegisterAdmin(router *gin.RouterGroup) {
 			Group:       "Knowledge Base",
 			Name:        "Knowledge",
 			Desc:        "Knowledge base articles and documents.",
-			Shows:       []string{"UserID", "KnowledgeKey", "KnowledgeName", "CreatedAt", "UpdatedAt"},
-			Editables:   []string{"UserID", "KnowledgeKey", "KnowledgeName", "CreatedAt", "UpdatedAt"},
+			Shows:       []string{"ID", "UserID", "KnowledgeKey", "KnowledgeName", "Provider", "CreatedAt"},
+			Editables:   []string{"UserID", "KnowledgeKey", "KnowledgeName", "Provider", "Config"},
 			Orderables:  []string{"CreatedAt"},
 			Searchables: []string{"KnowledgeKey", "KnowledgeName"},
 			Icon:        &models.AdminIcon{SVG: string(iconChatSessionLog)},
@@ -192,10 +200,10 @@ func (h *Handlers) RegisterAdmin(router *gin.RouterGroup) {
 			Group:       "Voice Training",
 			Name:        "Voice Training Texts",
 			Desc:        "Text materials for voice training.",
-			Shows:       []string{"ID", "UserID", "Title", "CreatedAt"},
-			Editables:   []string{"Title", "Content"},
-			Orderables:  []string{"CreatedAt", "Title"},
-			Searchables: []string{"Title", "Content"},
+			Shows:       []string{"ID", "TextID", "TextName", "Language", "IsActive", "CreatedAt"},
+			Editables:   []string{"TextID", "TextName", "Language", "IsActive"},
+			Orderables:  []string{"CreatedAt", "TextName"},
+			Searchables: []string{"TextName"},
 			Icon:        &models.AdminIcon{SVG: string(iconChatSessionLog)},
 		},
 		{
@@ -203,10 +211,138 @@ func (h *Handlers) RegisterAdmin(router *gin.RouterGroup) {
 			Group:       "Voice Training",
 			Name:        "Voice Training Text Segments",
 			Desc:        "Text segments for voice training.",
-			Shows:       []string{"ID", "TrainingTextID", "Content", "CreatedAt"},
-			Editables:   []string{"Content", "Order"},
-			Orderables:  []string{"CreatedAt", "Order"},
-			Searchables: []string{"Content"},
+			Shows:       []string{"ID", "TextID", "SegID", "SegText", "CreatedAt"},
+			Editables:   []string{"TextID", "SegID", "SegText"},
+			Orderables:  []string{"CreatedAt", "ID"},
+			Searchables: []string{"SegText"},
+			Icon:        &models.AdminIcon{SVG: string(iconChatSessionLog)},
+		},
+		// Workflow management
+		{
+			Model:       &models.WorkflowDefinition{},
+			Group:       "Workflow",
+			Name:        "Workflow Definitions",
+			Desc:        "Workflow definitions and templates.",
+			Shows:       []string{"ID", "Name", "Slug", "Status", "Version", "UserID", "CreatedAt"},
+			Editables:   []string{"Name", "Slug", "Description", "Status", "Definition", "Settings", "Triggers", "Tags"},
+			Orderables:  []string{"CreatedAt", "UpdatedAt", "Name"},
+			Searchables: []string{"Name", "Slug", "Description"},
+			Icon:        &models.AdminIcon{SVG: string(iconChatSessionLog)},
+		},
+		{
+			Model:       &models.WorkflowInstance{},
+			Group:       "Workflow",
+			Name:        "Workflow Instances",
+			Desc:        "Workflow execution instances and their status.",
+			Shows:       []string{"ID", "DefinitionID", "DefinitionName", "Status", "CurrentNodeID", "StartedAt", "CompletedAt", "CreatedAt"},
+			Editables:   []string{"Status", "ContextData", "ResultData"},
+			Orderables:  []string{"CreatedAt", "StartedAt", "CompletedAt"},
+			Searchables: []string{"DefinitionName", "Status"},
+			Icon:        &models.AdminIcon{SVG: string(iconChatSessionLog)},
+		},
+		// Billing management
+		{
+			Model:       &models.UsageRecord{},
+			Group:       "Billing",
+			Name:        "Usage Records",
+			Desc:        "User usage records and statistics.",
+			Shows:       []string{"ID", "UserID", "UsageType", "Model", "PromptTokens", "CompletionTokens", "CreatedAt"},
+			Editables:   []string{"UserID", "UsageType", "Model", "PromptTokens", "CompletionTokens"},
+			Orderables:  []string{"CreatedAt"},
+			Searchables: []string{"UserID", "UsageType", "Model"},
+			Icon:        &models.AdminIcon{SVG: string(iconChatSessionLog)},
+		},
+		{
+			Model:       &models.Bill{},
+			Group:       "Billing",
+			Name:        "Bills",
+			Desc:        "Billing records and invoices.",
+			Shows:       []string{"ID", "BillNo", "Title", "Status", "UserID", "StartTime", "EndTime", "CreatedAt"},
+			Editables:   []string{"Title", "Status", "Notes"},
+			Orderables:  []string{"CreatedAt", "StartTime", "EndTime"},
+			Searchables: []string{"BillNo", "Title"},
+			Icon:        &models.AdminIcon{SVG: string(iconChatSessionLog)},
+		},
+		// Quota management
+		{
+			Model:       &models.UserQuota{},
+			Group:       "Quota",
+			Name:        "User Quotas",
+			Desc:        "User quota allocations and usage.",
+			Shows:       []string{"ID", "UserID", "QuotaType", "TotalQuota", "UsedQuota", "Period", "CreatedAt"},
+			Editables:   []string{"UserID", "QuotaType", "TotalQuota", "UsedQuota", "Period", "Description"},
+			Orderables:  []string{"CreatedAt"},
+			Searchables: []string{"UserID", "QuotaType"},
+			Icon:        &models.AdminIcon{SVG: string(iconChatSessionLog)},
+		},
+		{
+			Model:       &models.GroupQuota{},
+			Group:       "Quota",
+			Name:        "Group Quotas",
+			Desc:        "Group quota allocations and usage.",
+			Shows:       []string{"ID", "GroupID", "QuotaType", "TotalQuota", "UsedQuota", "Period", "CreatedAt"},
+			Editables:   []string{"GroupID", "QuotaType", "TotalQuota", "UsedQuota", "Period", "Description"},
+			Orderables:  []string{"CreatedAt"},
+			Searchables: []string{"GroupID", "QuotaType"},
+			Icon:        &models.AdminIcon{SVG: string(iconChatSessionLog)},
+		},
+		// Alert management
+		{
+			Model:       &models.AlertRule{},
+			Group:       "Alert",
+			Name:        "Alert Rules",
+			Desc:        "Alert rules and trigger conditions.",
+			Shows:       []string{"ID", "UserID", "Name", "AlertType", "Severity", "Enabled", "CreatedAt"},
+			Editables:   []string{"Name", "Description", "AlertType", "Severity", "Conditions", "Enabled"},
+			Orderables:  []string{"CreatedAt"},
+			Searchables: []string{"Name", "AlertType"},
+			Icon:        &models.AdminIcon{SVG: string(iconChatSessionLog)},
+		},
+		{
+			Model:       &models.Alert{},
+			Group:       "Alert",
+			Name:        "Alerts",
+			Desc:        "Alert records and notifications.",
+			Shows:       []string{"ID", "UserID", "RuleID", "AlertType", "Severity", "Title", "Status", "CreatedAt"},
+			Editables:   []string{"Status", "ResolvedAt", "ResolvedBy"},
+			Orderables:  []string{"CreatedAt"},
+			Searchables: []string{"Title", "AlertType", "Status"},
+			Icon:        &models.AdminIcon{SVG: string(iconChatSessionLog)},
+		},
+		// Device management
+		{
+			Model:       &models.Device{},
+			Group:       "Device",
+			Name:        "Devices",
+			Desc:        "IoT devices and their configurations.",
+			Shows:       []string{"ID", "MacAddress", "UserID", "Board", "AppVersion", "AutoUpdate", "AssistantID", "CreatedAt"},
+			Editables:   []string{"UserID", "GroupID", "Board", "AppVersion", "AutoUpdate", "AssistantID"},
+			Orderables:  []string{"CreatedAt"},
+			Searchables: []string{"ID", "MacAddress", "Board"},
+			Icon:        &models.AdminIcon{SVG: string(iconChatSessionLog)},
+		},
+		// OTA management
+		{
+			Model:       &models.OTA{},
+			Group:       "OTA",
+			Name:        "OTA Firmware",
+			Desc:        "Firmware OTA update management.",
+			Shows:       []string{"ID", "FirmwareName", "Type", "Version", "Size", "Sort", "CreatedAt"},
+			Editables:   []string{"FirmwareName", "Type", "Version", "Size", "Remark", "FirmwarePath", "Sort"},
+			Orderables:  []string{"CreatedAt", "Sort", "Version"},
+			Searchables: []string{"FirmwareName", "Type", "Version"},
+			Icon:        &models.AdminIcon{SVG: string(iconChatSessionLog)},
+		},
+		// Overview config
+		{
+			Model:       &models.OverviewConfig{},
+			Group:       "System",
+			Name:        "Overview Config",
+			Desc:        "Overview page configurations for organizations.",
+			Shows:       []string{"ID", "OrganizationID", "Name", "Description", "CreatedAt"},
+			Editables:   []string{"OrganizationID", "Name", "Description", "Config"},
+			Orderables:  []string{"CreatedAt"},
+			Searchables: []string{"Name", "Description"},
 			Icon:        &models.AdminIcon{SVG: string(iconChatSessionLog)},
 		},
 	}
