@@ -792,8 +792,8 @@ const adminapp = () => ({
             html += '<div class="bg-white border border-gray-200 rounded-lg shadow-sm p-5">'
             html += '<h3 class="text-sm font-semibold text-gray-900 mb-3">账户操作</h3>'
             html += '<div class="flex flex-wrap gap-2">'
-            html += '<button class="px-3 py-1.5 text-sm font-medium text-gray-700 bg-gray-50 border border-gray-300 rounded hover:bg-gray-100 transition-colors">修改密码</button>'
-            html += '<button class="px-3 py-1.5 text-sm font-medium text-gray-700 bg-gray-50 border border-gray-300 rounded hover:bg-gray-100 transition-colors">编辑资料</button>'
+            html += '<button onclick="if(window.adminAppInstance){window.adminAppInstance.showChangePassword();}" class="px-3 py-1.5 text-sm font-medium text-gray-700 bg-gray-50 border border-gray-300 rounded hover:bg-gray-100 transition-colors">修改密码</button>'
+            html += '<button onclick="if(window.adminAppInstance){window.adminAppInstance.showEditProfile();}" class="px-3 py-1.5 text-sm font-medium text-gray-700 bg-gray-50 border border-gray-300 rounded hover:bg-gray-100 transition-colors">编辑资料</button>'
             html += '<a href="/api/auth/logout?next=/api/auth/login" class="px-3 py-1.5 text-sm font-medium text-gray-700 bg-gray-50 border border-gray-300 rounded hover:bg-gray-100 transition-colors">退出登录</a>'
             html += '</div>'
             html += '</div>'
@@ -802,7 +802,285 @@ const adminapp = () => ({
             
             elm.innerHTML = html
             elm.style.display = 'block'
+            Alpine.initTree(elm)
+            
+            // Make instance globally accessible
+            window.adminAppInstance = this
         })
+    },
+
+    async loadSystemStatus() {
+        try {
+            let resp = await fetch('/api/system/status', {
+                method: 'GET',
+                cache: "no-store",
+            })
+            if (!resp.ok) {
+                throw new Error('Failed to fetch system status')
+            }
+            let data = await resp.json()
+            let statusList = document.getElementById('system_status_list')
+            if (!statusList) {
+                // 如果元素不存在，稍后重试
+                setTimeout(() => this.loadSystemStatus(), 500)
+                return
+            }
+            
+            if ((data.success || data.code === 200) && data.data) {
+                let status = data.data
+                let statusMap = {
+                    'database': '数据库',
+                    'cache': '缓存服务',
+                    'api': 'API服务',
+                    'storage': '存储服务'
+                }
+                let html = ''
+                Object.keys(statusMap).forEach(key => {
+                    let isOnline = status[key] === true
+                    html += '<div class="flex items-center justify-between py-2 border-b border-gray-100 last:border-0">'
+                    html += '<div class="flex items-center gap-2">'
+                    html += '<div class="w-1.5 h-1.5 rounded-full ' + (isOnline ? 'bg-green-500' : 'bg-red-500') + '"></div>'
+                    html += '<span class="text-xs text-gray-700">' + statusMap[key] + '</span>'
+                    html += '</div>'
+                    html += '<div class="flex items-center gap-3">'
+                    html += '<span class="text-xs font-medium ' + (isOnline ? 'text-green-600' : 'text-red-600') + '">' + (isOnline ? '通' : '不通') + '</span>'
+                    html += '</div>'
+                    html += '</div>'
+                })
+                statusList.innerHTML = html
+            } else {
+                statusList.innerHTML = '<div class="flex items-center justify-center py-4"><span class="text-xs text-red-500">加载失败</span></div>'
+            }
+        } catch (err) {
+            console.error('Failed to load system status:', err)
+            let statusList = document.getElementById('system_status_list')
+            if (statusList) {
+                statusList.innerHTML = '<div class="flex items-center justify-center py-4"><span class="text-xs text-red-500">加载失败</span></div>'
+            }
+        }
+    },
+
+    showChangePassword() {
+        let html = `
+            <div class="fixed inset-0 z-50 overflow-y-auto" id="change_password_modal">
+                <div class="flex min-h-full items-center justify-center p-4">
+                    <div class="fixed inset-0 bg-gray-500 bg-opacity-75 transition-opacity" onclick="document.getElementById('change_password_modal').remove()"></div>
+                    <div class="relative transform overflow-hidden rounded-lg bg-white text-left shadow-xl transition-all sm:my-8 sm:w-full sm:max-w-lg">
+                        <div class="bg-white px-4 pb-4 pt-5 sm:p-6 sm:pb-4">
+                            <div class="sm:flex sm:items-start">
+                                <div class="mt-3 text-center sm:mt-0 sm:text-left w-full">
+                                    <h3 class="text-lg font-semibold leading-6 text-gray-900 mb-4">修改密码</h3>
+                                    <form id="change_password_form" onsubmit="event.preventDefault(); window.adminAppInstance.handleChangePasswordSubmit(event);">
+                                        <div class="space-y-4">
+                                            <div>
+                                                <label for="current_password" class="block text-sm font-medium text-gray-700 mb-1">当前密码</label>
+                                                <input type="password" id="current_password" name="currentPassword" required
+                                                       class="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 text-sm">
+                                            </div>
+                                            <div>
+                                                <label for="new_password" class="block text-sm font-medium text-gray-700 mb-1">新密码</label>
+                                                <input type="password" id="new_password" name="newPassword" required minlength="6"
+                                                       class="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 text-sm">
+                                                <p class="mt-1 text-xs text-gray-500">密码长度至少为6位</p>
+                                            </div>
+                                            <div>
+                                                <label for="confirm_password" class="block text-sm font-medium text-gray-700 mb-1">确认新密码</label>
+                                                <input type="password" id="confirm_password" name="confirmPassword" required minlength="6"
+                                                       class="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 text-sm">
+                                            </div>
+                                        </div>
+                                        <div class="mt-5 sm:mt-6 sm:flex sm:flex-row-reverse gap-3">
+                                            <button type="submit" 
+                                                    class="inline-flex w-full justify-center rounded-md bg-indigo-600 px-3 py-2 text-sm font-semibold text-white shadow-sm hover:bg-indigo-500 sm:ml-3 sm:w-auto">
+                                                确认修改
+                                            </button>
+                                            <button type="button" onclick="document.getElementById('change_password_modal').remove()"
+                                                    class="mt-3 inline-flex w-full justify-center rounded-md bg-white px-3 py-2 text-sm font-semibold text-gray-900 shadow-sm ring-1 ring-inset ring-gray-300 hover:bg-gray-50 sm:mt-0 sm:w-auto">
+                                                取消
+                                            </button>
+                                        </div>
+                                    </form>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        `
+        document.body.insertAdjacentHTML('beforeend', html)
+    },
+
+    handleChangePasswordSubmit(event) {
+        let form = document.getElementById('change_password_form')
+        let formData = new FormData(form)
+        let currentPassword = formData.get('currentPassword')
+        let newPassword = formData.get('newPassword')
+        let confirmPassword = formData.get('confirmPassword')
+        
+        if (!currentPassword || !newPassword || !confirmPassword) {
+            alert('请填写所有字段')
+            return
+        }
+        
+        if (newPassword !== confirmPassword) {
+            alert('两次输入的密码不一致')
+            return
+        }
+        
+        if (newPassword.length < 6) {
+            alert('密码长度至少为6位')
+            return
+        }
+        
+        this.changePassword(currentPassword, newPassword)
+        document.getElementById('change_password_modal').remove()
+    },
+
+    async changePassword(currentPassword, newPassword) {
+        try {
+            let resp = await fetch('/api/auth/change-password', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({
+                    currentPassword: currentPassword,
+                    newPassword: newPassword,
+                    confirmPassword: newPassword
+                }),
+                cache: "no-store",
+            })
+            
+            let data = await resp.json()
+            if (data.success || data.code === 200) {
+                alert('密码修改成功，请重新登录')
+                if (data.data && data.data.logout) {
+                    window.location.href = '/api/auth/logout?next=/api/auth/login'
+                } else {
+                    // 如果没有logout字段，也跳转到登录页
+                    setTimeout(() => {
+                        window.location.href = '/api/auth/logout?next=/api/auth/login'
+                    }, 1000)
+                }
+            } else {
+                alert('密码修改失败: ' + (data.error || data.msg || '未知错误'))
+            }
+        } catch (err) {
+            alert('密码修改失败: ' + err.message)
+        }
+    },
+
+    showEditProfile() {
+        let user = this.user || {}
+        // 转义HTML特殊字符
+        let escapeHtml = (str) => {
+            if (!str) return ''
+            return String(str).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#039;')
+        }
+        let firstName = escapeHtml(user.firstName || '')
+        let lastName = escapeHtml(user.lastName || '')
+        let displayName = escapeHtml(user.displayName || (firstName + ' ' + lastName).trim() || '')
+        let email = escapeHtml(user.email || '')
+        
+        let html = `
+            <div class="fixed inset-0 z-50 overflow-y-auto" id="edit_profile_modal">
+                <div class="flex min-h-full items-center justify-center p-4">
+                    <div class="fixed inset-0 bg-gray-500 bg-opacity-75 transition-opacity" onclick="document.getElementById('edit_profile_modal').remove()"></div>
+                    <div class="relative transform overflow-hidden rounded-lg bg-white text-left shadow-xl transition-all sm:my-8 sm:w-full sm:max-w-lg">
+                        <div class="bg-white px-4 pb-4 pt-5 sm:p-6 sm:pb-4">
+                            <div class="sm:flex sm:items-start">
+                                <div class="mt-3 text-center sm:mt-0 sm:text-left w-full">
+                                    <h3 class="text-lg font-semibold leading-6 text-gray-900 mb-4">编辑资料</h3>
+                                    <form id="edit_profile_form" onsubmit="event.preventDefault(); window.adminAppInstance.handleEditProfileSubmit(event);">
+                                        <div class="space-y-4">
+                                            <div>
+                                                <label for="first_name" class="block text-sm font-medium text-gray-700 mb-1">名字</label>
+                                                <input type="text" id="first_name" name="firstName" value="${firstName}"
+                                                       class="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 text-sm">
+                                            </div>
+                                            <div>
+                                                <label for="last_name" class="block text-sm font-medium text-gray-700 mb-1">姓氏</label>
+                                                <input type="text" id="last_name" name="lastName" value="${lastName}"
+                                                       class="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 text-sm">
+                                            </div>
+                                            <div>
+                                                <label for="display_name" class="block text-sm font-medium text-gray-700 mb-1">显示名称</label>
+                                                <input type="text" id="display_name" name="displayName" value="${displayName}"
+                                                       class="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 text-sm">
+                                            </div>
+                                            <div>
+                                                <label for="email" class="block text-sm font-medium text-gray-700 mb-1">邮箱</label>
+                                                <input type="email" id="email" name="email" value="${email}"
+                                                       class="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 text-sm">
+                                            </div>
+                                        </div>
+                                        <div class="mt-5 sm:mt-6 sm:flex sm:flex-row-reverse gap-3">
+                                            <button type="submit" 
+                                                    class="inline-flex w-full justify-center rounded-md bg-indigo-600 px-3 py-2 text-sm font-semibold text-white shadow-sm hover:bg-indigo-500 sm:ml-3 sm:w-auto">
+                                                保存
+                                            </button>
+                                            <button type="button" onclick="document.getElementById('edit_profile_modal').remove()"
+                                                    class="mt-3 inline-flex w-full justify-center rounded-md bg-white px-3 py-2 text-sm font-semibold text-gray-900 shadow-sm ring-1 ring-inset ring-gray-300 hover:bg-gray-50 sm:mt-0 sm:w-auto">
+                                                取消
+                                            </button>
+                                        </div>
+                                    </form>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        `
+        document.body.insertAdjacentHTML('beforeend', html)
+    },
+
+    handleEditProfileSubmit(event) {
+        let form = document.getElementById('edit_profile_form')
+        let formData = new FormData(form)
+        let profileData = {
+            firstName: formData.get('firstName') || '',
+            lastName: formData.get('lastName') || '',
+            displayName: formData.get('displayName') || '',
+            email: formData.get('email') || ''
+        }
+        
+        this.updateProfile(profileData)
+        document.getElementById('edit_profile_modal').remove()
+    },
+
+    async updateProfile(profileData) {
+        try {
+            let resp = await fetch('/api/auth/update', {
+                method: 'PUT',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify(profileData),
+                cache: "no-store",
+            })
+            
+            let data = await resp.json()
+            if (data.success || data.code === 200) {
+                alert('资料更新成功')
+                // 更新本地用户信息
+                if (data.data) {
+                    this.user = Object.assign(this.user || {}, data.data)
+                    // 更新显示名称
+                    if (data.data.displayName) {
+                        this.user.name = data.data.displayName
+                    } else if (data.data.firstName || data.data.lastName) {
+                        this.user.name = (data.data.firstName || '') + ' ' + (data.data.lastName || '')
+                    }
+                }
+                // 刷新个人中心页面
+                this.showProfile()
+            } else {
+                alert('资料更新失败: ' + (data.error || data.msg || '未知错误'))
+            }
+        } catch (err) {
+            alert('资料更新失败: ' + err.message)
+        }
     },
 
     loadAllScripts(objects) {
@@ -1069,27 +1347,16 @@ const adminapp = () => ({
             html += '<div class="grid grid-cols-1 lg:grid-cols-2 gap-4">'
             html += '<div class="bg-white border border-gray-200 rounded-lg shadow-sm p-5">'
             html += '<h3 class="text-sm font-semibold text-gray-900 mb-3">系统状态</h3>'
-            html += '<div class="space-y-2">'
-            let systemStatus = [
-                { name: '数据库', status: '正常', value: '99.9%', color: 'green' },
-                { name: '缓存服务', status: '正常', value: '98.5%', color: 'green' },
-                { name: 'API服务', status: '正常', value: '99.2%', color: 'green' },
-                { name: '存储服务', status: '正常', value: '97.8%', color: 'green' }
-            ]
-            systemStatus.forEach(item => {
-                html += '<div class="flex items-center justify-between py-2 border-b border-gray-100 last:border-0">'
-                html += '<div class="flex items-center gap-2">'
-                html += '<div class="w-1.5 h-1.5 rounded-full bg-gray-400"></div>'
-                html += '<span class="text-xs text-gray-700">' + item.name + '</span>'
-                html += '</div>'
-                html += '<div class="flex items-center gap-3">'
-                html += '<span class="text-xs text-gray-500">' + item.status + '</span>'
-                html += '<span class="text-xs font-medium text-gray-900">' + item.value + '</span>'
-                html += '</div>'
-                html += '</div>'
-            })
+            html += '<div class="space-y-2" id="system_status_list">'
+            html += '<div class="flex items-center justify-center py-4">'
+            html += '<div class="animate-spin inline-block w-4 h-4 border-2 border-gray-300 border-t-gray-600 rounded-full"></div>'
+            html += '<span class="ml-2 text-xs text-gray-500">检查中...</span>'
             html += '</div>'
             html += '</div>'
+            html += '</div>'
+            
+            // Load system status
+            this.loadSystemStatus()
             
             html += '<div class="bg-white border border-gray-200 rounded-lg shadow-sm p-5">'
             html += '<h3 class="text-sm font-semibold text-gray-900 mb-3">快速操作</h3>'
