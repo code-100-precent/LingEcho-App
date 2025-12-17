@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/base64"
+	"encoding/json"
 	"errors"
 	"fmt"
 
@@ -158,7 +159,8 @@ func AuthRequired(c *gin.Context) {
 			Email:       "test@example.com",
 			DisplayName: "Test User",
 			IsStaff:     true,
-			IsSuperUser: true,
+			Role:        RoleSuperAdmin,
+			Permissions: `["*"]`,
 			Enabled:     true,
 			Activated:   true,
 		}
@@ -672,17 +674,11 @@ func UpdateNotificationSettings(db *gorm.DB, user *User, settings map[string]boo
 	if pushNotif, ok := settings["pushNotifications"]; ok {
 		vals["push_notifications"] = pushNotif
 	}
-	if smsNotif, ok := settings["smsNotifications"]; ok {
-		vals["sms_notifications"] = smsNotif
-	}
-	if marketingEmails, ok := settings["marketingEmails"]; ok {
-		vals["marketing_emails"] = marketingEmails
-	}
 	if systemNotif, ok := settings["systemNotifications"]; ok {
 		vals["system_notifications"] = systemNotif
 	}
-	if securityAlerts, ok := settings["securityAlerts"]; ok {
-		vals["security_alerts"] = securityAlerts
+	if autoCleanUnreadEmails, ok := settings["autoCleanUnreadEmails"]; ok {
+		vals["auto_clean_unread_emails"] = autoCleanUnreadEmails
 	}
 
 	if len(vals) == 0 {
@@ -701,17 +697,8 @@ func UpdateNotificationSettings(db *gorm.DB, user *User, settings map[string]boo
 	if pushNotif, ok := settings["pushNotifications"]; ok {
 		user.PushNotifications = pushNotif
 	}
-	if smsNotif, ok := settings["smsNotifications"]; ok {
-		user.SMSNotifications = smsNotif
-	}
-	if marketingEmails, ok := settings["marketingEmails"]; ok {
-		user.MarketingEmails = marketingEmails
-	}
 	if systemNotif, ok := settings["systemNotifications"]; ok {
 		user.SystemNotifications = systemNotif
-	}
-	if securityAlerts, ok := settings["securityAlerts"]; ok {
-		user.SecurityAlerts = securityAlerts
 	}
 	if autoCleanUnreadEmails, ok := settings["autoCleanUnreadEmails"]; ok {
 		user.AutoCleanUnreadEmails = autoCleanUnreadEmails
@@ -721,24 +708,10 @@ func UpdateNotificationSettings(db *gorm.DB, user *User, settings map[string]boo
 }
 
 // UpdatePreferences 更新用户偏好设置
+// 只处理实际使用的字段：timezone 和 locale
 func UpdatePreferences(db *gorm.DB, user *User, preferences map[string]string) error {
 	vals := make(map[string]any)
 
-	if theme, ok := preferences["theme"]; ok {
-		vals["theme"] = theme
-	}
-	if language, ok := preferences["language"]; ok {
-		vals["language"] = language
-	}
-	if dateFormat, ok := preferences["dateFormat"]; ok {
-		vals["date_format"] = dateFormat
-	}
-	if timeFormat, ok := preferences["timeFormat"]; ok {
-		vals["time_format"] = timeFormat
-	}
-	if currency, ok := preferences["currency"]; ok {
-		vals["currency"] = currency
-	}
 	if timezone, ok := preferences["timezone"]; ok {
 		vals["timezone"] = timezone
 	}
@@ -756,21 +729,6 @@ func UpdatePreferences(db *gorm.DB, user *User, preferences map[string]string) e
 	}
 
 	// 更新用户对象
-	if theme, ok := preferences["theme"]; ok {
-		user.Theme = theme
-	}
-	if language, ok := preferences["language"]; ok {
-		user.Language = language
-	}
-	if dateFormat, ok := preferences["dateFormat"]; ok {
-		user.DateFormat = dateFormat
-	}
-	if timeFormat, ok := preferences["timeFormat"]; ok {
-		user.TimeFormat = timeFormat
-	}
-	if currency, ok := preferences["currency"]; ok {
-		user.Currency = currency
-	}
 	if timezone, ok := preferences["timezone"]; ok {
 		user.Timezone = timezone
 	}
@@ -863,25 +821,106 @@ func IncrementLoginCount(db *gorm.DB, user *User) error {
 	return nil
 }
 
-// IsAdmin 检查是否为管理员
+// 角色常量
+const (
+	RoleSuperAdmin = "superadmin" // 超级管理员
+	RoleAdmin      = "admin"      // 管理员
+	RoleUser       = "user"       // 普通用户
+)
+
+// 权限常量
+const (
+	PermissionAll          = "*"             // 所有权限
+	PermissionAdminRead    = "admin.read"    // 管理员读取
+	PermissionAdminWrite   = "admin.write"   // 管理员写入
+	PermissionUserRead     = "user.read"     // 用户读取
+	PermissionUserWrite    = "user.write"    // 用户写入
+	PermissionSearchConfig = "search.config" // 搜索配置
+	PermissionSystemConfig = "system.config" // 系统配置
+)
+
+// getPermissions 解析用户权限 JSON 字符串，返回权限列表
+func (u *User) getPermissions() []string {
+	if u.Permissions == "" {
+		return []string{}
+	}
+
+	var perms []string
+	if err := json.Unmarshal([]byte(u.Permissions), &perms); err != nil {
+		// 如果解析失败，返回空列表
+		return []string{}
+	}
+	return perms
+}
+
+// IsAdmin 检查是否为管理员（基于角色）
 func (u *User) IsAdmin() bool {
-	return u.IsSuperUser || u.Role == "admin"
+	return u.Role == RoleSuperAdmin || u.Role == RoleAdmin
+}
+
+// IsSuperAdmin 检查是否为超级管理员
+func (u *User) IsSuperAdmin() bool {
+	return u.Role == RoleSuperAdmin
 }
 
 // HasPermission 检查是否有特定权限
+// 优先级：超级管理员 > 权限列表中的权限 > 角色默认权限
 func (u *User) HasPermission(permission string) bool {
-	if u.IsSuperUser {
+	// 超级管理员拥有所有权限
+	if u.Role == RoleSuperAdmin {
 		return true
 	}
 
-	// 这里可以实现更复杂的权限检查逻辑
-	// 目前简单检查角色
-	switch permission {
-	case "user.read", "user.write":
-		return true
-	case "admin.read", "admin.write":
-		return u.Role == "admin"
-	default:
-		return false
+	// 检查权限列表
+	perms := u.getPermissions()
+	for _, p := range perms {
+		// 支持通配符权限 "*" 表示所有权限
+		if p == PermissionAll {
+			return true
+		}
+		// 精确匹配权限
+		if p == permission {
+			return true
+		}
 	}
+
+	// 基于角色的默认权限
+	switch u.Role {
+	case RoleAdmin:
+		// 管理员默认拥有 admin 和 user 相关权限
+		switch permission {
+		case PermissionAdminRead, PermissionAdminWrite,
+			PermissionUserRead, PermissionUserWrite,
+			PermissionSearchConfig, PermissionSystemConfig:
+			return true
+		}
+	case RoleUser:
+		// 普通用户默认拥有 user 相关权限
+		switch permission {
+		case PermissionUserRead, PermissionUserWrite:
+			return true
+		}
+	}
+
+	return false
+}
+
+// HasAnyPermission 检查是否有任意一个权限
+func (u *User) HasAnyPermission(permissions ...string) bool {
+	for _, perm := range permissions {
+		if u.HasPermission(perm) {
+			return true
+		}
+	}
+	return false
+}
+
+// HasAllPermissions 检查是否拥有所有指定权限
+func (u *User) HasAllPermissions(permissions ...string) bool {
+	for _, perm := range permissions {
+		if !u.HasPermission(perm) {
+			return false
+		}
+	}
+	return true
 }

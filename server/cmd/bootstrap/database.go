@@ -176,8 +176,6 @@ func RunMigrations(db *gorm.DB) error {
 		&models.WorkflowDefinition{},
 		&models.WorkflowInstance{},
 		&models.WorkflowVersion{},
-		// Voice server call records
-		&models.CallRecord{},
 		&models.OverviewConfig{},
 	})
 }

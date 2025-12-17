@@ -462,8 +462,7 @@ func (h *Handlers) GetUserVoiceClones(c *gin.Context) {
 		query = query.Where("provider = ?", provider)
 	}
 
-	if err := query.Preload("TrainingTask").
-		Order("created_at DESC").
+	if err := query.Order("created_at DESC").
 		Find(&clones).Error; err != nil {
 		response.Fail(c, "获取音色列表失败", err.Error())
 		return
@@ -489,7 +488,6 @@ func (h *Handlers) GetVoiceClone(c *gin.Context) {
 
 	var clone models.VoiceClone
 	if err := h.db.Where("user_id = ? AND id = ? AND is_active = ?", user.ID, uint(cloneID), true).
-		Preload("TrainingTask").
 		First(&clone).Error; err != nil {
 		response.Fail(c, "音色不存在", err.Error())
 		return
@@ -522,7 +520,6 @@ func (h *Handlers) SynthesizeWithVoice(c *gin.Context) {
 	// 1) 获取音色
 	var clone models.VoiceClone
 	if err := h.db.Where("user_id = ? AND id = ? AND is_active = ?", user.ID, req.VoiceCloneID, true).
-		Preload("TrainingTask").
 		First(&clone).Error; err != nil {
 		response.Fail(c, "音色不存在", err.Error())
 		return
@@ -620,8 +617,7 @@ func (h *Handlers) GetSynthesisHistory(c *gin.Context) {
 			Where("voice_clones.provider = ? AND voice_clones.deleted_at IS NULL", provider)
 	}
 
-	query = query.Preload("VoiceClone").
-		Order("voice_syntheses.created_at DESC")
+	query = query.Order("voice_syntheses.created_at DESC")
 
 	if limit > 0 {
 		query = query.Limit(limit)
@@ -632,13 +628,27 @@ func (h *Handlers) GetSynthesisHistory(c *gin.Context) {
 		return
 	}
 
+	// 获取所有相关的 VoiceClone ID
+	voiceCloneIDs := make([]uint, 0, len(history))
+	for _, item := range history {
+		voiceCloneIDs = append(voiceCloneIDs, item.VoiceCloneID)
+	}
+
+	// 批量查询 VoiceClone 获取 provider
+	voiceClones := make(map[uint]string)
+	if len(voiceCloneIDs) > 0 {
+		var clones []models.VoiceClone
+		if err := h.db.Select("id, provider").Where("id IN ?", voiceCloneIDs).Find(&clones).Error; err == nil {
+			for _, clone := range clones {
+				voiceClones[clone.ID] = clone.Provider
+			}
+		}
+	}
+
 	// 只返回必要字段
 	result := make([]SynthesisHistoryItem, 0, len(history))
 	for _, item := range history {
-		providerStr := ""
-		if item.VoiceClone.ID > 0 && item.VoiceClone.Provider != "" {
-			providerStr = item.VoiceClone.Provider
-		}
+		providerStr := voiceClones[item.VoiceCloneID]
 
 		result = append(result, SynthesisHistoryItem{
 			ID:           item.ID,
@@ -1024,8 +1034,10 @@ func (h *Handlers) GetTrainingTexts(c *gin.Context) {
 	// 1) 先查库
 	var text models.VoiceTrainingText
 	if err := h.db.Where("text_id = ? AND is_active = ?", textID, true).
-		Preload("TextSegments").
 		First(&text).Error; err == nil {
+		// 查询关联的段落
+		var segments []models.VoiceTrainingTextSegment
+		h.db.Where("text_id = ?", text.ID).Find(&segments)
 		response.Success(c, "获取训练文本成功", text)
 		return
 	}
@@ -1070,7 +1082,7 @@ func (h *Handlers) GetTrainingTexts(c *gin.Context) {
 	}
 
 	// 5) 重新加载返回
-	if err := h.db.Preload("TextSegments").First(&text, text.ID).Error; err != nil {
+	if err := h.db.First(&text, text.ID).Error; err != nil {
 		response.Fail(c, "加载训练文本失败", err.Error())
 		return
 	}

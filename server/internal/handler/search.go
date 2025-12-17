@@ -34,7 +34,7 @@ func (h *Handlers) UpdateSearchConfig(c *gin.Context) {
 	}
 
 	// Only administrators can modify search configuration
-	if !user.IsSuperUser {
+	if !user.HasPermission(models.PermissionSearchConfig) {
 		response.Fail(c, "forbidden", "Insufficient permissions")
 		return
 	}
@@ -82,7 +82,7 @@ func (h *Handlers) EnableSearch(c *gin.Context) {
 	}
 
 	// Only administrators can enable search
-	if !user.IsSuperUser {
+	if !user.HasPermission(models.PermissionSearchConfig) {
 		response.Fail(c, "forbidden", "Insufficient permissions")
 		return
 	}
@@ -102,7 +102,7 @@ func (h *Handlers) DisableSearch(c *gin.Context) {
 	}
 
 	// Only administrators can disable search
-	if !user.IsSuperUser {
+	if !user.HasPermission(models.PermissionSearchConfig) {
 		response.Fail(c, "forbidden", "Insufficient permissions")
 		return
 	}

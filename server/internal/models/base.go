@@ -31,71 +31,44 @@ type UserBasicInfoUpdate struct {
 }
 
 type User struct {
-	ID        uint       `json:"id" gorm:"primaryKey"`
-	CreatedAt time.Time  `json:"createdAt" gorm:"autoCreateTime"`
-	UpdatedAt time.Time  `json:"-" gorm:"autoUpdateTime"`
-	DeletedAt *time.Time `json:"-" gorm:"index"`
-
-	Email              string `json:"email" gorm:"size:128;uniqueIndex"`
-	EmailNotifications bool   `json:"emailNotifications"`
-
-	Password    string     `json:"-" gorm:"size:128"`
-	Phone       string     `json:"phone,omitempty" gorm:"size:64;index"`
-	FirstName   string     `json:"firstName,omitempty" gorm:"size:128"`
-	LastName    string     `json:"lastName,omitempty" gorm:"size:128"`
-	DisplayName string     `json:"displayName,omitempty" gorm:"size:128"`
-	IsSuperUser bool       `json:"-"`
-	IsStaff     bool       `json:"isStaff,omitempty"`
-	Enabled     bool       `json:"-"`
-	Activated   bool       `json:"-"`
-	LastLogin   *time.Time `json:"lastLogin,omitempty"`
-	LastLoginIP string     `json:"-" gorm:"size:128"`
-
-	Source    string `json:"-" gorm:"size:64;index"`
-	Locale    string `json:"locale,omitempty" gorm:"size:20"`
-	Timezone  string `json:"timezone,omitempty" gorm:"size:200"`
-	AuthToken string `json:"token,omitempty" gorm:"-"`
-
-	Avatar       string `json:"avatar,omitempty"`
-	Gender       string `json:"gender,omitempty"`
-	City         string `json:"city,omitempty"`
-	Region       string `json:"region,omitempty"`
-	Country      string `json:"country,omitempty"`
-	Extra        string `json:"extra,omitempty"`
-	PrivateExtra string `json:"privateExtra,omitempty"`
-
-	// New fields for basic information input
-	FatherCallName   string `json:"fatherCallName,omitempty" gorm:"size:128"`
-	MotherCallName   string `json:"motherCallName,omitempty" gorm:"size:128"`
-	WiFiName         string `json:"wifiName,omitempty" gorm:"size:128"`
-	WiFiPassword     string `json:"wifiPassword,omitempty" gorm:"size:128"`
-	HasFilledDetails bool   `json:"hasFilledDetails"`
-
-	// 新增推送和通知相关字段
-	PushNotifications     bool `json:"pushNotifications" gorm:"default:true"`      // 推送通知
-	SMSNotifications      bool `json:"smsNotifications" gorm:"default:false"`      // 短信通知
-	MarketingEmails       bool `json:"marketingEmails" gorm:"default:false"`       // 营销邮件
-	SystemNotifications   bool `json:"systemNotifications" gorm:"default:true"`    // 系统通知
-	SecurityAlerts        bool `json:"securityAlerts" gorm:"default:true"`         // 安全警报
-	AutoCleanUnreadEmails bool `json:"autoCleanUnreadEmails" gorm:"default:false"` // 自动清理七天未读邮件
-
-	// 新增用户状态和验证相关字段
-	EmailVerified        bool       `json:"emailVerified" gorm:"default:false"`    // 邮箱已验证
-	PhoneVerified        bool       `json:"phoneVerified" gorm:"default:false"`    // 手机已验证
-	TwoFactorEnabled     bool       `json:"twoFactorEnabled" gorm:"default:false"` // 双因素认证
-	TwoFactorSecret      string     `json:"-" gorm:"size:128"`                     // 双因素认证密钥
-	EmailVerifyToken     string     `json:"-" gorm:"size:128"`                     // 邮箱验证令牌
-	PhoneVerifyToken     string     `json:"-" gorm:"size:128"`                     // 手机验证令牌
-	PasswordResetToken   string     `json:"-" gorm:"size:128"`                     // 密码重置令牌
-	PasswordResetExpires *time.Time `json:"-"`                                     // 密码重置过期时间
-	EmailVerifyExpires   *time.Time `json:"-"`                                     // 邮箱验证过期时间
-
-	// 新增用户偏好设置
-	Theme      string `json:"theme,omitempty" gorm:"size:20;default:'light'"` // 主题偏好
-	Language   string `json:"language,omitempty" gorm:"size:10;default:'zh'"` // 语言偏好
-	DateFormat string `json:"dateFormat,omitempty" gorm:"size:20"`            // 日期格式
-	TimeFormat string `json:"timeFormat,omitempty" gorm:"size:20"`            // 时间格式
-	Currency   string `json:"currency,omitempty" gorm:"size:10"`              // 货币偏好
+	ID                    uint       `json:"id" gorm:"primaryKey"`
+	CreatedAt             time.Time  `json:"createdAt" gorm:"autoCreateTime"`
+	UpdatedAt             time.Time  `json:"-" gorm:"autoUpdateTime"`
+	DeletedAt             *time.Time `json:"-" gorm:"index"`
+	Email                 string     `json:"email" gorm:"size:128;uniqueIndex"`
+	Password              string     `json:"-" gorm:"size:128"`
+	Phone                 string     `json:"phone,omitempty" gorm:"size:64;index"`
+	FirstName             string     `json:"firstName,omitempty" gorm:"size:128"`
+	LastName              string     `json:"lastName,omitempty" gorm:"size:128"`
+	DisplayName           string     `json:"displayName,omitempty" gorm:"size:128"`
+	IsStaff               bool       `json:"isStaff,omitempty"`
+	Enabled               bool       `json:"-"`
+	Activated             bool       `json:"-"`
+	LastLogin             *time.Time `json:"lastLogin,omitempty"`
+	LastLoginIP           string     `json:"-" gorm:"size:128"`
+	Source                string     `json:"-" gorm:"size:64;index"`
+	Locale                string     `json:"locale,omitempty" gorm:"size:20"`
+	Timezone              string     `json:"timezone,omitempty" gorm:"size:200"`
+	AuthToken             string     `json:"token,omitempty" gorm:"-"`
+	Avatar                string     `json:"avatar,omitempty"`
+	Gender                string     `json:"gender,omitempty"`
+	City                  string     `json:"city,omitempty"`
+	Region                string     `json:"region,omitempty"`
+	Country               string     `json:"country,omitempty"`
+	HasFilledDetails      bool       `json:"hasFilledDetails"`
+	EmailNotifications    bool       `json:"emailNotifications"`                         // 邮件通知
+	PushNotifications     bool       `json:"pushNotifications" gorm:"default:true"`      // 推送通知
+	SystemNotifications   bool       `json:"systemNotifications" gorm:"default:true"`    // 系统通知
+	AutoCleanUnreadEmails bool       `json:"autoCleanUnreadEmails" gorm:"default:false"` // 自动清理七天未读邮件
+	EmailVerified         bool       `json:"emailVerified" gorm:"default:false"`         // 邮箱已验证
+	PhoneVerified         bool       `json:"phoneVerified" gorm:"default:false"`         // 手机已验证
+	TwoFactorEnabled      bool       `json:"twoFactorEnabled" gorm:"default:false"`      // 双因素认证
+	TwoFactorSecret       string     `json:"-" gorm:"size:128"`                          // 双因素认证密钥
+	EmailVerifyToken      string     `json:"-" gorm:"size:128"`                          // 邮箱验证令牌
+	PhoneVerifyToken      string     `json:"-" gorm:"size:128"`                          // 手机验证令牌
+	PasswordResetToken    string     `json:"-" gorm:"size:128"`                          // 密码重置令牌
+	PasswordResetExpires  *time.Time `json:"-"`                                          // 密码重置过期时间
+	EmailVerifyExpires    *time.Time `json:"-"`                                          // 邮箱验证过期时间
 
 	// 新增用户统计信息
 	LoginCount         int        `json:"loginCount" gorm:"default:0"`      // 登录次数

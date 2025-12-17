@@ -119,12 +119,16 @@ func (s *SeedService) seedConfigs() error {
 }
 
 func (s *SeedService) seedAdminUsers() error {
+	// 超级管理员权限（所有权限）
+	allPermissions := `["*"]`
+
 	defaultAdmins := []models.User{
 		{
 			Email:       "admin@lingecho.com",
 			Password:    models.HashPassword("admin123"),
 			IsStaff:     true,
-			IsSuperUser: true,
+			Role:        models.RoleSuperAdmin,
+			Permissions: allPermissions,
 			DisplayName: "Administrator",
 			Enabled:     true,
 		},
@@ -132,7 +136,8 @@ func (s *SeedService) seedAdminUsers() error {
 			Email:       "19511899044@163.com",
 			Password:    models.HashPassword("admin123"),
 			IsStaff:     true,
-			IsSuperUser: true,
+			Role:        models.RoleSuperAdmin,
+			Permissions: allPermissions,
 			DisplayName: "Administrator",
 			Enabled:     true,
 		},
