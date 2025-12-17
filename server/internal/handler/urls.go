@@ -283,6 +283,7 @@ func (h *Handlers) registerSystemRoutes(r *gin.RouterGroup) {
 		system.POST("/rate-limiter/config", h.UpdateRateLimiterConfig)
 
 		system.GET("/health", h.HealthCheck)
+		system.GET("/status", h.SystemStatus)
 
 		// System initialization route (no auth required)
 		system.GET("/init", h.SystemInit)
