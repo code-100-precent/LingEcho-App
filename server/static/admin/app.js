@@ -1160,20 +1160,8 @@ const adminapp = () => ({
             // Get monitor URL from site config
             let monitorUrl = (this.site?.Site?.monitor_url) || (this.site?.monitor_url) || ''
             
-            // Mock data for dashboard
-            let mockData = {
-                pv: { today: 12580, yesterday: 11234, change: 12.0 },
-                uv: { today: 3245, yesterday: 2987, change: 8.6 },
-                apiCalls: { today: 45678, yesterday: 43210, change: 5.7 },
-                activeUsers: { today: 892, yesterday: 856, change: 4.2 },
-                responseTime: { avg: 125, p95: 234, p99: 456 },
-                errorRate: { today: 0.12, yesterday: 0.15, change: -20.0 },
-                throughput: { today: 1250, yesterday: 1180, change: 5.9 }
-            }
-            
             // Get user info
             let userName = this.user?.name || this.user?.firstName || this.user?.email || '管理员'
-            let userEmail = this.user?.email || ''
             let currentTime = new Date().toLocaleString('zh-CN', { 
                 year: 'numeric', 
                 month: 'long', 
@@ -1183,7 +1171,48 @@ const adminapp = () => ({
                 weekday: 'long'
             })
             
-            let html = '<div class="space-y-6">'
+            // Load dashboard metrics from backend
+            this.loadDashboardMetrics(elm, monitorUrl, userName, currentTime)
+        })
+    },
+    
+    async loadDashboardMetrics(elm, monitorUrl, userName, currentTime) {
+        // Default mock data (fallback)
+        let mockData = {
+            pv: { today: 0, yesterday: 0, change: 0.0 },
+            uv: { today: 0, yesterday: 0, change: 0.0 },
+            apiCalls: { today: 0, yesterday: 0, change: 0.0 },
+            activeUsers: { today: 0, yesterday: 0, change: 0.0 },
+            responseTime: { avg: 125, p95: 234, p99: 456 },
+            errorRate: { today: 0.12, yesterday: 0.15, change: -20.0 },
+            throughput: { today: 1250, yesterday: 1180, change: 5.9 }
+        }
+        
+        try {
+            let resp = await fetch('/api/system/dashboard/metrics', {
+                method: 'GET',
+                cache: "no-store",
+            })
+            if (resp.ok) {
+                let data = await resp.json()
+                if (data.success && data.data) {
+                    // Use real data from backend
+                    mockData.pv = data.data.pv || mockData.pv
+                    mockData.uv = data.data.uv || mockData.uv
+                    mockData.apiCalls = data.data.apiCalls || mockData.apiCalls
+                    mockData.activeUsers = data.data.activeUsers || mockData.activeUsers
+                }
+            }
+        } catch (err) {
+            console.error('Failed to load dashboard metrics:', err)
+        }
+        
+        // Render dashboard with data
+        this.renderDashboard(elm, monitorUrl, userName, currentTime, mockData)
+    },
+    
+    renderDashboard(elm, monitorUrl, userName, currentTime, mockData) {
+        let html = '<div class="space-y-6">'
             
             // Welcome Section
             html += '<div class="bg-white border border-gray-200 rounded-lg shadow-sm p-6">'
@@ -1213,30 +1242,6 @@ const adminapp = () => ({
             html += '<h3 class="text-base font-semibold text-gray-900 mb-1">性能监控</h3>'
             html += '<p class="text-sm text-gray-500">查看系统性能指标和监控数据</p>'
             html += '</a>'
-            html += '</div>'
-            
-            // Recent Activity Section
-            html += '<div class="bg-white border border-gray-200 rounded-lg shadow-sm p-6">'
-            html += '<h3 class="text-base font-semibold text-gray-900 mb-4">最近活动</h3>'
-            html += '<div class="space-y-2">'
-            let activities = [
-                { type: 'user', text: '新用户注册', time: '2分钟前', icon: 'M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z' },
-                { type: 'api', text: 'API调用量达到峰值', time: '15分钟前', icon: 'M8 9l3 3-3 3m5 0h3M5 20h14a2 2 0 002-2V6a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z' },
-                { type: 'system', text: '系统备份完成', time: '1小时前', icon: 'M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z' },
-                { type: 'alert', text: '性能监控告警已处理', time: '2小时前', icon: 'M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z' }
-            ]
-            activities.forEach(activity => {
-                html += '<div class="flex items-center gap-3 p-3 rounded border border-gray-100 hover:bg-gray-50 transition-colors">'
-                html += '<div class="p-1.5 bg-gray-100 rounded">'
-                html += '<svg class="w-4 h-4 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="' + activity.icon + '"></path></svg>'
-                html += '</div>'
-                html += '<div class="flex-1 min-w-0">'
-                html += '<p class="text-sm text-gray-900">' + activity.text + '</p>'
-                html += '<p class="text-xs text-gray-500">' + activity.time + '</p>'
-                html += '</div>'
-                html += '</div>'
-            })
-            html += '</div>'
             html += '</div>'
             
             // Key Metrics Section
@@ -1287,87 +1292,21 @@ const adminapp = () => ({
             html += '<div class="p-1.5 bg-gray-100 rounded">'
             html += '<svg class="w-4 h-4 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z"></path></svg>'
             html += '</div>'
-            html += '<span class="text-xs font-medium px-2 py-0.5 rounded ' + (mockData.activeUsers.change > 0 ? 'bg-gray-100 text-gray-700' : 'bg-gray-100 text-gray-700') + '">' + (mockData.activeUsers.change > 0 ? '+' : '') + mockData.activeUsers.change.toFixed(1) + '%</span>'
             html += '</div>'
             html += '<div class="text-xl font-semibold text-gray-900 mb-1">' + mockData.activeUsers.today.toLocaleString() + '</div>'
             html += '<div class="text-xs text-gray-500">活跃用户</div>'
-            html += '<div class="text-xs text-gray-400 mt-1">昨日: ' + mockData.activeUsers.yesterday.toLocaleString() + '</div>'
-            html += '</div>'
-            
-            html += '</div>'
-            
-            // Performance Metrics Section
-            html += '<div class="grid grid-cols-1 lg:grid-cols-3 gap-4">'
-            
-            // Response Time Card
-            html += '<div class="bg-white border border-gray-200 rounded-lg shadow-sm p-5">'
-            html += '<h3 class="text-sm font-semibold text-gray-900 mb-3">响应时间</h3>'
-            html += '<div class="space-y-2.5">'
-            html += '<div class="flex items-center justify-between py-1.5 border-b border-gray-100">'
-            html += '<span class="text-xs text-gray-600">平均响应</span>'
-            html += '<span class="text-sm font-semibold text-gray-900">' + mockData.responseTime.avg + 'ms</span>'
-            html += '</div>'
-            html += '<div class="flex items-center justify-between py-1.5 border-b border-gray-100">'
-            html += '<span class="text-xs text-gray-600">P95</span>'
-            html += '<span class="text-sm font-semibold text-gray-700">' + mockData.responseTime.p95 + 'ms</span>'
-            html += '</div>'
-            html += '<div class="flex items-center justify-between py-1.5">'
-            html += '<span class="text-xs text-gray-600">P99</span>'
-            html += '<span class="text-sm font-semibold text-gray-700">' + mockData.responseTime.p99 + 'ms</span>'
-            html += '</div>'
-            html += '</div>'
-            html += '</div>'
-            
-            // Error Rate Card
-            html += '<div class="bg-white border border-gray-200 rounded-lg shadow-sm p-5">'
-            html += '<h3 class="text-sm font-semibold text-gray-900 mb-3">错误率</h3>'
-            html += '<div class="flex items-baseline gap-2 mb-2">'
-            html += '<div class="text-2xl font-semibold text-gray-900">' + mockData.errorRate.today.toFixed(2) + '%</div>'
-            html += '<span class="text-xs text-gray-500">' + (mockData.errorRate.change < 0 ? '↓' : '↑') + ' ' + Math.abs(mockData.errorRate.change).toFixed(1) + '%</span>'
-            html += '</div>'
-            html += '<div class="text-xs text-gray-500">较昨日 ' + (mockData.errorRate.change < 0 ? '下降' : '上升') + '</div>'
-            html += '</div>'
-            
-            // Throughput Card
-            html += '<div class="bg-white border border-gray-200 rounded-lg shadow-sm p-5">'
-            html += '<h3 class="text-sm font-semibold text-gray-900 mb-3">吞吐量</h3>'
-            html += '<div class="flex items-baseline gap-2 mb-2">'
-            html += '<div class="text-2xl font-semibold text-gray-900">' + mockData.throughput.today.toLocaleString() + '</div>'
-            html += '<span class="text-xs text-gray-500">req/s</span>'
-            html += '<span class="text-xs text-gray-500 ml-auto">' + (mockData.throughput.change > 0 ? '↑' : '↓') + ' ' + Math.abs(mockData.throughput.change).toFixed(1) + '%</span>'
-            html += '</div>'
-            html += '<div class="text-xs text-gray-500">较昨日 ' + (mockData.throughput.change > 0 ? '上升' : '下降') + '</div>'
+            html += '<div class="text-xs text-gray-400 mt-1">最近24小时</div>'
             html += '</div>'
             
             html += '</div>'
             
             // System Status Section
-            html += '<div class="grid grid-cols-1 lg:grid-cols-2 gap-4">'
             html += '<div class="bg-white border border-gray-200 rounded-lg shadow-sm p-5">'
             html += '<h3 class="text-sm font-semibold text-gray-900 mb-3">系统状态</h3>'
             html += '<div class="space-y-2" id="system_status_list">'
             html += '<div class="flex items-center justify-center py-4">'
             html += '<div class="animate-spin inline-block w-4 h-4 border-2 border-gray-300 border-t-gray-600 rounded-full"></div>'
             html += '<span class="ml-2 text-xs text-gray-500">检查中...</span>'
-            html += '</div>'
-            html += '</div>'
-            html += '</div>'
-            
-            html += '<div class="bg-white border border-gray-200 rounded-lg shadow-sm p-5">'
-            html += '<h3 class="text-sm font-semibold text-gray-900 mb-3">快速操作</h3>'
-            html += '<div class="grid grid-cols-2 gap-2">'
-            let quickActions = [
-                { name: '查看日志', icon: 'M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z' },
-                { name: '系统设置', icon: 'M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z' },
-                { name: '数据备份', icon: 'M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12' },
-                { name: '用户管理', icon: 'M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z' }
-            ]
-            quickActions.forEach(action => {
-                html += '<button class="flex flex-col items-center gap-1.5 p-3 rounded border border-gray-200 hover:border-gray-300 hover:bg-gray-50 transition-all">'
-                html += '<svg class="w-4 h-4 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="' + action.icon + '"></path></svg>'
-                html += '<span class="text-xs text-gray-700">' + action.name + '</span>'
-                html += '</button>'
-            })
             html += '</div>'
             html += '</div>'
             html += '</div>'
@@ -1382,11 +1321,10 @@ const adminapp = () => ({
             // Make instance globally accessible
             window.adminAppInstance = this
             
-            // Load system status after DOM is ready
-            setTimeout(() => {
-                this.loadSystemStatus()
-            }, 200)
-        })
+        // Load system status after DOM is ready
+        setTimeout(() => {
+            this.loadSystemStatus()
+        }, 200)
     },
     loadSidebar() {
         fetch('sidebar.html', {

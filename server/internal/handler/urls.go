@@ -284,6 +284,7 @@ func (h *Handlers) registerSystemRoutes(r *gin.RouterGroup) {
 
 		system.GET("/health", h.HealthCheck)
 		system.GET("/status", h.SystemStatus)
+		system.GET("/dashboard/metrics", models.AuthRequired, h.DashboardMetrics)
 
 		// System initialization route (no auth required)
 		system.GET("/init", h.SystemInit)

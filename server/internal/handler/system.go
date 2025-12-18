@@ -8,6 +8,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/code-100-precent/LingEcho/internal/models"
 	"github.com/code-100-precent/LingEcho/pkg/cache"
 	"github.com/code-100-precent/LingEcho/pkg/config"
 	"github.com/code-100-precent/LingEcho/pkg/constants"
@@ -300,4 +301,91 @@ func (h *Handlers) SystemStatus(c *gin.Context) {
 	status["storage"] = storageStatus
 
 	response.Success(c, "系统状态检查完成", status)
+}
+
+// DashboardMetrics 获取仪表板指标数据（PV、UV、API调用次数、活跃用户）
+func (h *Handlers) DashboardMetrics(c *gin.Context) {
+	now := time.Now()
+	today := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, now.Location())
+	yesterday := today.AddDate(0, 0, -1)
+
+	// 计算今天和昨天的数据
+	var todayPV, yesterdayPV int64
+	var todayUV, yesterdayUV int64
+	var todayAPICalls, yesterdayAPICalls int64
+	var activeUsers int64
+
+	// PV：统计UsageRecord总数（今天和昨天）
+	h.db.Model(&models.UsageRecord{}).
+		Where("DATE(usage_time) = ?", today.Format("2006-01-02")).
+		Count(&todayPV)
+	h.db.Model(&models.UsageRecord{}).
+		Where("DATE(usage_time) = ?", yesterday.Format("2006-01-02")).
+		Count(&yesterdayPV)
+
+	// UV：统计独立用户数（今天和昨天）
+	var todayUserIDs []uint
+	var yesterdayUserIDs []uint
+	h.db.Model(&models.UsageRecord{}).
+		Where("DATE(usage_time) = ?", today.Format("2006-01-02")).
+		Distinct("user_id").
+		Pluck("user_id", &todayUserIDs)
+	todayUV = int64(len(todayUserIDs))
+
+	h.db.Model(&models.UsageRecord{}).
+		Where("DATE(usage_time) = ?", yesterday.Format("2006-01-02")).
+		Distinct("user_id").
+		Pluck("user_id", &yesterdayUserIDs)
+	yesterdayUV = int64(len(yesterdayUserIDs))
+
+	// API调用次数：统计UsageType为API的记录（今天和昨天）
+	h.db.Model(&models.UsageRecord{}).
+		Where("DATE(usage_time) = ? AND usage_type = ?", today.Format("2006-01-02"), models.UsageTypeAPI).
+		Count(&todayAPICalls)
+	h.db.Model(&models.UsageRecord{}).
+		Where("DATE(usage_time) = ? AND usage_type = ?", yesterday.Format("2006-01-02"), models.UsageTypeAPI).
+		Count(&yesterdayAPICalls)
+
+	// 活跃用户：统计最近24小时内有活动的用户数
+	last24Hours := now.Add(-24 * time.Hour)
+	h.db.Model(&models.UsageRecord{}).
+		Where("usage_time >= ?", last24Hours).
+		Distinct("user_id").
+		Count(&activeUsers)
+
+	// 计算变化百分比
+	calculateChange := func(today, yesterday int64) float64 {
+		if yesterday == 0 {
+			if today > 0 {
+				return 100.0
+			}
+			return 0.0
+		}
+		return ((float64(today) - float64(yesterday)) / float64(yesterday)) * 100.0
+	}
+
+	metrics := map[string]interface{}{
+		"pv": map[string]interface{}{
+			"today":     todayPV,
+			"yesterday": yesterdayPV,
+			"change":    calculateChange(todayPV, yesterdayPV),
+		},
+		"uv": map[string]interface{}{
+			"today":     todayUV,
+			"yesterday": yesterdayUV,
+			"change":    calculateChange(todayUV, yesterdayUV),
+		},
+		"apiCalls": map[string]interface{}{
+			"today":     todayAPICalls,
+			"yesterday": yesterdayAPICalls,
+			"change":    calculateChange(todayAPICalls, yesterdayAPICalls),
+		},
+		"activeUsers": map[string]interface{}{
+			"today":     activeUsers,
+			"yesterday": 0, // 活跃用户是实时数据，不需要昨日对比
+			"change":    0.0,
+		},
+	}
+
+	response.Success(c, "获取仪表板指标成功", metrics)
 }
