@@ -17,10 +17,11 @@ import { useSearchHighlight } from '@/hooks/useSearchHighlight'
 import Card from '@/components/UI/Card'
 import Button from '@/components/UI/Button'
 import Input from '@/components/UI/Input'
-import Modal from '@/components/UI/Modal'
+import Modal, { ModalContent, ModalFooter } from '@/components/UI/Modal'
 import ConfirmDialog from '@/components/UI/ConfirmDialog'
 import EmptyState from '@/components/UI/EmptyState'
 import Badge from '@/components/UI/Badge'
+import FileUpload from '@/components/UI/FileUpload'
 import FadeIn from '@/components/Animations/FadeIn'
 import PageContainer from '@/components/Layout/PageContainer'
 
@@ -312,15 +313,19 @@ const KnowledgeBase = () => {
         }
     };
 
-    const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-        if (e.target.files && e.target.files[0]) {
-            setFile(e.target.files[0]);
+    const handleFileChange = (files: File[]) => {
+        if (files && files.length > 0) {
+            setFile(files[0]);
+        } else {
+            setFile(null);
         }
     };
 
-    const handleUploadFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-        if (e.target.files && e.target.files[0]) {
-            setUploadFile(e.target.files[0]);
+    const handleUploadFileChange = (files: File[]) => {
+        if (files && files.length > 0) {
+            setUploadFile(files[0]);
+        } else {
+            setUploadFile(null);
         }
     };
 
@@ -470,33 +475,55 @@ const KnowledgeBase = () => {
             {/* 创建知识库模态框 */}
             <Modal
                 isOpen={isCreateModalOpen}
-                onClose={() => setIsCreateModalOpen(false)}
+                onClose={() => {
+                    setIsCreateModalOpen(false)
+                    setFile(null)
+                    setFormData({
+                        knowledgeName: '',
+                        shareToGroup: false,
+                        selectedGroupId: null
+                    })
+                }}
                 title={t('knowledgeBase.createModal.title')}
                 size="md"
             >
                 <form onSubmit={handleCreateSubmit}>
-                    <div className="space-y-4">
-                        <Input
-                            label={t('knowledgeBase.createModal.nameLabel')}
-                            name="knowledgeName"
-                            value={formData.knowledgeName}
-                            onChange={handleInputChange}
-                            placeholder={t('knowledgeBase.createModal.namePlaceholder')}
-                            required
-                            maxLength={10}
-                        />
-
-                        <div>
-                            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                                {t('knowledgeBase.createModal.fileLabel')}
-                            </label>
-                            <input
-                                type="file"
-                                onChange={handleFileChange}
-                                className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-purple-500 dark:bg-neutral-700 dark:border-neutral-600"
+                    <ModalContent>
+                        <div className="space-y-4">
+                            <Input
+                                label={t('knowledgeBase.createModal.nameLabel')}
+                                name="knowledgeName"
+                                value={formData.knowledgeName}
+                                onChange={handleInputChange}
+                                placeholder={t('knowledgeBase.createModal.namePlaceholder')}
                                 required
+                                maxLength={10}
                             />
-                        </div>
+
+                            <FileUpload
+                                onFileSelect={handleFileChange}
+                                accept=".pdf,.doc,.docx,.txt,.md"
+                                multiple={false}
+                                maxSize={50}
+                                maxFiles={1}
+                                label={t('knowledgeBase.createModal.fileLabel')}
+                                className="w-full"
+                            />
+                            {file && (
+                                <div className="p-3 bg-blue-50 dark:bg-blue-900/20 rounded-lg border border-blue-200 dark:border-blue-800">
+                                    <div className="flex items-center gap-2">
+                                        <FileText className="w-5 h-5 text-blue-600 dark:text-blue-400" />
+                                        <div className="flex-1">
+                                            <p className="text-sm font-medium text-blue-900 dark:text-blue-100">
+                                                {file.name}
+                                            </p>
+                                            <p className="text-xs text-blue-700 dark:text-blue-300">
+                                                {(file.size / 1024 / 1024).toFixed(2)} MB
+                                            </p>
+                                        </div>
+                                    </div>
+                                </div>
+                            )}
 
                         {groups.length > 0 && (
                             <div>
@@ -532,12 +559,20 @@ const KnowledgeBase = () => {
                                 )}
                             </div>
                         )}
-                    </div>
-
-                    <div className="flex justify-end gap-3 mt-6">
+                        </div>
+                    </ModalContent>
+                    <ModalFooter>
                         <Button
                             variant="outline"
-                            onClick={() => setIsCreateModalOpen(false)}
+                            onClick={() => {
+                                setIsCreateModalOpen(false)
+                                setFile(null)
+                                setFormData({
+                                    knowledgeName: '',
+                                    shareToGroup: false,
+                                    selectedGroupId: null
+                                })
+                            }}
                         >
                             {t('knowledgeBase.deleteConfirm.cancel')}
                         </Button>
@@ -546,39 +581,62 @@ const KnowledgeBase = () => {
                             type="submit"
                             loading={isCreating}
                             leftIcon={!isCreating ? <Plus className="w-4 h-4" /> : undefined}
+                            disabled={!file || !formData.knowledgeName}
                         >
                             {isCreating ? t('knowledgeBase.createModal.creating') : t('knowledgeBase.createModal.create')}
                         </Button>
-                    </div>
+                    </ModalFooter>
                 </form>
             </Modal>
 
             {/* 上传文件模态框 */}
             <Modal
                 isOpen={isUploadModalOpen}
-                onClose={() => setIsUploadModalOpen(false)}
+                onClose={() => {
+                    setIsUploadModalOpen(false)
+                    setUploadFile(null)
+                }}
                 title={t('knowledgeBase.uploadModal.title').replace('{name}', currentItem?.knowledge_name || '')}
                 size="md"
             >
                 <form onSubmit={handleUploadSubmit}>
-                    <div className="space-y-4">
-                        <div>
-                            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                                {t('knowledgeBase.uploadModal.fileLabel')}
-                            </label>
-                            <input
-                                type="file"
-                                onChange={handleUploadFileChange}
-                                className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-purple-500 dark:bg-neutral-700 dark:border-neutral-600"
-                                required
-                            />
+                    <ModalContent>
+                        <div className="space-y-4">
+                            <div>
+                                <FileUpload
+                                    onFileSelect={handleUploadFileChange}
+                                    accept=".pdf,.doc,.docx,.txt,.md"
+                                    multiple={false}
+                                    maxSize={50}
+                                    maxFiles={1}
+                                    label={t('knowledgeBase.uploadModal.fileLabel')}
+                                    className="w-full"
+                                />
+                                {uploadFile && (
+                                    <div className="mt-4 p-3 bg-blue-50 dark:bg-blue-900/20 rounded-lg border border-blue-200 dark:border-blue-800">
+                                        <div className="flex items-center gap-2">
+                                            <FileText className="w-5 h-5 text-blue-600 dark:text-blue-400" />
+                                            <div className="flex-1">
+                                                <p className="text-sm font-medium text-blue-900 dark:text-blue-100">
+                                                    {uploadFile.name}
+                                                </p>
+                                                <p className="text-xs text-blue-700 dark:text-blue-300">
+                                                    {(uploadFile.size / 1024 / 1024).toFixed(2)} MB
+                                                </p>
+                                            </div>
+                                        </div>
+                                    </div>
+                                )}
+                            </div>
                         </div>
-                    </div>
-
-                    <div className="flex justify-end gap-3 mt-6">
+                    </ModalContent>
+                    <ModalFooter>
                         <Button
                             variant="outline"
-                            onClick={() => setIsUploadModalOpen(false)}
+                            onClick={() => {
+                                setIsUploadModalOpen(false)
+                                setUploadFile(null)
+                            }}
                         >
                             {t('knowledgeBase.deleteConfirm.cancel')}
                         </Button>
@@ -586,10 +644,11 @@ const KnowledgeBase = () => {
                             variant="primary"
                             type="submit"
                             leftIcon={<Upload className="w-4 h-4" />}
+                            disabled={!uploadFile}
                         >
                             {t('knowledgeBase.uploadModal.upload')}
                         </Button>
-                    </div>
+                    </ModalFooter>
                 </form>
             </Modal>
 

@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react'
+import { motion } from 'framer-motion'
 import {
     Bell,
     Check,
@@ -213,13 +214,20 @@ const NotificationCenter = () => {
   return (
     <div className="h-[calc(100vh-4rem)] bg-background flex flex-col">
       {/* 主要内容区域 - 横向布局 */}
-      <div className="flex-1 flex overflow-hidden">
+      <div className="flex-1 flex flex-col lg:flex-row overflow-hidden">
         {/* 左侧：统计和筛选 */}
-        <div className="w-80 flex-shrink-0 border-r bg-card/30 flex flex-col">
+        <div className="w-full lg:w-80 flex-shrink-0 border-r bg-card/30 flex flex-col">
           {/* 头部 */}
           <div className="p-3 border-b">
             <div className="flex items-center justify-between mb-2">
-              <h1 className="text-base font-bold text-foreground">{t('notification.title')}</h1>
+              <h1 className="text-base font-bold text-foreground relative pl-4">
+                <motion.div
+                  layoutId="pageTitleIndicator"
+                  className="absolute left-0 top-1/2 -translate-y-1/2 w-1 h-5 bg-primary rounded-r-full"
+                  transition={{ type: 'spring', bounce: 0.2, duration: 0.3 }}
+                />
+                {t('notification.title')}
+              </h1>
             </div>
             {/* 操作按钮 - 横向排列 */}
             <div className="flex items-center space-x-1.5">
@@ -536,7 +544,7 @@ const NotificationCenter = () => {
           {/* 分页 - 固定在底部 */}
           {totalPages > 1 && (
             <div className="flex-shrink-0 border-t bg-card/30 px-4 py-3">
-              <div className="flex items-center justify-between">
+              <div className="flex flex-col sm:flex-row items-center justify-between gap-3">
                 <div className="text-sm text-muted-foreground">
                   {t('notification.totalCount').replace('{count}', String(total))}
                 </div>
@@ -602,7 +610,7 @@ const NotificationCenter = () => {
       {showDrawer && selectedNotification && (
         <div className="fixed inset-0 z-40">
           <div className={`absolute inset-0 bg-black/30 transition-opacity duration-200 ${drawerEntering ? 'opacity-100' : 'opacity-0'}`} onClick={closeDrawer} />
-          <div className={`absolute right-0 top-0 h-full w-[380px] max-w-full bg-background border-l shadow-xl flex flex-col transform transition-transform duration-200 ease-out ${drawerEntering ? 'translate-x-0' : 'translate-x-full'}`}>
+          <div className={`absolute right-0 top-0 h-full w-full sm:w-[380px] max-w-full bg-background border-l shadow-xl flex flex-col transform transition-transform duration-200 ease-out ${drawerEntering ? 'translate-x-0' : 'translate-x-full'}`}>
             <div className="px-4 py-3 border-b flex items-center justify-between">
               <div className="flex items-center space-x-2 min-w-0">
                 <div className={`w-6 h-6 rounded-full flex items-center justify-center ${

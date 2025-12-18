@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from 'react';
+import { motion } from 'framer-motion';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { 
   getGroupList, 
@@ -190,7 +191,12 @@ const Groups: React.FC = () => {
     <div className="min-h-screen dark:bg-neutral-900 flex flex-col">
       <div className="max-w-7xl w-full mx-auto pt-10 pb-4 px-4">
         <div className="flex items-center justify-between mb-8">
-          <div>
+          <div className="relative pl-4">
+            <motion.div
+              layoutId="pageTitleIndicator"
+              className="absolute left-0 top-1/2 -translate-y-1/2 w-1 h-8 bg-primary rounded-r-full"
+              transition={{ type: 'spring', bounce: 0.2, duration: 0.3 }}
+            />
             <h1 className="text-3xl font-bold text-gray-900 dark:text-gray-100">{t('groups.title')}</h1>
             <p className="text-gray-500 dark:text-gray-400 mt-2">{t('groups.subtitle')}</p>
           </div>

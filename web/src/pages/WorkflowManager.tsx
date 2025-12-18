@@ -1317,9 +1317,14 @@ const WorkflowManager: React.FC = () => {
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         {/* Header */}
         <div className="mb-8">
-          <div className="flex items-center justify-between mb-4">
-            <div>
-              <h1 className="text-3xl font-bold text-gray-900 dark:text-white mb-2">
+          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-4">
+            <div className="flex-1 min-w-0 relative pl-4">
+              <motion.div
+                layoutId="pageTitleIndicator"
+                className="absolute left-0 top-1/2 -translate-y-1/2 w-1 h-8 bg-primary rounded-r-full"
+                transition={{ type: 'spring', bounce: 0.2, duration: 0.3 }}
+              />
+              <h1 className="text-2xl sm:text-3xl font-bold text-gray-900 dark:text-white mb-2">
                 工作流管理
               </h1>
               <p className="text-sm text-gray-500 dark:text-gray-400">
@@ -1328,17 +1333,17 @@ const WorkflowManager: React.FC = () => {
             </div>
             {error && (
               <div className="flex items-center gap-2 px-4 py-2 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg text-red-700 dark:text-red-400">
-                <AlertCircle className="w-4 h-4" />
-                <span className="text-sm">{error}</span>
+                <AlertCircle className="w-4 h-4 flex-shrink-0" />
+                <span className="text-sm break-words">{error}</span>
                 <button
                   onClick={() => setError(null)}
-                  className="ml-2 text-red-500 hover:text-red-700 dark:text-red-400 dark:hover:text-red-300"
+                  className="ml-2 text-red-500 hover:text-red-700 dark:text-red-400 dark:hover:text-red-300 flex-shrink-0"
                 >
                   <X className="w-4 h-4" />
                 </button>
-          </div>
+              </div>
             )}
-            <div className="flex items-center gap-2">
+            <div className="flex flex-wrap items-center gap-2">
               <Button
                 variant={viewMode === 'grid' ? 'primary' : 'outline'}
                 size="sm"

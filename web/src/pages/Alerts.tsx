@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from 'react';
+import { motion } from 'framer-motion';
 import { useNavigate } from 'react-router-dom';
 import { getAlerts, resolveAlert, muteAlert, Alert, AlertStatus, AlertType } from '@/api/alert';
 import { showAlert } from '@/utils/notification';
@@ -109,9 +110,14 @@ const Alerts: React.FC = () => {
   return (
     <div className="min-h-screen bg-gray-50 dark:bg-neutral-900 flex flex-col">
       <div className="max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 pt-8 pb-8 flex flex-col">
-        <div className="flex items-center justify-between mb-6">
-          <div>
-            <h1 className="text-3xl font-bold text-gray-900 dark:text-gray-100 mb-1">{t('alerts.title')}</h1>
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-6">
+          <div className="relative pl-4">
+            <motion.div
+              layoutId="pageTitleIndicator"
+              className="absolute left-0 top-1/2 -translate-y-1/2 w-1 h-8 bg-primary rounded-r-full"
+              transition={{ type: 'spring', bounce: 0.2, duration: 0.3 }}
+            />
+            <h1 className="text-2xl sm:text-3xl font-bold text-gray-900 dark:text-gray-100 mb-1">{t('alerts.title')}</h1>
             <p className="text-sm text-gray-500 dark:text-gray-400">{t('alerts.subtitle')}</p>
           </div>
           <Button
@@ -119,6 +125,7 @@ const Alerts: React.FC = () => {
             variant="primary"
             size="md"
             leftIcon={<Plus className="w-4 h-4" />}
+            className="w-full sm:w-auto"
           >
             {t('alerts.createRule')}
           </Button>
@@ -126,43 +133,45 @@ const Alerts: React.FC = () => {
 
         {/* 过滤器 */}
         <div className="bg-white dark:bg-neutral-800 border border-gray-200 dark:border-neutral-700 rounded-lg p-4 mb-6">
-          <div className="flex items-center gap-4 flex-wrap">
+          <div className="flex flex-col sm:flex-row sm:items-center gap-3 sm:gap-4">
             <div className="flex items-center gap-2">
               <Filter className="w-4 h-4 text-gray-500 dark:text-gray-400" />
               <span className="text-sm font-medium text-gray-700 dark:text-gray-300">{t('alerts.filter')}</span>
             </div>
-            <div className="flex items-center gap-2">
-              <label className="text-sm text-gray-600 dark:text-gray-400">{t('alerts.status')}</label>
-              <select
-                value={statusFilter}
-                onChange={(e) => {
-                  setStatusFilter(e.target.value as AlertStatus | '');
-                  setPage(1);
-                }}
-                className="px-3 py-1.5 border border-gray-300 dark:border-neutral-700 rounded-lg bg-white dark:bg-neutral-800 text-sm focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent"
-              >
-                <option value="">{t('alerts.all')}</option>
-                <option value="active">{t('alerts.status.active')}</option>
-                <option value="resolved">{t('alerts.status.resolved')}</option>
-                <option value="muted">{t('alerts.status.muted')}</option>
-              </select>
-            </div>
-            <div className="flex items-center gap-2">
-              <label className="text-sm text-gray-600 dark:text-gray-400">{t('alerts.type')}</label>
-              <select
-                value={typeFilter}
-                onChange={(e) => {
-                  setTypeFilter(e.target.value as AlertType | '');
-                  setPage(1);
-                }}
-                className="px-3 py-1.5 border border-gray-300 dark:border-neutral-700 rounded-lg bg-white dark:bg-neutral-800 text-sm focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent"
-              >
-                <option value="">{t('alerts.all')}</option>
-                <option value="system_error">{t('alerts.type.systemError')}</option>
-                <option value="quota_exceeded">{t('alerts.type.quotaExceeded')}</option>
-                <option value="service_error">{t('alerts.type.serviceError')}</option>
-                <option value="custom">{t('alerts.type.custom')}</option>
-              </select>
+            <div className="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-2 flex-1">
+              <div className="flex items-center gap-2">
+                <label className="text-sm text-gray-600 dark:text-gray-400 whitespace-nowrap">{t('alerts.status')}</label>
+                <select
+                  value={statusFilter}
+                  onChange={(e) => {
+                    setStatusFilter(e.target.value as AlertStatus | '');
+                    setPage(1);
+                  }}
+                  className="flex-1 sm:flex-none px-3 py-1.5 border border-gray-300 dark:border-neutral-700 rounded-lg bg-white dark:bg-neutral-800 text-sm focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+                >
+                  <option value="">{t('alerts.all')}</option>
+                  <option value="active">{t('alerts.status.active')}</option>
+                  <option value="resolved">{t('alerts.status.resolved')}</option>
+                  <option value="muted">{t('alerts.status.muted')}</option>
+                </select>
+              </div>
+              <div className="flex items-center gap-2">
+                <label className="text-sm text-gray-600 dark:text-gray-400 whitespace-nowrap">{t('alerts.type')}</label>
+                <select
+                  value={typeFilter}
+                  onChange={(e) => {
+                    setTypeFilter(e.target.value as AlertType | '');
+                    setPage(1);
+                  }}
+                  className="flex-1 sm:flex-none px-3 py-1.5 border border-gray-300 dark:border-neutral-700 rounded-lg bg-white dark:bg-neutral-800 text-sm focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+                >
+                  <option value="">{t('alerts.all')}</option>
+                  <option value="system_error">{t('alerts.type.systemError')}</option>
+                  <option value="quota_exceeded">{t('alerts.type.quotaExceeded')}</option>
+                  <option value="service_error">{t('alerts.type.serviceError')}</option>
+                  <option value="custom">{t('alerts.type.custom')}</option>
+                </select>
+              </div>
             </div>
           </div>
         </div>
@@ -184,20 +193,20 @@ const Alerts: React.FC = () => {
                 key={alert.id}
                 className="border border-gray-200 dark:border-neutral-700 bg-white dark:bg-neutral-800 rounded-lg p-5 hover:border-purple-400 dark:hover:border-purple-500 hover:shadow-md transition-all"
               >
-                <div className="flex items-start justify-between">
-                  <div className="flex-1">
-                    <div className="flex items-center gap-3 mb-2">
+                <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-4">
+                  <div className="flex-1 min-w-0">
+                    <div className="flex flex-wrap items-center gap-2 sm:gap-3 mb-2">
                       {getSeverityIcon(alert.severity)}
-                      <h3 className="font-semibold text-gray-900 dark:text-gray-100">{alert.title}</h3>
-                      <span className={`px-2 py-0.5 rounded text-xs font-medium ${getSeverityColor(alert.severity)}`}>
+                      <h3 className="font-semibold text-gray-900 dark:text-gray-100 break-words">{alert.title}</h3>
+                      <span className={`px-2 py-0.5 rounded text-xs font-medium whitespace-nowrap ${getSeverityColor(alert.severity)}`}>
                         {alert.severity}
                       </span>
-                      <span className={`px-2 py-0.5 rounded text-xs font-medium ${getStatusColor(alert.status)}`}>
+                      <span className={`px-2 py-0.5 rounded text-xs font-medium whitespace-nowrap ${getStatusColor(alert.status)}`}>
                         {alert.status === 'active' ? t('alerts.status.active') : alert.status === 'resolved' ? t('alerts.status.resolved') : t('alerts.status.muted')}
                       </span>
                     </div>
-                    <p className="text-gray-600 dark:text-gray-400 mb-3">{alert.message}</p>
-                    <div className="flex items-center gap-4 text-xs text-gray-500 dark:text-gray-400 flex-wrap">
+                    <p className="text-gray-600 dark:text-gray-400 mb-3 break-words">{alert.message}</p>
+                    <div className="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-4 text-xs text-gray-500 dark:text-gray-400">
                       <span className="flex items-center gap-1">
                         <span className="font-medium">{t('alerts.type')}：</span>
                         <span>{alert.alertType}</span>
@@ -214,7 +223,7 @@ const Alerts: React.FC = () => {
                       )}
                     </div>
                   </div>
-                  <div className="flex items-center gap-2 ml-4">
+                  <div className="flex flex-wrap items-center gap-2 sm:ml-4">
                     {alert.status === 'active' && (
                       <>
                         <Button
@@ -222,6 +231,7 @@ const Alerts: React.FC = () => {
                           variant="ghost"
                           size="sm"
                           leftIcon={<CheckCircle className="w-4 h-4" />}
+                          className="flex-1 sm:flex-none"
                         >
                           {t('alerts.resolve')}
                         </Button>
@@ -230,6 +240,7 @@ const Alerts: React.FC = () => {
                           variant="ghost"
                           size="sm"
                           leftIcon={<VolumeX className="w-4 h-4" />}
+                          className="flex-1 sm:flex-none"
                         >
                           {t('alerts.mute')}
                         </Button>
@@ -239,6 +250,7 @@ const Alerts: React.FC = () => {
                       onClick={() => navigate(`/alerts/${alert.id}`)}
                       variant="ghost"
                       size="sm"
+                      className="flex-1 sm:flex-none"
                     >
                       {t('alerts.detail')}
                     </Button>

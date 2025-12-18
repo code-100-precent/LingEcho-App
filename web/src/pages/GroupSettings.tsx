@@ -1,4 +1,5 @@
 import React, { useEffect, useState, useRef } from 'react';
+import { motion } from 'framer-motion';
 import { useParams, useNavigate } from 'react-router-dom';
 import { 
   getGroup,
@@ -318,12 +319,19 @@ const GroupSettings: React.FC = () => {
           >
             {t('groupSettings.backToList')}
           </Button>
-          <h1 className="text-3xl font-bold text-gray-900 dark:text-gray-100 mb-2">
-            {group.name} - {t('groupSettings.title')}
-          </h1>
-          <p className="text-gray-500 dark:text-gray-400">
-            {t('groupSettings.subtitle')}
-          </p>
+          <div className="relative pl-4">
+            <motion.div
+              layoutId="pageTitleIndicator"
+              className="absolute left-0 top-1/2 -translate-y-1/2 w-1 h-8 bg-primary rounded-r-full"
+              transition={{ type: 'spring', bounce: 0.2, duration: 0.3 }}
+            />
+            <h1 className="text-3xl font-bold text-gray-900 dark:text-gray-100 mb-2">
+              {group.name} - {t('groupSettings.title')}
+            </h1>
+            <p className="text-gray-500 dark:text-gray-400">
+              {t('groupSettings.subtitle')}
+            </p>
+          </div>
         </div>
 
         {/* 组织头像 */}

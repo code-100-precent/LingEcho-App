@@ -56,8 +56,6 @@ export default function UsageCharts({ dailyData, statistics }: UsageChartsProps)
       date: new Date(item.date).toLocaleDateString('zh-CN', { month: 'short', day: 'numeric' }),
       llmCalls: item.llmCalls,
       llmTokens: item.llmTokens,
-      callCount: item.callCount,
-      callDuration: item.callDuration,
       asrCount: item.asrCount,
       asrDuration: item.asrDuration,
       ttsCount: item.ttsCount,
@@ -76,24 +74,19 @@ export default function UsageCharts({ dailyData, statistics }: UsageChartsProps)
         color: COLORS[0]
       },
       {
-        name: t('billing.usageType.call'),
-        value: statistics.callCount,
-        color: COLORS[1]
-      },
-      {
         name: t('billing.usageType.asr'),
         value: statistics.asrCount,
-        color: COLORS[2]
+        color: COLORS[1]
       },
       {
         name: t('billing.usageType.tts'),
         value: statistics.ttsCount,
-        color: COLORS[3]
+        color: COLORS[2]
       },
       {
         name: t('billing.usageType.api'),
         value: statistics.apiCalls,
-        color: COLORS[4]
+        color: COLORS[3]
       }
     ].filter(item => item.value > 0)
   }, [statistics, t])
@@ -106,11 +99,10 @@ export default function UsageCharts({ dailyData, statistics }: UsageChartsProps)
     }))
   }, [dailyData])
 
-  // 准备通话时长趋势数据
-  const callDurationTrendData = useMemo(() => {
+  // 准备时长趋势数据
+  const durationTrendData = useMemo(() => {
     return dailyData.map(item => ({
       date: new Date(item.date).toLocaleDateString('zh-CN', { month: 'short', day: 'numeric' }),
-      callDuration: item.callDuration,
       asrDuration: item.asrDuration,
       ttsDuration: item.ttsDuration
     }))
@@ -153,22 +145,15 @@ export default function UsageCharts({ dailyData, statistics }: UsageChartsProps)
               />
               <Line 
                 type="monotone" 
-                dataKey="callCount" 
-                stroke={COLORS[1]} 
-                name={t('billing.charts.callCount')}
-                strokeWidth={2}
-              />
-              <Line 
-                type="monotone" 
                 dataKey="asrCount" 
-                stroke={COLORS[2]} 
+                stroke={COLORS[1]} 
                 name={t('billing.charts.asrCount')}
                 strokeWidth={2}
               />
               <Line 
                 type="monotone" 
                 dataKey="ttsCount" 
-                stroke={COLORS[3]} 
+                stroke={COLORS[2]} 
                 name={t('billing.charts.ttsCount')}
                 strokeWidth={2}
               />
@@ -253,7 +238,7 @@ export default function UsageCharts({ dailyData, statistics }: UsageChartsProps)
         </CardHeader>
         <CardContent>
           <ResponsiveContainer width="100%" height={300}>
-            <LineChart data={callDurationTrendData}>
+            <LineChart data={durationTrendData}>
               <CartesianGrid strokeDasharray="3 3" className="stroke-gray-200 dark:stroke-gray-700" />
               <XAxis 
                 dataKey="date" 
@@ -276,22 +261,15 @@ export default function UsageCharts({ dailyData, statistics }: UsageChartsProps)
               <Legend />
               <Line 
                 type="monotone" 
-                dataKey="callDuration" 
-                stroke={COLORS[1]} 
-                name={t('billing.charts.callDuration')}
-                strokeWidth={2}
-              />
-              <Line 
-                type="monotone" 
                 dataKey="asrDuration" 
-                stroke={COLORS[2]} 
+                stroke={COLORS[1]} 
                 name={t('billing.charts.asrDuration')}
                 strokeWidth={2}
               />
               <Line 
                 type="monotone" 
                 dataKey="ttsDuration" 
-                stroke={COLORS[3]} 
+                stroke={COLORS[2]} 
                 name={t('billing.charts.ttsDuration')}
                 strokeWidth={2}
               />
