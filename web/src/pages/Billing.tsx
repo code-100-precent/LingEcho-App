@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
+import { motion } from 'framer-motion'
 import { 
-  FileText, Download, RefreshCw, Phone, Brain, Mic, Volume2, HardDrive,
+  FileText, Download, RefreshCw, Brain, Mic, Volume2, HardDrive,
   Globe, Plus, Eye, Search, ChevronLeft, ChevronRight,
   BarChart3, List
 } from 'lucide-react'
@@ -436,7 +437,12 @@ const Billing = () => {
     <div className="container mx-auto px-4 py-6 space-y-6">
       <FadeIn>
         <div className="flex items-center justify-between">
-          <div>
+          <div className="relative pl-4">
+            <motion.div
+              layoutId="pageTitleIndicator"
+              className="absolute left-0 top-1/2 -translate-y-1/2 w-1 h-8 bg-primary rounded-r-full"
+              transition={{ type: 'spring', bounce: 0.2, duration: 0.3 }}
+            />
             <h1 className="text-3xl font-bold">{t('billing.title')}</h1>
             <p className="text-muted-foreground mt-1">{t('billing.subtitle')}</p>
           </div>
@@ -574,7 +580,6 @@ const Billing = () => {
                     <SelectContent>
                       <SelectItem value="all">{t('billing.filter.all')}</SelectItem>
                       <SelectItem value="llm">{t('billing.usageType.llm')}</SelectItem>
-                      <SelectItem value="call">{t('billing.usageType.call')}</SelectItem>
                       <SelectItem value="asr">{t('billing.usageType.asr')}</SelectItem>
                       <SelectItem value="tts">{t('billing.usageType.tts')}</SelectItem>
                       <SelectItem value="storage">{t('billing.usageType.storage')}</SelectItem>
@@ -656,29 +661,6 @@ const Billing = () => {
                     <div className="flex justify-between">
                       <span className="text-muted-foreground">{t('billing.stats.completionTokens')}</span>
                       <span className="font-semibold">{formatNumber(statistics.completionTokens)}</span>
-                    </div>
-                  </CardContent>
-                </Card>
-                
-                <Card>
-                  <CardHeader>
-                    <CardTitle className="flex items-center gap-2">
-                      <Phone className="w-5 h-5 text-green-500" />
-                      {t('billing.stats.call')}
-                    </CardTitle>
-                  </CardHeader>
-                  <CardContent className="space-y-2">
-                    <div className="flex justify-between">
-                      <span className="text-muted-foreground">{t('billing.stats.callCountLabel')}</span>
-                      <span className="font-semibold">{formatNumber(statistics.callCount)}</span>
-                    </div>
-                    <div className="flex justify-between">
-                      <span className="text-muted-foreground">{t('billing.stats.totalDuration')}</span>
-                      <span className="font-semibold">{formatDuration(statistics.callDuration)}</span>
-                    </div>
-                    <div className="flex justify-between">
-                      <span className="text-muted-foreground">{t('billing.stats.avgDuration')}</span>
-                      <span className="font-semibold">{formatDuration(Math.floor(statistics.avgCallDuration))}</span>
                     </div>
                   </CardContent>
                 </Card>
@@ -926,10 +908,6 @@ const Billing = () => {
                           <span className="text-muted-foreground">{t('billing.bills.totalTokens')}</span>
                           <span className="font-semibold">{formatNumber(bill.totalLLMTokens)}</span>
                         </div>
-                        <div className="flex justify-between">
-                          <span className="text-muted-foreground">{t('billing.bills.callDuration')}</span>
-                          <span className="font-semibold">{formatDuration(bill.totalCallDuration)}</span>
-                        </div>
                       </div>
                       <div className="flex gap-2 pt-2">
                         <Button
@@ -1157,14 +1135,6 @@ const Billing = () => {
                   <div className="flex justify-between">
                     <span className="text-muted-foreground">{t('billing.stats.completionTokens')}</span>
                     <span className="font-semibold">{formatNumber(selectedBill.totalCompletionTokens)}</span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span className="text-muted-foreground">{t('billing.stats.totalDuration')} ({t('billing.usageType.call')})</span>
-                    <span className="font-semibold">{formatDuration(selectedBill.totalCallDuration)}</span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span className="text-muted-foreground">{t('billing.stats.callCountLabel')}</span>
-                    <span className="font-semibold">{formatNumber(selectedBill.totalCallCount)}</span>
                   </div>
                   <div className="flex justify-between">
                     <span className="text-muted-foreground">{t('billing.stats.totalDuration')} ({t('billing.usageType.asr')})</span>

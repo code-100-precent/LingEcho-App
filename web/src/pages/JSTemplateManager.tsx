@@ -443,7 +443,12 @@ const JSTemplateManager = () => {
                                 {t('jsTemplate.back')}
                             </Button>
                             <div className="h-8 w-px bg-slate-300 dark:bg-slate-600"></div>
-                            <div>
+                            <div className="relative pl-4">
+                                <motion.div
+                                  layoutId="pageTitleIndicator"
+                                  className="absolute left-0 top-1/2 -translate-y-1/2 w-1 h-6 bg-primary rounded-r-full"
+                                  transition={{ type: 'spring', bounce: 0.2, duration: 0.3 }}
+                                />
                                 <h1 className="text-2xl font-bold">{t('jsTemplate.title')}</h1>
                                 <p className="text-sm mt-1">
                                     {t('jsTemplate.desc')}

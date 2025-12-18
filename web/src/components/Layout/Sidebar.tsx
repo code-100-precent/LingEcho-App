@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { Link, useLocation, useNavigate } from 'react-router-dom'
 import { motion } from 'framer-motion'
 import {
@@ -25,7 +25,6 @@ import { useAuthStore } from '@/stores/authStore'
 import { useI18nStore } from '@/stores/i18nStore'
 import AuthModal from '../Auth/AuthModal'
 import Button from '../UI/Button'
-import { useEffect } from 'react'
 import { getGroupList, type Group } from '@/api/group'
 import { prefetch } from '@/utils/prefetch'
 
@@ -38,6 +37,24 @@ const Sidebar = () => {
   const [showDropdown, setShowDropdown] = useState(false)
   const [groups, setGroups] = useState<Group[]>([])
   const navigate = useNavigate()
+  const dropdownRef = useRef<HTMLDivElement>(null)
+
+  // 点击外部关闭下拉菜单
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
+        setShowDropdown(false)
+      }
+    }
+
+    if (showDropdown) {
+      document.addEventListener('mousedown', handleClickOutside)
+    }
+
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside)
+    }
+  }, [showDropdown])
 
   // 获取组织列表
   useEffect(() => {
@@ -78,13 +95,9 @@ const Sidebar = () => {
 
   const isActive = (path: string) => location.pathname === path
 
-  return (
-    <motion.aside
-      initial={false}
-      animate={{ width: isCollapsed ? 72 : 192 }}
-      transition={{ duration: 0.3, ease: 'easeInOut' }}
-      className="hidden lg:flex flex-col bg-background border-r border-border relative"
-    >
+  // 桌面端侧边栏内容
+  const desktopSidebarContent = (
+    <>
       {/* 顶部 LOGO 区域 */}
       <div className="h-14 flex items-center border-b border-border px-3 relative">
         {!isCollapsed && (
@@ -104,7 +117,7 @@ const Sidebar = () => {
             </span>
           </Link>
         )}
-        {/* 折叠/展开按钮 - 右侧小按钮，仅保留在折叠时显示按钮 */}
+        {/* 桌面端折叠/展开按钮 */}
         <button
           onClick={() => setIsCollapsed(!isCollapsed)}
           className="absolute right-2 top-3 inline-flex items-center justify-center w-7 h-7 rounded-full hover:bg-accent text-muted-foreground hover:text-foreground transition-colors"
@@ -229,7 +242,7 @@ const Sidebar = () => {
                       variant="ghost"
                       size="sm"
                       className="flex items-center gap-2 w-full justify-start text-sm px-3 py-2"
-                      onClick={async () => { setShowDropdown(false); await logout(); }}
+                      onClick={async () => { setShowDropdown(false); await logout() }}
                       leftIcon={<LogOut className="w-4 h-4" />}
                     >
                       {t('nav.logout')}
@@ -382,7 +395,175 @@ const Sidebar = () => {
           </div>
         )}
       </div>
-    </motion.aside>
+    </>
+  )
+
+  // 过滤后的导航项
+  const filteredNavigation = navigation.filter(item => {
+    if (publicNavs.includes(item.name)) return true;
+    if (privateNavs.includes(item.name)) return isAuthenticated;
+    return true;
+  })
+
+  return (
+    <>
+      {/* 桌面端侧边栏 */}
+      <motion.aside
+        initial={false}
+        animate={{ width: isCollapsed ? 72 : 192 }}
+        transition={{ duration: 0.3, ease: 'easeInOut' }}
+        className="hidden lg:flex flex-col bg-background border-r border-border relative"
+      >
+        {desktopSidebarContent}
+      </motion.aside>
+
+      {/* 移动端顶部 Header */}
+      <header className="lg:hidden fixed top-0 left-0 right-0 z-50 bg-background border-b border-border">
+        {/* LOGO 和用户信息行 */}
+        <div className="h-14 flex items-center justify-between px-4 border-b border-border">
+          <Link to="/" className="flex items-center gap-2 flex-shrink-0">
+            <img
+              src="https://cetide-1325039295.cos.ap-chengdu.myqcloud.com/folder/icon-192x192.ico"
+              alt="LingEcho Logo"
+              className="w-6 h-8 rounded"
+            />
+            <span className="text-sm font-extrabold tracking-wider">
+              {t('brand.name')}
+            </span>
+          </Link>
+          
+          {/* 用户信息 */}
+          <div className="flex items-center gap-2">
+            {isAuthenticated && groups.length > 0 && (
+              <div className="flex items-center gap-1.5 overflow-x-auto [&::-webkit-scrollbar]:hidden [-ms-overflow-style:none] [scrollbar-width:none] max-w-[120px]">
+                {groups.map((group) => {
+                  const isSelected = currentOrganizationId === group.id
+                  const avatarUrl = group.avatar || `https://ui-avatars.com/api/?name=${encodeURIComponent(group.name)}&background=6366f1&color=fff&size=24`
+                  
+                  return (
+                    <button
+                      key={group.id}
+                      onClick={() => {
+                        setCurrentOrganization(group.id)
+                        prefetch.prefetchOverview(group.id)
+                      }}
+                      className={`relative flex-shrink-0 w-6 h-6 rounded-lg overflow-hidden transition-all ${
+                        isSelected ? 'ring-2 ring-primary' : ''
+                      }`}
+                      title={group.name}
+                    >
+                      <img
+                        src={avatarUrl}
+                        alt={group.name}
+                        className="w-full h-full object-cover"
+                      />
+                    </button>
+                  )
+                })}
+              </div>
+            )}
+            
+            {isAuthenticated && user ? (
+              <div className="relative" ref={dropdownRef}>
+                <button
+                  onClick={() => setShowDropdown(!showDropdown)}
+                  className="flex items-center gap-2 p-1 rounded hover:bg-accent transition-colors"
+                >
+                  <img
+                    src={user.avatar || `https://ui-avatars.com/api/?name=${user.displayName || 'U'}&background=0ea5e9&color=fff`}
+                    alt={user.displayName}
+                    className="w-8 h-8 rounded-full"
+                  />
+                </button>
+                {showDropdown && (
+                  <div className="absolute right-0 top-full mt-2 w-40 bg-popover rounded-md shadow-lg border z-50">
+                    <div className="flex flex-col p-2">
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="flex items-center gap-2 w-full justify-start text-sm px-3 py-2"
+                        onClick={() => { setShowDropdown(false); navigate('/profile') }}
+                        leftIcon={<UserIcon className="w-4 h-4" />}
+                      >
+                        {t('nav.sidebar.profile')}
+                      </Button>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="flex items-center gap-2 w-full justify-start text-sm px-3 py-2"
+                        onClick={() => { setShowDropdown(false); navigate('/credential') }}
+                        leftIcon={<Key className="w-4 h-4" />}
+                      >
+                        {t('nav.sidebar.credential')}
+                      </Button>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="flex items-center gap-2 w-full justify-start text-sm px-3 py-2"
+                        onClick={() => { setShowDropdown(false); navigate('/quotas') }}
+                        leftIcon={<Database className="w-4 h-4" />}
+                      >
+                        {t('nav.sidebar.quotas')}
+                      </Button>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="flex items-center gap-2 w-full justify-start text-sm px-3 py-2"
+                        onClick={async () => { setShowDropdown(false); await logout() }}
+                        leftIcon={<LogOut className="w-4 h-4" />}
+                      >
+                        {t('nav.logout')}
+                      </Button>
+                    </div>
+                  </div>
+                )}
+              </div>
+            ) : (
+              <Button
+                variant="primary"
+                size="sm"
+                onClick={() => setShowAuthModal(true)}
+                leftIcon={<UserIcon className="w-4 h-4" />}
+              >
+                {t('nav.loginRegister')}
+              </Button>
+            )}
+            <AuthModal isOpen={showAuthModal} onClose={() => setShowAuthModal(false)} />
+          </div>
+        </div>
+
+        {/* 导航项横向滚动 */}
+        <div className="h-12 flex items-center overflow-x-auto [&::-webkit-scrollbar]:hidden [-ms-overflow-style:none] [scrollbar-width:none] bg-background border-b border-border">
+          <nav className="flex items-center gap-1 px-2 min-w-max">
+            {filteredNavigation.map(item => {
+              const Icon = item.icon
+              const active = isActive(item.href) || location.pathname.startsWith(item.href + '/')
+              return (
+                <Link
+                  key={item.name}
+                  to={item.href}
+                  className={`group relative flex items-center gap-2 px-3 py-2 rounded-md font-medium text-xs whitespace-nowrap transition-colors ${
+                    active
+                      ? 'text-foreground bg-accent'
+                      : 'text-muted-foreground hover:text-foreground hover:bg-accent/50'
+                  }`}
+                >
+                  <Icon className="w-4 h-4 flex-shrink-0" />
+                  <span>{item.name}</span>
+                  {active && (
+                    <motion.div
+                      layoutId="activeMobileNavItem"
+                      className="absolute bottom-0 left-0 right-0 h-0.5 bg-primary rounded-t-full"
+                      transition={{ type: 'spring', bounce: 0.2, duration: 0.3 }}
+                    />
+                  )}
+                </Link>
+              )
+            })}
+          </nav>
+        </div>
+      </header>
+    </>
   )
 }
 

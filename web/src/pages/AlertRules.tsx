@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from 'react';
+import { motion } from 'framer-motion';
 import { useNavigate } from 'react-router-dom';
 import { getAlertRules, deleteAlertRule, AlertRule, AlertType, AlertSeverity, NotificationChannel } from '@/api/alert';
 import { showAlert } from '@/utils/notification';
@@ -100,9 +101,14 @@ const AlertRules: React.FC = () => {
   return (
     <div className="min-h-screen bg-gray-50 dark:bg-neutral-900 flex flex-col">
       <div className="max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 pt-8 pb-8 flex flex-col">
-        <div className="flex items-center justify-between mb-6">
-          <div>
-            <h1 className="text-3xl font-bold text-gray-900 dark:text-gray-100 mb-1">{t('alertRules.title')}</h1>
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-6">
+          <div className="relative pl-4">
+            <motion.div
+              layoutId="pageTitleIndicator"
+              className="absolute left-0 top-1/2 -translate-y-1/2 w-1 h-8 bg-primary rounded-r-full"
+              transition={{ type: 'spring', bounce: 0.2, duration: 0.3 }}
+            />
+            <h1 className="text-2xl sm:text-3xl font-bold text-gray-900 dark:text-gray-100 mb-1">{t('alertRules.title')}</h1>
             <p className="text-sm text-gray-500 dark:text-gray-400">{t('alertRules.subtitle')}</p>
           </div>
           <Button
@@ -110,6 +116,7 @@ const AlertRules: React.FC = () => {
             variant="primary"
             size="md"
             leftIcon={<Plus className="w-4 h-4" />}
+            className="w-full sm:w-auto"
           >
             {t('alertRules.create')}
           </Button>

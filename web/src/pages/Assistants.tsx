@@ -66,7 +66,14 @@ const Assistants: React.FC = () => {
     <div className="min-h-screen dark:bg-neutral-900 flex flex-col">
       <div className="max-w-6xl w-full mx-auto pt-10 pb-4 flex flex-col">
         <div className="flex items-center justify-between mb-7">
-          <h1 className="text-2xl font-semibold text-gray-900 dark:text-gray-100">{t('assistants.title')}</h1>
+          <h1 className="text-2xl font-semibold text-gray-900 dark:text-gray-100 relative pl-4">
+            <motion.div
+              layoutId="pageTitleIndicator"
+              className="absolute left-0 top-1/2 -translate-y-1/2 w-1 h-6 bg-primary rounded-r-full"
+              transition={{ type: 'spring', bounce: 0.2, duration: 0.3 }}
+            />
+            {t('assistants.title')}
+          </h1>
           <Button
             onClick={() => setShowAddModal(true)}
             variant="primary"

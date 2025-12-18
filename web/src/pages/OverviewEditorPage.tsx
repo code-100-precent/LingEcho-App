@@ -1,4 +1,5 @@
 import React, { useEffect, useState, Suspense, lazy, useCallback } from 'react';
+import { motion } from 'framer-motion';
 import { useParams, useNavigate } from 'react-router-dom';
 import { getOverviewConfig, saveOverviewConfig } from '@/api/overview';
 import { getGroup } from '@/api/group';
@@ -189,12 +190,19 @@ const OverviewEditorPage: React.FC = () => {
           >
             返回组织设置
           </Button>
-          <h1 className="text-3xl font-bold text-gray-900 dark:text-gray-100 mb-2">
-            {group?.name || '组织'} - 编辑概览页面
-          </h1>
-          <p className="text-gray-500 dark:text-gray-400">
-            自定义组织的概览页面布局、组件和样式
-          </p>
+          <div className="relative pl-4">
+            <motion.div
+              layoutId="pageTitleIndicator"
+              className="absolute left-0 top-1/2 -translate-y-1/2 w-1 h-8 bg-primary rounded-r-full"
+              transition={{ type: 'spring', bounce: 0.2, duration: 0.3 }}
+            />
+            <h1 className="text-3xl font-bold text-gray-900 dark:text-gray-100 mb-2">
+              {group?.name || '组织'} - 编辑概览页面
+            </h1>
+            <p className="text-gray-500 dark:text-gray-400">
+              自定义组织的概览页面布局、组件和样式
+            </p>
+          </div>
         </div>
 
         {/* 编辑器 */}

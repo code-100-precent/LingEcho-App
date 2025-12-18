@@ -103,18 +103,6 @@ const Home = () => {
             features: [t('tag.visualDesign'), t('tag.processAutomation'), t('tag.conditionalBranch'), t('tag.realTimeMonitor')]
         },
         {
-            title: t('feature.apiCalls'),
-            icon: "Settings",
-            description: t('feature.apiCallsDesc'),
-            features: [t('tag.freeApi'), t('tag.functionTools'), t('tag.featureExtend'), t('tag.smartCall')]
-        },
-        {
-            title: t('feature.callStorage'),
-            icon: "BookOpen",
-            description: t('feature.callStorageDesc'),
-            features: [t('tag.objectStorage'), t('tag.callBack'), t('tag.historyAnalysis'), t('tag.dataManagement')]
-        },
-        {
             title: t('feature.credential'),
             icon: "Key",
             description: t('feature.credentialDesc'),
