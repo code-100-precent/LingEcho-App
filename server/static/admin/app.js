@@ -792,8 +792,8 @@ const adminapp = () => ({
             html += '<div class="bg-white border border-gray-200 rounded-lg shadow-sm p-5">'
             html += '<h3 class="text-sm font-semibold text-gray-900 mb-3">账户操作</h3>'
             html += '<div class="flex flex-wrap gap-2">'
-            html += '<button onclick="if(window.adminAppInstance){window.adminAppInstance.showChangePassword();}" class="px-3 py-1.5 text-sm font-medium text-gray-700 bg-gray-50 border border-gray-300 rounded hover:bg-gray-100 transition-colors">修改密码</button>'
-            html += '<button onclick="if(window.adminAppInstance){window.adminAppInstance.showEditProfile();}" class="px-3 py-1.5 text-sm font-medium text-gray-700 bg-gray-50 border border-gray-300 rounded hover:bg-gray-100 transition-colors">编辑资料</button>'
+            html += '<button onclick="window.adminAppInstance.showChangePassword()" class="px-3 py-1.5 text-sm font-medium text-gray-700 bg-gray-50 border border-gray-300 rounded hover:bg-gray-100 transition-colors">修改密码</button>'
+            html += '<button onclick="window.adminAppInstance.showEditProfile()" class="px-3 py-1.5 text-sm font-medium text-gray-700 bg-gray-50 border border-gray-300 rounded hover:bg-gray-100 transition-colors">编辑资料</button>'
             html += '<a href="/api/auth/logout?next=/api/auth/login" class="px-3 py-1.5 text-sm font-medium text-gray-700 bg-gray-50 border border-gray-300 rounded hover:bg-gray-100 transition-colors">退出登录</a>'
             html += '</div>'
             html += '</div>'
@@ -821,7 +821,6 @@ const adminapp = () => ({
             let data = await resp.json()
             let statusList = document.getElementById('system_status_list')
             if (!statusList) {
-                // 如果元素不存在，稍后重试
                 setTimeout(() => this.loadSystemStatus(), 500)
                 return
             }
@@ -852,6 +851,10 @@ const adminapp = () => ({
                 statusList.innerHTML = '<div class="flex items-center justify-center py-4"><span class="text-xs text-red-500">加载失败</span></div>'
             }
         } catch (err) {
+            // Ignore runtime.lastError from browser extensions
+            if (err.message && err.message.includes('runtime.lastError')) {
+                return
+            }
             console.error('Failed to load system status:', err)
             let statusList = document.getElementById('system_status_list')
             if (statusList) {
@@ -957,7 +960,6 @@ const adminapp = () => ({
                 if (data.data && data.data.logout) {
                     window.location.href = '/api/auth/logout?next=/api/auth/login'
                 } else {
-                    // 如果没有logout字段，也跳转到登录页
                     setTimeout(() => {
                         window.location.href = '/api/auth/logout?next=/api/auth/login'
                     }, 1000)
@@ -972,7 +974,6 @@ const adminapp = () => ({
 
     showEditProfile() {
         let user = this.user || {}
-        // 转义HTML特殊字符
         let escapeHtml = (str) => {
             if (!str) return ''
             return String(str).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#039;')
@@ -1063,17 +1064,14 @@ const adminapp = () => ({
             let data = await resp.json()
             if (data.success || data.code === 200) {
                 alert('资料更新成功')
-                // 更新本地用户信息
                 if (data.data) {
                     this.user = Object.assign(this.user || {}, data.data)
-                    // 更新显示名称
                     if (data.data.displayName) {
                         this.user.name = data.data.displayName
                     } else if (data.data.firstName || data.data.lastName) {
                         this.user.name = (data.data.firstName || '') + ' ' + (data.data.lastName || '')
                     }
                 }
-                // 刷新个人中心页面
                 this.showProfile()
             } else {
                 alert('资料更新失败: ' + (data.error || data.msg || '未知错误'))
@@ -1355,9 +1353,6 @@ const adminapp = () => ({
             html += '</div>'
             html += '</div>'
             
-            // Load system status
-            this.loadSystemStatus()
-            
             html += '<div class="bg-white border border-gray-200 rounded-lg shadow-sm p-5">'
             html += '<h3 class="text-sm font-semibold text-gray-900 mb-3">快速操作</h3>'
             html += '<div class="grid grid-cols-2 gap-2">'
@@ -1382,6 +1377,15 @@ const adminapp = () => ({
             elm.innerHTML = html
             // Force display in case x-show is hiding it
             elm.style.display = 'block'
+            Alpine.initTree(elm)
+            
+            // Make instance globally accessible
+            window.adminAppInstance = this
+            
+            // Load system status after DOM is ready
+            setTimeout(() => {
+                this.loadSystemStatus()
+            }, 200)
         })
     },
     loadSidebar() {
