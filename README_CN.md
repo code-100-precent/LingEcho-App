@@ -39,10 +39,11 @@ LingEcho 灵语回响是一个基于 Go + React 的企业级智能语音交互�
 - **告警系统** - 完善的告警系统，支持基于规则的监控、多渠道通知和告警管理
 - **账单系统** - 灵活的计费和用量追踪系统，支持详细的使用记录、账单生成和配额管理
 - **组织管理** - 多租户组织管理，支持团队协作、成员管理和资源共享
-- **通话记录存储** - 通话记录存储到对象存储中，支持后续回溯和分析
 - **密钥管理与API平台** - 企业级密钥管理系统和API开发平台
 - **VAD语音活动检测** - 独立的SileroVAD服务，支持PCM和OPUS格式
 - **声纹识别服务** - 基于ModelScope的声纹识别服务，支持说话人识别
+- **ASR-TTS服务** - 独立的ASR（Whisper）和TTS（edge-tts）服务，支持语音识别和文本转语音合成
+- **MCP服务** - Model Context Protocol服务，支持SSE和stdio传输方式
 - **硬件设备支持** - 支持xiaozhi协议的硬件设备接入，提供完整的WebSocket通信
 
 ---
@@ -85,11 +86,12 @@ LingEcho 灵语回响是一个基于 Go + React 的企业级智能语音交互�
 
 | 服务 | 端口 | 技术栈 | 说明 |
 |------|------|--------|------|
-| **主服务** | 7072 | Go + Gin | 核心后端服务 |
-| **语音服务** | 8000 | Go | WebSocket语音服务 |
-| **VAD服务** | 7073 | Python + FastAPI | 语音活动检测服务 |
-| **声纹识别服务** | 7074 | Python + FastAPI | 声纹识别服务 |
-| **前端服务** | 3000 | React + Vite | 开发环境前端 |
+| **主服务** | 7072 | Go + Gin | 核心后端服务，提供RESTful API和WebSocket支持 |
+| **VAD服务** | 7073 | Python + FastAPI | 语音活动检测服务（SileroVAD） |
+| **声纹识别服务** | 7074 | Python + FastAPI | 声纹识别服务（ModelScope） |
+| **ASR-TTS服务** | 7075 | Python + FastAPI | ASR（Whisper）和TTS（edge-tts）服务 |
+| **MCP服务** | 3001 | Go | Model Context Protocol服务（SSE传输，可选） |
+| **前端服务** | 5173 | React + Vite | 开发环境前端（Vite开发服务器） |
 
 详细的架构文档请查看 [架构文档](docs/architecture_CN.md)。
 
@@ -99,38 +101,114 @@ LingEcho 灵语回响是一个基于 Go + React 的企业级智能语音交互�
 
 ### 环境要求
 
-- **Go** >= 1.25.1
+- **Go** >= 1.24.0
 - **Node.js** >= 18.0.0
-- **npm** >= 8.0.0
+- **npm** >= 8.0.0 或 **pnpm** >= 8.0.0
 - **Git**
-- **Python** >= 3.10 (可选服务需要)
+- **Python** >= 3.10 (可选服务需要：VAD、声纹识别、ASR-TTS)
+- **Docker** & **Docker Compose** (容器化部署，推荐)
 
-### 快速安装
+### 安装方法
+
+#### 方法一：Docker Compose（推荐）
+
+使用 Docker Compose 是最简单的启动方式：
+
+```bash
+# 启动 Neo4j（如果需要）
+docker run -d --name neo4j \
+  -p 7474:7474 -p 7687:7687 \
+  -e NEO4J_AUTH=neo4j/admin123 \
+  neo4j:latest
+
+# 克隆项目
+git clone https://github.com/code-100-precent/LingEcho-App.git
+cd LingEcho-App
+
+# 复制环境配置
+cp server/env.example .env
+
+# 编辑 .env 文件并配置你的设置
+# 至少需要设置：SESSION_SECRET, LLM_API_KEY
+
+# 使用 Docker Compose 启动服务
+docker-compose up -d
+
+# 查看日志
+docker-compose logs -f lingecho
+```
+
+**访问应用：**
+- **前端界面**: http://localhost:7072
+- **后端API**: http://localhost:7072/api
+- **API文档**: http://localhost:7072/api/docs
+
+**可选服务：**
+```bash
+# 启动 PostgreSQL 数据库
+docker-compose --profile postgres up -d
+
+# 启动 Redis 缓存
+docker-compose --profile redis up -d
+
+# 启动 Nginx 反向代理
+docker-compose --profile nginx up -d
+
+# 启动前端开发服务器
+docker-compose --profile dev up -d
+```
+
+#### 方法二：手动安装
 
 ```bash
 # 克隆项目
-git clone https://github.com/your-username/LingEcho.git
-cd LingEcho
+git clone https://github.com/code-100-precent/LingEcho-App.git
+cd LingEcho-App
 
 # 后端设置
+cd server
 go mod tidy
-cp env.example .env.dev
+cp env.example .env
+# 编辑 .env 文件配置你的设置
 
 # 前端设置
-cd ui
-npm install
-npm run dev
+cd ../web
+npm install  # 或 pnpm install
+npm run build  # 生产环境
+# 或
+npm run dev    # 开发环境（运行在端口 5173）
 
-# 启动后端（在项目根目录）
-cd ..
-go run ./cmd/server/. -mode=dev
+# 启动后端（在 server 目录）
+cd ../server
+go run ./cmd/server/main.go -mode=dev
 ```
 
-### 访问应用
-
-- **前端界面**: http://localhost:3000
-- **后端API**: http://localhost:7072
+**访问应用：**
+- **前端界面**: http://localhost:5173 (开发) 或 http://localhost:7072 (生产)
+- **后端API**: http://localhost:7072/api
 - **API文档**: http://localhost:7072/api/docs
+
+**可选服务（如需要）：**
+```bash
+# 启动 VAD 服务
+cd services/vad-service
+docker-compose up -d
+# 或手动启动: python vad_service.py
+
+# 启动声纹识别服务
+cd services/voiceprint-api
+docker-compose up -d
+# 或手动启动: python -m app.main
+
+# 启动 ASR-TTS 服务
+cd services/asr-tts-service
+docker-compose up -d
+# 或手动启动: python -m app.main
+
+# 启动 MCP 服务（可选）
+cd server
+go run ./cmd/mcp/main.go --transport sse --port 3001
+```
 
 详细的安装说明请查看 [安装指南](docs/installation_CN.md)。
 

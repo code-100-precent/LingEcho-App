@@ -9,13 +9,11 @@ services:
     container_name: lingecho-app
     ports:
       - "7072:7072"  # 主服务器端口
-      - "8000:8000"  # 语音服务器端口
     environment:
       # 基础配置
       - APP_ENV=production
       - MODE=production
       - ADDR=:7072
-      - VOICE_SERVER_ADDR=:8000
       
       # 数据库配置
       - DB_DRIVER=${DB_DRIVER:-sqlite}
@@ -172,7 +170,6 @@ services:
     command: sh -c "npm install && npm run dev -- --host 0.0.0.0 --port 5173"
     environment:
       - VITE_API_URL=${VITE_API_URL:-http://localhost:7072}
-      - VITE_VOICE_SERVER_URL=${VITE_VOICE_SERVER_URL:-http://localhost:8000}
     depends_on:
       - lingecho
     networks:

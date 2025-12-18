@@ -98,13 +98,12 @@ RUN mkdir -p \
 USER appuser
 
 # Expose ports
-EXPOSE 7072 8000
+EXPOSE 7072
 
 # Set default environment variables
 ENV APP_ENV=production
 ENV MODE=production
 ENV ADDR=:7072
-ENV VOICE_SERVER_ADDR=:8000
 ENV DB_DRIVER=sqlite
 ENV DSN=./data/ling.db
 

@@ -7,7 +7,7 @@
 
 **Intelligent Voice Interaction Platform - Giving AI a Real Voice**
 
-[![Go Version](https://img.shields.io/badge/Go-1.24.0-blue.svg)](https://golang.org/)
+[![Go Version](https://img.shields.io/badge/Go-1.24.0+-blue.svg)](https://golang.org/)
 [![React](https://img.shields.io/badge/React-18.2.0-61dafb.svg)](https://reactjs.org/)
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.2.2-3178c6.svg)](https://www.typescriptlang.org/)
 [![License](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
@@ -39,10 +39,11 @@ LingEcho is an enterprise-grade intelligent voice interaction platform based on 
 -  **Alert System** - Comprehensive alerting system with rule-based monitoring, multi-channel notifications, and alert management
 -  **Billing System** - Flexible billing and usage tracking system with detailed usage records, bill generation, and quota management
 -  **Organization Management** - Multi-tenant organization management with group collaboration, member management, and resource sharing
--  **Call Record Storage** - Call records stored in object storage, supporting subsequent review and analysis
 -  **Key Management & API Platform** - Enterprise-level key management system and API development platform
 -  **VAD Voice Activity Detection** - Standalone SileroVAD service supporting PCM and OPUS formats
 - ️ **Voiceprint Recognition Service** - ModelScope-based voiceprint recognition service supporting speaker identification
+-  **ASR-TTS Service** - Standalone ASR (Whisper) and TTS (edge-tts) service supporting speech recognition and text-to-speech synthesis
+-  **MCP Service** - Model Context Protocol service supporting SSE and stdio transports
 -  **Hardware Device Support** - Support for xiaozhi protocol hardware devices with complete WebSocket communication
 
 ---
@@ -83,11 +84,12 @@ LingEcho is an enterprise-grade intelligent voice interaction platform based on 
 
 | Service | Port | Tech Stack | Description |
 |---------|------|------------|-------------|
-| **Main Service** | 7072 | Go + Gin | Core backend service |
-| **Voice Service** | 8000 | Go | WebSocket voice service |
-| **VAD Service** | 7073 | Python + FastAPI | Voice activity detection service |
-| **Voiceprint Service** | 7074 | Python + FastAPI | Voiceprint recognition service |
-| **Frontend Service** | 3000 | React + Vite | Development frontend |
+| **Main Service** | 7072 | Go + Gin | Core backend service with RESTful API and WebSocket support |
+| **VAD Service** | 7073 | Python + FastAPI | Voice activity detection service (SileroVAD) |
+| **Voiceprint Service** | 7074 | Python + FastAPI | Voiceprint recognition service (ModelScope) |
+| **ASR-TTS Service** | 7075 | Python + FastAPI | ASR (Whisper) and TTS (edge-tts) service |
+| **MCP Service** | 3001 | Go | Model Context Protocol service (SSE transport, optional) |
+| **Frontend Service** | 5173 | React + Vite | Development frontend (Vite dev server) |
 
 For detailed architecture documentation, see [Architecture Documentation](docs/architecture.md).
 
@@ -99,10 +101,10 @@ For detailed architecture documentation, see [Architecture Documentation](docs/a
 
 - **Go** >= 1.24.0
 - **Node.js** >= 18.0.0
-- **npm** >= 8.0.0
+- **npm** >= 8.0.0 or **pnpm** >= 8.0.0
 - **Git**
-- **Python** >= 3.10 (for optional services)
-- **Docker** & **Docker Compose** (for containerized deployment)
+- **Python** >= 3.10 (for optional services: VAD, Voiceprint, ASR-TTS)
+- **Docker** & **Docker Compose** (for containerized deployment, recommended)
 
 ### Installation Methods
 
@@ -167,10 +169,10 @@ cp env.example .env
 
 # Frontend setup
 cd ../web
-npm install
+npm install  # or pnpm install
 npm run build  # For production
 # OR
-npm run dev    # For development
+npm run dev    # For development (runs on port 5173)
 
 # Start backend (from server directory)
 cd ../server
@@ -178,9 +180,31 @@ go run ./cmd/server/main.go -mode=dev
 ```
 
 **Access the Application:**
-- **Frontend Interface**: http://localhost:3000 (dev) or http://localhost:7072 (production)
+- **Frontend Interface**: http://localhost:5173 (dev) or http://localhost:7072 (production)
 - **Backend API**: http://localhost:7072/api
 - **API Documentation**: http://localhost:7072/api/docs
+
+**Optional Services (if needed):**
+```bash
+# Start VAD service
+cd services/vad-service
+docker-compose up -d
+# Or manually: python vad_service.py
+
+# Start Voiceprint service
+cd services/voiceprint-api
+docker-compose up -d
+# Or manually: python -m app.main
+
+# Start ASR-TTS service
+cd services/asr-tts-service
+docker-compose up -d
+# Or manually: python -m app.main
+
+# Start MCP service (optional)
+cd server
+go run ./cmd/mcp/main.go --transport sse --port 3001
+```
 
 For detailed installation instructions, see [Installation Guide](docs/installation.md).
 

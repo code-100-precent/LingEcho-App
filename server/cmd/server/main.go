@@ -94,7 +94,7 @@ func main() {
 	// 8. Load Base Configs
 	var addr = config.GlobalConfig.Addr
 	if addr == "" {
-		addr = ":8000"
+		addr = ":7072"
 	}
 
 	var DBDriver = config.GlobalConfig.DBDriver
