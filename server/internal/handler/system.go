@@ -270,7 +270,6 @@ func (h *Handlers) SystemStatus(c *gin.Context) {
 	store := stores.Default()
 	if store != nil {
 		// 尝试使用 Exists 方法检查存储服务是否可用
-		// 使用一个不存在的键来测试连接
 		testKey := "__health_check__"
 		_, err := store.Exists(testKey)
 		if err == nil {
