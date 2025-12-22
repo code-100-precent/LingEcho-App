@@ -28,6 +28,10 @@ type SessionConfig struct {
 	DB           *gorm.DB
 	Logger       *zap.Logger
 	Context      context.Context
+	// VAD 配置
+	EnableVAD            bool    // 是否启用VAD
+	VADThreshold         float64 // VAD阈值
+	VADConsecutiveFrames int     // 需要连续超过阈值的帧数
 }
 
 // SessionInterface 语音会话接口

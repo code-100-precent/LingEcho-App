@@ -38,21 +38,28 @@ const Sidebar = () => {
   const [groups, setGroups] = useState<Group[]>([])
   const navigate = useNavigate()
   const dropdownRef = useRef<HTMLDivElement>(null)
+  const buttonRef = useRef<HTMLButtonElement>(null)
+  const dropdownContainerRef = useRef<HTMLDivElement>(null)
+  const hoverTimeoutRef = useRef<NodeJS.Timeout | null>(null)
 
   // 点击外部关闭下拉菜单
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
-      if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
+      if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node) &&
+          buttonRef.current && !buttonRef.current.contains(event.target as Node)) {
         setShowDropdown(false)
       }
     }
 
     if (showDropdown) {
-      document.addEventListener('mousedown', handleClickOutside)
-    }
-
-    return () => {
-      document.removeEventListener('mousedown', handleClickOutside)
+      // 使用延迟，避免在鼠标移动时立即关闭
+      const timer = setTimeout(() => {
+        document.addEventListener('mousedown', handleClickOutside)
+      }, 100)
+      return () => {
+        clearTimeout(timer)
+        document.removeEventListener('mousedown', handleClickOutside)
+      }
     }
   }, [showDropdown])
 
@@ -194,8 +201,31 @@ const Sidebar = () => {
         {/* 通知中心按钮已移除，只保留用户区相关 */}
         <div>
           {isAuthenticated && user ? (
-            <div className="relative">
+            <div 
+              className="relative"
+              ref={dropdownContainerRef}
+              onMouseEnter={() => {
+                if (hoverTimeoutRef.current) {
+                  clearTimeout(hoverTimeoutRef.current)
+                  hoverTimeoutRef.current = null
+                }
+                if (!isCollapsed) {
+                  setShowDropdown(true)
+                }
+              }}
+              onMouseLeave={() => {
+                // 延迟关闭，给鼠标移动到菜单的时间
+                if (hoverTimeoutRef.current) {
+                  clearTimeout(hoverTimeoutRef.current)
+                }
+                hoverTimeoutRef.current = setTimeout(() => {
+                  setShowDropdown(false)
+                  hoverTimeoutRef.current = null
+                }, 150)
+              }}
+            >
               <button
+                ref={buttonRef}
                 className={`flex items-center w-full p-1 rounded hover:bg-accent transition-colors group text-muted-foreground hover:text-foreground ${isCollapsed ? 'justify-center' : ''}`}
                 onClick={() => setShowDropdown((open) => !open)}
               >
@@ -209,7 +239,26 @@ const Sidebar = () => {
                 )}
               </button>
               {showDropdown && !isCollapsed && (
-                <div className="absolute right-0 bottom-12 w-40 bg-popover rounded-md shadow-lg border z-50">
+                <div 
+                  ref={dropdownRef}
+                  className="absolute right-0 bottom-full mb-2 w-40 bg-popover rounded-md shadow-lg border z-50"
+                  onMouseEnter={() => {
+                    if (hoverTimeoutRef.current) {
+                      clearTimeout(hoverTimeoutRef.current)
+                      hoverTimeoutRef.current = null
+                    }
+                    setShowDropdown(true)
+                  }}
+                  onMouseLeave={() => {
+                    if (hoverTimeoutRef.current) {
+                      clearTimeout(hoverTimeoutRef.current)
+                    }
+                    hoverTimeoutRef.current = setTimeout(() => {
+                      setShowDropdown(false)
+                      hoverTimeoutRef.current = null
+                    }, 150)
+                  }}
+                >
                   <div className="flex flex-col p-2">
                     <Button
                       variant="ghost"

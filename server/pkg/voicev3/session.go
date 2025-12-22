@@ -41,6 +41,7 @@ type Session struct {
 	llmService    *llm.Service
 	messageWriter *message.Writer
 	processor     *message.Processor
+	vadDetector   *VADDetector // VAD 检测器用于 barge-in
 	mu            sync.RWMutex
 	active        bool
 }
@@ -70,6 +71,16 @@ func NewSession(config *SessionConfig) (*Session, error) {
 
 	// 创建错误处理器
 	errorHandler := errhandler.NewHandler(config.Logger)
+
+	// 创建 VAD 检测器，使用配置中的参数
+	vadDetector := NewVADDetector()
+	if config.EnableVAD {
+		vadDetector.SetEnabled(true)
+		vadDetector.SetThreshold(config.VADThreshold)
+		vadDetector.SetConsecutiveFrames(config.VADConsecutiveFrames)
+	} else {
+		vadDetector.SetEnabled(false)
+	}
 
 	// 创建服务工厂
 	transcriberFactory := recognizer.GetGlobalFactory()
@@ -187,6 +198,7 @@ func NewSession(config *SessionConfig) (*Session, error) {
 		llmService:    llmService,
 		messageWriter: messageWriter,
 		processor:     processor,
+		vadDetector:   vadDetector,
 		active:        false,
 	}
 
@@ -268,18 +280,36 @@ func (s *Session) Stop() error {
 func (s *Session) HandleAudio(data []byte) error {
 	s.mu.RLock()
 	active := s.active
+	vadDetector := s.vadDetector
+	ttsPlaying := s.stateManager.IsTTSPlaying()
 	s.mu.RUnlock()
 
 	if !active {
 		return errhandler.NewRecoverableError("Session", "会话未激活", nil)
 	}
 
-	// 快速状态检查：如果正在播放TTS或致命错误，忽略音频输入
-	if s.stateManager.IsFatalError() || s.stateManager.IsTTSPlaying() {
+	// 致命错误时忽略音频
+	if s.stateManager.IsFatalError() {
 		return nil
 	}
 
-	// 发送音频到ASR
+	// 如果 TTS 正在播放，使用 VAD 检测 barge-in
+	if ttsPlaying {
+		// 检测用户是否说话（barge-in）
+		if vadDetector.CheckBargeIn(data, true) {
+			s.config.Logger.Info("检测到用户说话，中断 TTS")
+			// 取消 TTS 播放
+			s.stateManager.CancelTTS()
+			// 设置 TTS 播放状态为 false
+			s.stateManager.SetTTSPlaying(false)
+			// 继续处理音频（用户开始说话了）
+			return s.asrService.SendAudio(data)
+		}
+		// TTS 播放中且未检测到用户说话，忽略音频输入
+		return nil
+	}
+
+	// TTS 未播放，正常处理音频
 	return s.asrService.SendAudio(data)
 }
 

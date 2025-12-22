@@ -1,7 +1,7 @@
 import React, {useEffect, useState} from 'react';
 import { useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Key, Settings, AppWindow, ChevronDown, RefreshCw, ArrowRight, Bot, MessageCircle, Users, Zap, Circle, ExternalLink } from 'lucide-react';
+import { Key, Settings, AppWindow, ChevronDown, RefreshCw, ArrowRight, Bot, MessageCircle, Users, Zap, Circle, ExternalLink, Mic } from 'lucide-react';
 import { cn } from '@/utils/cn';
 import {getKnowledgeBaseByUser} from "@/api/knowledge.ts";
 import { jsTemplateService, JSTemplate } from '@/api/jsTemplate';
@@ -48,6 +48,13 @@ interface ControlPanelProps {
     onAssistantDescriptionChange: (value: string) => void
     onAssistantIconChange: (value: string) => void
     onEnableGraphMemoryChange?: (value: boolean) => void
+    // VAD 配置
+    enableVAD?: boolean
+    vadThreshold?: number
+    vadConsecutiveFrames?: number
+    onEnableVADChange?: (value: boolean) => void
+    onVADThresholdChange?: (value: number) => void
+    onVADConsecutiveFramesChange?: (value: number) => void
     onSaveSettings: () => void
     onDeleteAssistant: () => void
     // JS模板配置
@@ -118,6 +125,12 @@ const ControlPanel: React.FC<ControlPanelProps> = ({
                                                        onAssistantDescriptionChange,
                                                        onAssistantIconChange,
                                                        onEnableGraphMemoryChange,
+                                                       enableVAD = true,
+                                                       vadThreshold = 500,
+                                                       vadConsecutiveFrames = 2,
+                                                       onEnableVADChange,
+                                                       onVADThresholdChange,
+                                                       onVADConsecutiveFramesChange,
                                                        onSaveSettings,
                                                        onDeleteAssistant,
                                                        selectedJSTemplate,
@@ -280,6 +293,7 @@ const ControlPanel: React.FC<ControlPanelProps> = ({
         integration: true,
         knowledge: true,
         voiceClone: true,
+        vad: true,
     })
     const toggleSection = (section: keyof typeof expandedSections) => {
         setExpandedSections(prev => ({
@@ -913,6 +927,117 @@ const ControlPanel: React.FC<ControlPanelProps> = ({
                                             {t('controlPanel.voiceClone.hint')}
                                         </p>
                                     </div>
+                                </div>
+                            </motion.div>
+                        )}
+                    </AnimatePresence>
+                </motion.div>
+
+                {/* VAD 监测配置 */}
+                <motion.div
+                    initial={{ opacity: 0, y: 20 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ delay: 0.25 }}
+                    className="space-y-4"
+                >
+                    <SectionHeader
+                        title={t('controlPanel.vad.title')}
+                        icon={<Mic className="w-5 h-5" />}
+                        section="vad"
+                    />
+
+                    <AnimatePresence>
+                        {expandedSections.vad && (
+                            <motion.div
+                                initial={{ height: 0, opacity: 0 }}
+                                animate={{ height: 'auto', opacity: 1 }}
+                                exit={{ height: 0, opacity: 0 }}
+                                transition={{ duration: 0.3, ease: 'easeInOut' }}
+                                className="overflow-hidden"
+                            >
+                                <div className="space-y-4 pt-4">
+                                    {/* 启用 VAD 开关 */}
+                                    <div className="space-y-2">
+                                        <div className="flex items-center justify-between">
+                                            <div className="flex-1">
+                                                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                                                    {t('controlPanel.vad.enable')}
+                                                </label>
+                                                <p className="text-xs text-gray-500 dark:text-gray-400">
+                                                    {t('controlPanel.vad.enableDesc')}
+                                                </p>
+                                            </div>
+                                            <div className="ml-4 flex-shrink-0">
+                                                <Switch
+                                                    checked={enableVAD}
+                                                    onCheckedChange={(checked) => {
+                                                        if (onEnableVADChange) {
+                                                            onEnableVADChange(checked)
+                                                        }
+                                                    }}
+                                                    size="md"
+                                                    className="flex-shrink-0"
+                                                />
+                                            </div>
+                                        </div>
+                                    </div>
+
+                                    {/* VAD 阈值 */}
+                                    {enableVAD && (
+                                        <>
+                                            <div className="space-y-2">
+                                                <label className="text-sm font-medium text-gray-700 dark:text-gray-300">
+                                                    {t('controlPanel.vad.threshold')}
+                                                </label>
+                                                <div className="flex justify-between text-sm">
+                                                    <span className="text-gray-500">{t('controlPanel.vad.thresholdLabel')}</span>
+                                                    <span className="font-medium text-purple-600">{vadThreshold}</span>
+                                                </div>
+                                                <input
+                                                    type="range"
+                                                    min="100"
+                                                    max="5000"
+                                                    step="50"
+                                                    value={vadThreshold}
+                                                    onChange={(e) => {
+                                                        if (onVADThresholdChange) {
+                                                            onVADThresholdChange(parseFloat(e.target.value))
+                                                        }
+                                                    }}
+                                                    className="w-full"
+                                                    disabled={!enableVAD}
+                                                />
+                                                <p className="text-xs text-gray-500 dark:text-gray-400">
+                                                    {t('controlPanel.vad.thresholdHint')}
+                                                </p>
+                                            </div>
+
+                                            {/* 连续帧数 */}
+                                            <div className="space-y-2">
+                                                <label className="text-sm font-medium text-gray-700 dark:text-gray-300">
+                                                    {t('controlPanel.vad.consecutiveFrames')}
+                                                </label>
+                                                <input
+                                                    type="number"
+                                                    min="1"
+                                                    max="10"
+                                                    step="1"
+                                                    value={vadConsecutiveFrames}
+                                                    onChange={(e) => {
+                                                        if (onVADConsecutiveFramesChange) {
+                                                            onVADConsecutiveFramesChange(parseInt(e.target.value) || 2)
+                                                        }
+                                                    }}
+                                                    className="w-full p-2 text-sm border rounded-lg focus:ring-2 focus:ring-purple-500 dark:bg-neutral-700 dark:border-neutral-600"
+                                                    placeholder="2"
+                                                    disabled={!enableVAD}
+                                                />
+                                                <p className="text-xs text-gray-500 dark:text-gray-400">
+                                                    {t('controlPanel.vad.consecutiveFramesHint')}
+                                                </p>
+                                            </div>
+                                        </>
+                                    )}
                                 </div>
                             </motion.div>
                         )}

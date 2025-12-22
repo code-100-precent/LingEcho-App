@@ -470,6 +470,18 @@ func (h *Handlers) registerJSTemplateRoutes(r *gin.RouterGroup) {
 		jsTemplate.GET("/default", h.ListDefaultJSTemplates)
 		jsTemplate.GET("/custom", h.ListCustomJSTemplates)
 		jsTemplate.GET("/search", h.SearchJSTemplates)
+
+		// 版本管理
+		jsTemplate.GET("/:id/versions", h.ListJSTemplateVersions)
+		jsTemplate.GET("/:id/versions/:versionId", h.GetJSTemplateVersion)
+		jsTemplate.POST("/:id/versions/:versionId/rollback", h.RollbackJSTemplateVersion)
+		jsTemplate.POST("/:id/versions/:versionId/publish", h.PublishJSTemplateVersion)
+	}
+
+	// Webhook路由（不需要认证，使用签名验证）
+	webhook := r.Group("js-templates/webhook")
+	{
+		webhook.POST("/:jsSourceId", h.TriggerJSTemplateWebhook)
 	}
 }
 

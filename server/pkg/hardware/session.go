@@ -36,6 +36,7 @@ type Session struct {
 	messageWriter *message.Writer
 	processor     *message.Processor
 	audioManager  *audio.Manager
+	vadDetector   *VADDetector // VAD 检测器用于 barge-in
 	mu            sync.RWMutex
 	active        bool
 
@@ -144,6 +145,16 @@ func NewSession(config *SessionConfig) (*Session, error) {
 	// 使用默认采样率，hello消息后会更新
 	audioManager := audio.NewManager(16000, 1, config.Logger)
 
+	// 创建 VAD 检测器，使用配置中的参数
+	vadDetector := NewVADDetector()
+	if config.EnableVAD {
+		vadDetector.SetEnabled(true)
+		vadDetector.SetThreshold(config.VADThreshold)
+		vadDetector.SetConsecutiveFrames(config.VADConsecutiveFrames)
+	} else {
+		vadDetector.SetEnabled(false)
+	}
+
 	// 创建消息处理器
 	processor := message.NewProcessor(
 		stateManager,
@@ -190,6 +201,7 @@ func NewSession(config *SessionConfig) (*Session, error) {
 		messageWriter: messageWriter,
 		processor:     processor,
 		audioManager:  audioManager,
+		vadDetector:   vadDetector,
 		audioFormat:   "opus",
 		sampleRate:    16000,
 		channels:      1,
@@ -280,6 +292,7 @@ func (s *Session) HandleAudio(data []byte) error {
 	s.mu.RLock()
 	active := s.active
 	audioManager := s.audioManager
+	vadDetector := s.vadDetector
 	ttsPlaying := s.stateManager.IsTTSPlaying()
 	s.mu.RUnlock()
 
@@ -315,8 +328,36 @@ func (s *Session) HandleAudio(data []byte) error {
 		return nil
 	}
 
+	// 如果 TTS 正在播放，使用 VAD 检测 barge-in
+	if ttsPlaying {
+		// 检测用户是否说话（barge-in）
+		if vadDetector.CheckBargeIn(pcmData, true) {
+			s.config.Logger.Info("检测到用户说话，中断 TTS")
+			// 取消 TTS 播放
+			s.stateManager.CancelTTS()
+			// 设置 TTS 播放状态为 false
+			s.stateManager.SetTTSPlaying(false)
+			// 继续处理音频（用户开始说话了）
+			// 使用音频管理器处理输入音频
+			processedData, shouldProcess := audioManager.ProcessInputAudio(pcmData, false)
+			if !shouldProcess {
+				return nil
+			}
+			return s.asrService.SendAudio(processedData)
+		}
+		// TTS 播放中且未检测到用户说话，使用音频管理器过滤回音
+		_, shouldProcess := audioManager.ProcessInputAudio(pcmData, true)
+		if !shouldProcess {
+			// 被过滤（可能是TTS回音或无效音频）
+			return nil
+		}
+		// 即使通过过滤，也不发送到 ASR（TTS 播放中，等待 barge-in 或 TTS 结束）
+		return nil
+	}
+
+	// TTS 未播放，正常处理音频
 	// 使用音频管理器智能处理输入音频（解决TTS冲突）
-	processedData, shouldProcess := audioManager.ProcessInputAudio(pcmData, ttsPlaying)
+	processedData, shouldProcess := audioManager.ProcessInputAudio(pcmData, false)
 	if !shouldProcess {
 		// 被过滤（可能是TTS回音或无效音频）
 		return nil

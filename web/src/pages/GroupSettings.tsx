@@ -13,11 +13,8 @@ import {
 } from '@/api/group';
 import {
   getGroupQuotas,
-  createGroupQuota,
-  updateGroupQuota,
   deleteGroupQuota,
   type GroupQuota,
-  type CreateGroupQuotaRequest,
   getQuotaTypeLabel,
   formatQuotaValue
 } from '@/api/quota';

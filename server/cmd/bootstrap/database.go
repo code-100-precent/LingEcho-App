@@ -159,6 +159,7 @@ func RunMigrations(db *gorm.DB) error {
 		// Operation log model
 		&middleware.OperationLog{},
 		&models.JSTemplate{},
+		&models.JSTemplateVersion{},
 		// Device model for OTA
 		&models.Device{},
 		// OTA firmware model

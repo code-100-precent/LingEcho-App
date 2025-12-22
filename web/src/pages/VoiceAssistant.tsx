@@ -166,6 +166,10 @@ const VoiceAssistant = () => {
     const [assistantDescription, setAssistantDescription] = useState('')
     const [assistantIcon, setAssistantIcon] = useState('Bot')
     const [enableGraphMemory, setEnableGraphMemory] = useState(false)
+    // VAD 配置
+    const [enableVAD, setEnableVAD] = useState(true)
+    const [vadThreshold, setVadThreshold] = useState(500)
+    const [vadConsecutiveFrames, setVadConsecutiveFrames] = useState(2)
 
     // 模态框状态
     const [showAddAssistantModal, setShowAddAssistantModal] = useState(false)
@@ -188,11 +192,21 @@ const VoiceAssistant = () => {
             const currentAssistant = assistants.find(a => a.id === assistantId)
             if (currentAssistant) {
                 setSelectedJSTemplate(currentAssistant.jsSourceId || null)
-                // 同步助手基础配置（包括图记忆开关）
+                // 同步助手基础配置（包括图记忆开关和VAD配置）
                 setAssistantName(currentAssistant.name || '')
                 setAssistantDescription(currentAssistant.description || '')
                 setAssistantIcon(currentAssistant.icon || 'Bot')
                 setEnableGraphMemory(!!(currentAssistant as any).enableGraphMemory)
+                // 同步 VAD 配置
+                if ((currentAssistant as any).enableVAD !== undefined) {
+                    setEnableVAD((currentAssistant as any).enableVAD)
+                }
+                if ((currentAssistant as any).vadThreshold !== undefined) {
+                    setVadThreshold((currentAssistant as any).vadThreshold)
+                }
+                if ((currentAssistant as any).vadConsecutiveFrames !== undefined) {
+                    setVadConsecutiveFrames((currentAssistant as any).vadConsecutiveFrames)
+                }
             }
         }
     }, [assistantId, assistants])
@@ -1428,6 +1442,10 @@ const VoiceAssistant = () => {
                             setAssistantName(detail.name ?? '')
                             setAssistantDescription(detail.description ?? '')
                             setAssistantIcon(detail.icon ?? 'Bot')
+                            // 加载 VAD 配置
+                            setEnableVAD(detail.enableVAD !== undefined ? detail.enableVAD : true)
+                            setVadThreshold(detail.vadThreshold ?? 500)
+                            setVadConsecutiveFrames(detail.vadConsecutiveFrames ?? 2)
                         }
                     } catch (err) {
                         console.warn('加载助手配置失败:', err)
@@ -1732,6 +1750,10 @@ const VoiceAssistant = () => {
                 setAssistantName(detail.name ?? '')
                 setAssistantDescription(detail.description ?? '')
                 setAssistantIcon(detail.icon ?? 'Bot')
+                // 加载 VAD 配置
+                setEnableVAD(detail.enableVAD !== undefined ? detail.enableVAD : true)
+                setVadThreshold(detail.vadThreshold ?? 500)
+                setVadConsecutiveFrames(detail.vadConsecutiveFrames ?? 2)
 
                 // 重新加载当前助手的聊天记录
                 try {
@@ -1822,6 +1844,9 @@ const VoiceAssistant = () => {
                 apiSecret,
                 llmModel,
                 enableGraphMemory,
+                enableVAD,
+                vadThreshold,
+                vadConsecutiveFrames,
             })
 
             // 更新JS模板
@@ -2109,6 +2134,12 @@ const VoiceAssistant = () => {
                                 onAssistantDescriptionChange={setAssistantDescription}
                                 onAssistantIconChange={setAssistantIcon}
                                 onEnableGraphMemoryChange={setEnableGraphMemory}
+                                enableVAD={enableVAD}
+                                vadThreshold={vadThreshold}
+                                vadConsecutiveFrames={vadConsecutiveFrames}
+                                onEnableVADChange={setEnableVAD}
+                                onVADThresholdChange={setVadThreshold}
+                                onVADConsecutiveFramesChange={setVadConsecutiveFrames}
                                 onSaveSettings={handleSaveSettings}
                                 onDeleteAssistant={() => setShowDeleteConfirm(true)}
                                 searchKeyword={searchKeyword}

@@ -27,6 +27,9 @@ export interface UpdateAssistantForm {
   apiSecret?: string
   llmModel?: string // LLM模型名称
   enableGraphMemory?: boolean
+  enableVAD?: boolean // 是否启用VAD
+  vadThreshold?: number // VAD阈值
+  vadConsecutiveFrames?: number // VAD连续帧数
 }
 
 // 助手信息 - 对应后端Assistant模型的完整字段
@@ -50,6 +53,10 @@ export interface Assistant {
   apiKey?: string
   apiSecret?: string
   llmModel?: string // LLM模型名称
+  enableGraphMemory?: boolean // 是否启用基于图数据库的长期记忆
+  enableVAD?: boolean // 是否启用VAD
+  vadThreshold?: number // VAD阈值
+  vadConsecutiveFrames?: number // VAD连续帧数
   createdAt: string
   updatedAt: string
 }
