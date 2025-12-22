@@ -2,6 +2,8 @@ package handlers
 
 import (
 	"bytes"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"net/http"
@@ -22,6 +24,15 @@ import (
 	"github.com/gin-gonic/gin"
 	"go.uber.org/zap"
 )
+
+// hashString 计算字符串的哈希值（用于灰度发布）
+func hashString(s string) int {
+	hash := sha256.Sum256([]byte(s))
+	hashStr := hex.EncodeToString(hash[:])
+	// 取前8个字符转换为整数
+	val, _ := strconv.ParseInt(hashStr[:8], 16, 64)
+	return int(val % 100)
+}
 
 // CreateAssistant create new assistant
 func (h *Handlers) CreateAssistant(c *gin.Context) {
@@ -141,22 +152,25 @@ func (h *Handlers) UpdateAssistant(c *gin.Context) {
 	id, _ := strconv.ParseInt(c.Param("id"), 10, 64)
 
 	var input struct {
-		Name              string  `json:"name"`
-		Description       string  `json:"description"`
-		Icon              string  `json:"icon"`
-		SystemPrompt      string  `json:"systemPrompt"`
-		PersonaTag        string  `json:"persona_tag"`
-		Temperature       float32 `json:"temperature"`
-		MaxTokens         int     `json:"maxTokens"`
-		Language          string  `json:"language"`
-		Speaker           string  `json:"speaker"`
-		VoiceCloneId      *int    `json:"voiceCloneId"`
-		KnowledgeBaseId   *string `json:"knowledgeBaseId"`
-		TtsProvider       string  `json:"ttsProvider"`
-		ApiKey            string  `json:"apiKey"`
-		ApiSecret         string  `json:"apiSecret"`
-		LLMModel          string  `json:"llmModel"` // LLM model name
-		EnableGraphMemory *bool   `json:"enableGraphMemory"`
+		Name                 string   `json:"name"`
+		Description          string   `json:"description"`
+		Icon                 string   `json:"icon"`
+		SystemPrompt         string   `json:"systemPrompt"`
+		PersonaTag           string   `json:"persona_tag"`
+		Temperature          float32  `json:"temperature"`
+		MaxTokens            int      `json:"maxTokens"`
+		Language             string   `json:"language"`
+		Speaker              string   `json:"speaker"`
+		VoiceCloneId         *int     `json:"voiceCloneId"`
+		KnowledgeBaseId      *string  `json:"knowledgeBaseId"`
+		TtsProvider          string   `json:"ttsProvider"`
+		ApiKey               string   `json:"apiKey"`
+		ApiSecret            string   `json:"apiSecret"`
+		LLMModel             string   `json:"llmModel"` // LLM model name
+		EnableGraphMemory    *bool    `json:"enableGraphMemory"`
+		EnableVAD            *bool    `json:"enableVAD"`            // 是否启用VAD
+		VADThreshold         *float64 `json:"vadThreshold"`         // VAD阈值
+		VADConsecutiveFrames *int     `json:"vadConsecutiveFrames"` // VAD连续帧数
 	}
 	if err := c.ShouldBindJSON(&input); err != nil {
 		response.Fail(c, "invalid request", "parameter error")
@@ -227,6 +241,15 @@ func (h *Handlers) UpdateAssistant(c *gin.Context) {
 	}
 	if input.EnableGraphMemory != nil {
 		updateData["enable_graph_memory"] = *input.EnableGraphMemory
+	}
+	if input.EnableVAD != nil {
+		updateData["enable_vad"] = *input.EnableVAD
+	}
+	if input.VADThreshold != nil {
+		updateData["vad_threshold"] = *input.VADThreshold
+	}
+	if input.VADConsecutiveFrames != nil {
+		updateData["vad_consecutive_frames"] = *input.VADConsecutiveFrames
 	}
 
 	if err := h.db.Model(&assistant).Where("id = ?", id).Updates(updateData).Error; err != nil {
@@ -345,8 +368,22 @@ func (h *Handlers) ServeVoiceSculptorLoaderJS(c *gin.Context) {
 		// Try to get the bound JS template
 		jsTemplate, err := models.GetJSTemplateByJsSourceID(h.db, assistant.JsSourceID)
 		if err == nil && jsTemplate.Content != "" {
-			// Use the bound JS template
-			templateContent = jsTemplate.Content
+			// 检查是否有灰度版本
+			activeVersion, err := models.GetActiveJSTemplateVersion(h.db, jsTemplate.ID)
+			if err == nil && activeVersion != nil && activeVersion.Grayscale > 0 {
+				// 使用灰度版本（根据用户ID或其他因素决定是否使用灰度版本）
+				// 这里简化处理：如果灰度>0，使用版本内容；否则使用模板内容
+				// 实际可以根据用户ID、IP等做更精细的灰度控制
+				userHash := hashString(c.ClientIP() + c.GetHeader("User-Agent"))
+				if userHash%100 < activeVersion.Grayscale {
+					templateContent = activeVersion.Content
+				} else {
+					templateContent = jsTemplate.Content
+				}
+			} else {
+				// Use the bound JS template
+				templateContent = jsTemplate.Content
+			}
 		}
 	}
 

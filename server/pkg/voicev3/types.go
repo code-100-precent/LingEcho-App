@@ -29,6 +29,10 @@ type SessionConfig struct {
 	Logger       *zap.Logger
 	Context      context.Context
 	ASRPool      *asr.Pool // ASR连接池（可选）
+	// VAD 配置
+	EnableVAD            bool    // 是否启用VAD
+	VADThreshold         float64 // VAD阈值
+	VADConsecutiveFrames int     // 需要连续超过阈值的帧数
 }
 
 // SessionInterface 语音会话接口（避免与实现类冲突）

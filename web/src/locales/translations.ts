@@ -473,6 +473,15 @@ export const translations: Record<Language, Record<string, string>> = {
         'controlPanel.voiceClone.training': '去训练',
         'controlPanel.voiceClone.hint': '使用您训练的音色进行语音合成',
 
+        'controlPanel.vad.title': 'VAD 监测配置',
+        'controlPanel.vad.enable': '启用 VAD 打断',
+        'controlPanel.vad.enableDesc': '开启后，用户说话时可以自动打断 TTS 播放',
+        'controlPanel.vad.threshold': 'VAD 阈值',
+        'controlPanel.vad.thresholdLabel': '灵敏度',
+        'controlPanel.vad.thresholdHint': '阈值越低越敏感，建议范围：300-1000。默认：500',
+        'controlPanel.vad.consecutiveFrames': '连续帧数',
+        'controlPanel.vad.consecutiveFramesHint': '需要连续多少帧超过阈值才触发打断。数值越小响应越快，但可能误触发。建议：1-3，默认：2',
+
         'controlPanel.integration.title': '应用接入',
         'controlPanel.integration.web': 'Web应用',
         'controlPanel.integration.webDesc': '嵌入到网页中',

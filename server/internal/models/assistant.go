@@ -12,28 +12,31 @@ import (
 
 // Assistant 表示一个自定义的 AI 助手
 type Assistant struct {
-	ID                int64     `json:"id" gorm:"primaryKey;autoIncrement"`
-	UserID            uint      `json:"userId" gorm:"index"`
-	GroupID           *uint     `json:"groupId,omitempty" gorm:"index"` // 组织ID，如果设置则表示这是组织共享的助手
-	Name              string    `json:"name" gorm:"index"`
-	Description       string    `json:"description"`
-	Icon              string    `json:"icon"`
-	SystemPrompt      string    `json:"systemPrompt"`
-	PersonaTag        string    `json:"personaTag"`
-	Temperature       float32   `json:"temperature"`
-	JsSourceID        string    `json:"jsSourceId" gorm:"index:idx_assistant_js_source"` // 关联的JS模板ID
-	MaxTokens         int       `json:"maxTokens"`
-	Language          string    `json:"language" gorm:"column:language"`                                   // 语言设置
-	Speaker           string    `json:"speaker" gorm:"column:speaker"`                                     // 发音人ID
-	VoiceCloneID      *int      `json:"voiceCloneId" gorm:"column:voice_clone_id"`                         // 训练音色ID（可选）
-	KnowledgeBaseID   *string   `json:"knowledgeBaseId" gorm:"column:knowledge_base_id"`                   // 知识库ID（可选）
-	TtsProvider       string    `json:"ttsProvider" gorm:"column:tts_provider"`                            // TTS提供商
-	ApiKey            string    `json:"apiKey" gorm:"column:api_key"`                                      // API密钥
-	ApiSecret         string    `json:"apiSecret" gorm:"column:api_secret"`                                // API密钥
-	LLMModel          string    `json:"llmModel" gorm:"column:llm_model"`                                  // LLM模型名称
-	EnableGraphMemory bool      `json:"enableGraphMemory" gorm:"column:enable_graph_memory;default:false"` // 是否启用基于图数据库的长期记忆
-	CreatedAt         time.Time `json:"createdAt" gorm:"autoCreateTime"`
-	UpdatedAt         time.Time `json:"updatedAt" gorm:"autoUpdateTime"`
+	ID                   int64     `json:"id" gorm:"primaryKey;autoIncrement"`
+	UserID               uint      `json:"userId" gorm:"index"`
+	GroupID              *uint     `json:"groupId,omitempty" gorm:"index"` // 组织ID，如果设置则表示这是组织共享的助手
+	Name                 string    `json:"name" gorm:"index"`
+	Description          string    `json:"description"`
+	Icon                 string    `json:"icon"`
+	SystemPrompt         string    `json:"systemPrompt"`
+	PersonaTag           string    `json:"personaTag"`
+	Temperature          float32   `json:"temperature"`
+	JsSourceID           string    `json:"jsSourceId" gorm:"index:idx_assistant_js_source"` // 关联的JS模板ID
+	MaxTokens            int       `json:"maxTokens"`
+	Language             string    `json:"language" gorm:"column:language"`                                     // 语言设置
+	Speaker              string    `json:"speaker" gorm:"column:speaker"`                                       // 发音人ID
+	VoiceCloneID         *int      `json:"voiceCloneId" gorm:"column:voice_clone_id"`                           // 训练音色ID（可选）
+	KnowledgeBaseID      *string   `json:"knowledgeBaseId" gorm:"column:knowledge_base_id"`                     // 知识库ID（可选）
+	TtsProvider          string    `json:"ttsProvider" gorm:"column:tts_provider"`                              // TTS提供商
+	ApiKey               string    `json:"apiKey" gorm:"column:api_key"`                                        // API密钥
+	ApiSecret            string    `json:"apiSecret" gorm:"column:api_secret"`                                  // API密钥
+	LLMModel             string    `json:"llmModel" gorm:"column:llm_model"`                                    // LLM模型名称
+	EnableGraphMemory    bool      `json:"enableGraphMemory" gorm:"column:enable_graph_memory;default:false"`   // 是否启用基于图数据库的长期记忆
+	EnableVAD            bool      `json:"enableVAD" gorm:"column:enable_vad;default:true"`                     // 是否启用VAD（语音活动检测）用于打断TTS
+	VADThreshold         float64   `json:"vadThreshold" gorm:"column:vad_threshold;default:500"`                // VAD阈值（RMS值，范围0-32768，默认500）
+	VADConsecutiveFrames int       `json:"vadConsecutiveFrames" gorm:"column:vad_consecutive_frames;default:2"` // 需要连续超过阈值的帧数（默认2帧，约40ms）
+	CreatedAt            time.Time `json:"createdAt" gorm:"autoCreateTime"`
+	UpdatedAt            time.Time `json:"updatedAt" gorm:"autoUpdateTime"`
 }
 
 // AssistantTool 表示助手自定义的Function Tool
@@ -314,21 +317,48 @@ type ChatSessionLogDetail struct {
 }
 
 type JSTemplate struct {
-	ID         string    `json:"id" gorm:"primaryKey"`
-	JsSourceID string    `json:"jsSourceId" gorm:"uniqueIndex:idx_js_templates_source_id;size:50"` // 唯一标识符，用于应用接入
-	Name       string    `json:"name" gorm:"index:idx_js_templates_name"`                          // template name
-	Type       string    `json:"type" gorm:"index:idx_js_templates_type"`                          // "default" 或 "custom"
-	Content    string    `json:"content"`                                                          // content
-	Usage      string    `json:"usage"`                                                            // usage description
-	UserID     uint      `json:"user_id" gorm:"index:idx_js_templates_user"`                       // user id
-	GroupID    *uint     `json:"group_id,omitempty" gorm:"index"`                                  // 组织ID，如果设置则表示这是组织共享的JS模板
-	CreatedAt  time.Time `json:"created_at" gorm:"autoCreateTime"`
-	UpdatedAt  time.Time `json:"updated_at" gorm:"autoUpdateTime"`
+	ID                    string    `json:"id" gorm:"primaryKey"`
+	JsSourceID            string    `json:"jsSourceId" gorm:"uniqueIndex:idx_js_templates_source_id;size:50"` // 唯一标识符，用于应用接入
+	Name                  string    `json:"name" gorm:"index:idx_js_templates_name"`                          // template name
+	Type                  string    `json:"type" gorm:"index:idx_js_templates_type"`                          // "default" 或 "custom"
+	Content               string    `json:"content"`                                                          // content
+	Usage                 string    `json:"usage"`                                                            // usage description
+	UserID                uint      `json:"user_id" gorm:"index:idx_js_templates_user"`                       // user id
+	GroupID               *uint     `json:"group_id,omitempty" gorm:"index"`                                  // 组织ID，如果设置则表示这是组织共享的JS模板
+	Version               uint      `json:"version" gorm:"default:1"`                                         // 当前版本号
+	Status                string    `json:"status" gorm:"size:32;default:'active'"`                           // 状态: active, draft, archived
+	WebhookSecret         string    `json:"webhook_secret,omitempty" gorm:"size:128"`                         // Webhook签名密钥
+	WebhookEnabled        bool      `json:"webhook_enabled" gorm:"default:false"`                             // 是否启用Webhook
+	QuotaMaxExecutionTime int       `json:"quota_max_execution_time" gorm:"default:30000"`                    // 最大执行时间(ms)
+	QuotaMaxMemoryMB      int       `json:"quota_max_memory_mb" gorm:"default:100"`                           // 最大内存(MB)
+	QuotaMaxAPICalls      int       `json:"quota_max_api_calls" gorm:"default:1000"`                          // 最大API调用次数
+	CreatedAt             time.Time `json:"created_at" gorm:"autoCreateTime"`
+	UpdatedAt             time.Time `json:"updated_at" gorm:"autoUpdateTime"`
+}
+
+// JSTemplateVersion 存储JS模板的历史版本
+type JSTemplateVersion struct {
+	ID          string      `json:"id" gorm:"primaryKey"`
+	TemplateID  string      `json:"templateId" gorm:"index:idx_js_template_versions_template_id;not null"`
+	Version     uint        `json:"version" gorm:"not null"`
+	Name        string      `json:"name" gorm:"size:128"`
+	Content     string      `json:"content" gorm:"type:text"`
+	Status      string      `json:"status" gorm:"size:32"`       // draft, active, archived
+	Grayscale   int         `json:"grayscale" gorm:"default:0"`  // 灰度百分比 0-100
+	ChangeNote  string      `json:"changeNote" gorm:"type:text"` // 版本变更说明
+	CreatedBy   uint        `json:"createdBy" gorm:"index"`
+	CreatedAt   time.Time   `json:"createdAt" gorm:"autoCreateTime"`
+	TemplateRef *JSTemplate `json:"-" gorm:"foreignKey:TemplateID"`
 }
 
 // TableName 指定数据库表名
 func (JSTemplate) TableName() string {
 	return "js_templates"
+}
+
+// TableName 指定版本表名
+func (JSTemplateVersion) TableName() string {
+	return "js_template_versions"
 }
 
 // CreateJSTemplate create a new template
@@ -529,6 +559,93 @@ func SearchJSTemplates(db *gorm.DB, keyword string, userID uint, offset, limit i
 		return nil, err
 	}
 	return templates, nil
+}
+
+// ========== JSTemplateVersion 版本管理相关函数 ==========
+
+// CreateJSTemplateVersion 创建JS模板版本
+func CreateJSTemplateVersion(db *gorm.DB, version *JSTemplateVersion) error {
+	return db.Create(version).Error
+}
+
+// GetJSTemplateVersions 获取模板的所有版本
+func GetJSTemplateVersions(db *gorm.DB, templateID string, offset, limit int) ([]JSTemplateVersion, error) {
+	var versions []JSTemplateVersion
+	err := db.Where("template_id = ?", templateID).
+		Offset(offset).Limit(limit).
+		Order("version DESC").
+		Find(&versions).Error
+	return versions, err
+}
+
+// GetJSTemplateVersion 获取指定版本
+func GetJSTemplateVersion(db *gorm.DB, templateID string, versionID string) (*JSTemplateVersion, error) {
+	var version JSTemplateVersion
+	err := db.Where("id = ? AND template_id = ?", versionID, templateID).First(&version).Error
+	if err != nil {
+		return nil, err
+	}
+	return &version, nil
+}
+
+// GetActiveJSTemplateVersion 获取当前激活的版本（考虑灰度）
+func GetActiveJSTemplateVersion(db *gorm.DB, templateID string) (*JSTemplateVersion, error) {
+	var version JSTemplateVersion
+	// 优先获取灰度发布的版本，如果没有则获取状态为active的版本
+	err := db.Where("template_id = ? AND status = ? AND grayscale > 0", templateID, "active").
+		Order("grayscale DESC, version DESC").
+		First(&version).Error
+	if err != nil {
+		// 如果没有灰度版本，获取普通active版本
+		err = db.Where("template_id = ? AND status = ?", templateID, "active").
+			Order("version DESC").
+			First(&version).Error
+		if err != nil {
+			return nil, err
+		}
+	}
+	return &version, nil
+}
+
+// UpdateJSTemplateVersion 更新模板版本
+func UpdateJSTemplateVersion(db *gorm.DB, versionID string, updates map[string]interface{}) error {
+	return db.Model(&JSTemplateVersion{}).Where("id = ?", versionID).Updates(updates).Error
+}
+
+// RollbackJSTemplateVersion 回滚到指定版本
+func RollbackJSTemplateVersion(db *gorm.DB, templateID string, versionID string) error {
+	// 获取要回滚的版本
+	version, err := GetJSTemplateVersion(db, templateID, versionID)
+	if err != nil {
+		return err
+	}
+
+	// 获取当前模板
+	template, err := GetJSTemplateByID(db, templateID)
+	if err != nil {
+		return err
+	}
+
+	// 保存当前版本到历史
+	currentVersion := JSTemplateVersion{
+		TemplateID: templateID,
+		Version:    template.Version,
+		Name:       template.Name,
+		Content:    template.Content,
+		Status:     template.Status,
+		ChangeNote: fmt.Sprintf("Rollback to version %d", version.Version),
+		CreatedBy:  template.UserID,
+	}
+	if err := CreateJSTemplateVersion(db, &currentVersion); err != nil {
+		return err
+	}
+
+	// 恢复版本内容
+	updates := map[string]interface{}{
+		"content": version.Content,
+		"version": template.Version + 1,
+	}
+	return UpdateJSTemplate(db, templateID, updates)
 }
 
 type TemplateManager struct {

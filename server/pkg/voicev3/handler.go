@@ -66,6 +66,9 @@ func (h *Handler) HandleWebSocket(
 	llmModel := "gpt-3.5-turbo"
 	assistantTemperature := 0.6
 	assistantMaxTokens := 0
+	enableVAD := true
+	vadThreshold := 500.0
+	vadConsecutiveFrames := 2
 	if assistantID > 0 && db != nil {
 		var assistant models.Assistant
 		if err := db.First(&assistant, assistantID).Error; err == nil {
@@ -77,6 +80,14 @@ func (h *Handler) HandleWebSocket(
 			}
 			if assistant.MaxTokens > 0 {
 				assistantMaxTokens = assistant.MaxTokens
+			}
+			// 读取 VAD 配置
+			enableVAD = assistant.EnableVAD
+			if assistant.VADThreshold > 0 {
+				vadThreshold = assistant.VADThreshold
+			}
+			if assistant.VADConsecutiveFrames > 0 {
+				vadConsecutiveFrames = assistant.VADConsecutiveFrames
 			}
 		}
 	}
@@ -102,6 +113,10 @@ func (h *Handler) HandleWebSocket(
 		Logger:       h.logger,
 		Context:      ctx,
 		ASRPool:      h.asrPool, // 设置ASR连接池
+		// VAD 配置
+		EnableVAD:            enableVAD,
+		VADThreshold:         vadThreshold,
+		VADConsecutiveFrames: vadConsecutiveFrames,
 	}
 
 	// 创建会话
