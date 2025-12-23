@@ -205,9 +205,9 @@ func TestSyncSafeWhenNoLogger(t *testing.T) {
 		t.Fatalf("Init for SyncSafe: %v", err)
 	}
 	// 备份并置空
-	old := lg
-	lg = nil
-	defer func() { lg = old }()
+	old := Lg
+	Lg = nil
+	defer func() { Lg = old }()
 
 	defer func() { _ = recover() }()
 	Sync()
