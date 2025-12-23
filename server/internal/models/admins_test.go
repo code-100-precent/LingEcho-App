@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/code-100-precent/LingEcho"
+	"github.com/code-100-precent/LingEcho/pkg/config"
 	"github.com/code-100-precent/LingEcho/pkg/constants"
 	"github.com/gin-contrib/sessions"
 	"github.com/gin-contrib/sessions/cookie"
@@ -313,7 +314,15 @@ func TestAdminObject_BuildPermissions(t *testing.T) {
 	assert.True(t, obj.Permissions["can_delete"])
 	assert.True(t, obj.Permissions["can_action"])
 
-	// Test regular user
+	// Test regular user (should not have permissions by default)
+	obj.BuildPermissions(db, regularUser)
+	assert.False(t, obj.Permissions["can_create"])
+	assert.False(t, obj.Permissions["can_update"])
+	assert.False(t, obj.Permissions["can_delete"])
+	assert.False(t, obj.Permissions["can_action"])
+
+	// Test regular user with admin.write permission
+	regularUser.Permissions = `["admin.write"]`
 	obj.BuildPermissions(db, regularUser)
 	assert.True(t, obj.Permissions["can_create"])
 	assert.True(t, obj.Permissions["can_update"])
@@ -322,6 +331,14 @@ func TestAdminObject_BuildPermissions(t *testing.T) {
 }
 
 func TestHandleAdminJson(t *testing.T) {
+	// Initialize config to avoid nil pointer dereference
+	if config.GlobalConfig == nil {
+		config.GlobalConfig = &config.Config{
+			APIPrefix:     "/api",
+			MonitorPrefix: "/metrics",
+		}
+	}
+
 	db := setupAdminsTestDB(t)
 	router := setupAdminsTestRouter(t, db)
 

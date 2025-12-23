@@ -114,14 +114,35 @@ func (a *LLMAgent) Process(ctx context.Context, request *TaskRequest) (*TaskResp
 		maxTokens = int(maxTokensVal)
 	}
 
+	// 构建查询文本（将消息列表转换为文本）
+	queryText := request.Content
+	if len(messages) > 0 {
+		// 使用最后一条用户消息作为查询文本
+		for i := len(messages) - 1; i >= 0; i-- {
+			if messages[i].Role == "user" {
+				queryText = messages[i].Content
+				break
+			}
+		}
+	}
+
+	// 设置系统提示词
+	if len(messages) > 0 && messages[0].Role == "system" {
+		a.llmProvider.SetSystemPrompt(messages[0].Content)
+	}
+
 	// 调用LLM
+	var maxTokensPtr *int
+	if maxTokens > 0 {
+		maxTokensPtr = &maxTokens
+	}
 	options := llm.QueryOptions{
 		Model:       model,
 		Temperature: &temperature,
-		MaxTokens:   maxTokens,
+		MaxTokens:   maxTokensPtr,
 	}
 
-	response, err := a.llmProvider.Query(ctx, messages, options)
+	content, err := a.llmProvider.QueryWithOptions(queryText, options)
 	if err != nil {
 		a.logger.Error("LLM query failed",
 			zap.String("taskID", request.ID),
@@ -135,16 +156,17 @@ func (a *LLMAgent) Process(ctx context.Context, request *TaskRequest) (*TaskResp
 		}, nil
 	}
 
-	// 提取响应内容
-	content := response.Content
-	if content == "" && len(response.Choices) > 0 {
-		content = response.Choices[0].Message.Content
+	// 获取使用统计信息
+	var usage llm.Usage
+	var hasUsage bool
+	if usage, hasUsage = a.llmProvider.GetLastUsage(); !hasUsage {
+		usage = llm.Usage{}
 	}
 
 	a.logger.Info("LLM query completed",
 		zap.String("taskID", request.ID),
 		zap.String("model", model),
-		zap.Int("tokens", response.Usage.TotalTokens),
+		zap.Int("tokens", usage.TotalTokens),
 		zap.Duration("processingTime", time.Since(startTime)),
 	)
 
@@ -153,9 +175,8 @@ func (a *LLMAgent) Process(ctx context.Context, request *TaskRequest) (*TaskResp
 		Success: true,
 		Content: content,
 		Data: map[string]interface{}{
-			"model":        model,
-			"usage":        response.Usage,
-			"finishReason": response.FinishReason,
+			"model": model,
+			"usage": usage,
 		},
 		AgentID:        a.id,
 		ProcessingTime: time.Since(startTime),
@@ -170,17 +191,12 @@ func (a *LLMAgent) Health(ctx context.Context) error {
 	}
 
 	// 尝试一个简单的健康检查查询
-	testMessages := []llm.Message{
-		{
-			Role:    "user",
-			Content: "test",
-		},
-	}
-
-	_, err := a.llmProvider.Query(ctx, testMessages, llm.QueryOptions{
+	temp := float32(0.1)
+	maxTokens := 5
+	_, err := a.llmProvider.QueryWithOptions("test", llm.QueryOptions{
 		Model:       "gpt-4o",
-		MaxTokens:   5,
-		Temperature: func() *float32 { t := float32(0.1); return &t }(),
+		MaxTokens:   &maxTokens,
+		Temperature: &temp,
 	})
 
 	if err != nil {
