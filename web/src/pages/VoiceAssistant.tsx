@@ -68,6 +68,7 @@ const VoiceAssistant = () => {
     const currentTTSAudioSourceRef = useRef<AudioBufferSourceNode | null>(null) // 当前播放的TTS音频源
     const lastASRTextRef = useRef<string>('') // 上次已处理的ASR文本（用于去重）
     const lastLLMResponseRef = useRef<string>('') // 上次已处理的LLM回复（用于去重）
+    const lastSelectedAgentRef = useRef<number | null>(null) // 防止重复选择同一个助手
 
     // 引用DOM元素用于引导动画
     const voiceBallRef = useRef<HTMLDivElement>(null)
@@ -1390,8 +1391,19 @@ const VoiceAssistant = () => {
         setSocket(newSocket)
     }
 
+    // 使用 ref 防止 StrictMode 导致的重复请求
+    const initializedRef = useRef(false)
+    const loadingRef = useRef(false)
+    
     // 初始化数据
     useEffect(() => {
+        // 防止 StrictMode 导致的重复初始化
+        if (initializedRef.current || loadingRef.current) {
+            return
+        }
+        initializedRef.current = true
+        loadingRef.current = true
+        
         const initializeData = async () => {
             try {
                 setLoading(true)
@@ -1503,10 +1515,18 @@ const VoiceAssistant = () => {
                 showAlert('加载数据失败', 'error')
             } finally {
                 setLoading(false)
+                loadingRef.current = false
             }
         }
 
         initializeData()
+        
+        // 清理函数：在组件卸载或 StrictMode 重新挂载时重置
+        return () => {
+            // 注意：在 StrictMode 下，这个清理函数会在第二次渲染前执行
+            // 但我们不重置 initializedRef，因为第二次渲染时我们仍然希望跳过初始化
+            loadingRef.current = false
+        }
     }, [])
 
     // 当 assistantId 变化时（比如从 URL 参数或用户点击助手），自动加载助手配置
@@ -1515,7 +1535,11 @@ const VoiceAssistant = () => {
     useEffect(() => {
         // 只在助手列表加载完成后才处理切换，避免初始化时重复加载
         if (assistantId && assistantId > 0 && assistants.length > 0) {
-            handleSelectAgent(assistantId)
+            // 防止重复调用同一个 agentId（StrictMode 会导致重复执行）
+            if (lastSelectedAgentRef.current !== assistantId) {
+                lastSelectedAgentRef.current = assistantId
+                handleSelectAgent(assistantId)
+            }
         }
     }, [assistantId, assistants.length])
 
