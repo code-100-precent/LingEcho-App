@@ -8,24 +8,75 @@ import (
 	"net/http"
 	"strings"
 	"time"
+
+	"go.uber.org/zap"
 )
 
-// IPLocationResponse IP地理位置查询响应结构
+// IPLocationService IP地理位置服务
+type IPLocationService struct {
+	apiURL      string
+	timeout     time.Duration
+	logger      *zap.Logger
+	usePconline bool // 是否使用pconline API（国内IP更准确）
+}
+
+// IPLocationResponse IP地理位置查询响应结构（pconline格式）
 type IPLocationResponse struct {
 	Pro  string `json:"pro"`  // 省份
 	City string `json:"city"` // 城市
 }
 
+// IPGeolocationResponse IP地理位置API响应（ip-api格式）
+type IPGeolocationResponse struct {
+	Country     string  `json:"country"`
+	CountryCode string  `json:"countryCode"`
+	Region      string  `json:"region"`
+	City        string  `json:"city"`
+	Lat         float64 `json:"lat"`
+	Lon         float64 `json:"lon"`
+	Timezone    string  `json:"timezone"`
+	ISP         string  `json:"isp"`
+	Org         string  `json:"org"`
+	AS          string  `json:"as"`
+	Query       string  `json:"query"`
+	Status      string  `json:"status"`
+	Message     string  `json:"message"`
+}
+
 const (
-	// IP地址查询API
-	IP_URL = "http://whois.pconline.com.cn/ipJson.jsp"
+	// IP地址查询API（国内）
+	PCONLINE_IP_URL = "http://whois.pconline.com.cn/ipJson.jsp"
+
+	// IP地址查询API（国际）
+	IP_API_URL = "http://ip-api.com/json/"
 
 	// 未知地址
-	UNKNOWN = "XX XX"
+	UNKNOWN = "Unknown"
 
 	// 内网IP标识
-	INTERNAL_IP = "内网IP"
+	INTERNAL_IP   = "内网IP"
+	LOCAL_NETWORK = "Local Network"
 )
+
+// NewIPLocationService 创建IP地理位置服务
+func NewIPLocationService(logger *zap.Logger) *IPLocationService {
+	return &IPLocationService{
+		apiURL:      IP_API_URL,
+		timeout:     5 * time.Second,
+		logger:      logger,
+		usePconline: false, // 默认使用国际API
+	}
+}
+
+// NewIPLocationServiceWithPconline 创建使用pconline API的IP地理位置服务（国内IP更准确）
+func NewIPLocationServiceWithPconline(logger *zap.Logger) *IPLocationService {
+	return &IPLocationService{
+		apiURL:      PCONLINE_IP_URL,
+		timeout:     5 * time.Second,
+		logger:      logger,
+		usePconline: true,
+	}
+}
 
 // IsInternalIP 判断是否为内网IP
 func IsInternalIP(ip string) bool {
@@ -52,53 +103,53 @@ func IsInternalIP(ip string) bool {
 	return false
 }
 
-// GetRealAddressByIP 根据IP获取真实地址
-func GetRealAddressByIP(ip string) string {
-	// 内网不查询
-	if IsInternalIP(ip) {
-		return INTERNAL_IP
+// GetLocation 获取IP地理位置（返回国家、城市、完整位置字符串）
+func (ils *IPLocationService) GetLocation(ip string) (country, city, location string, err error) {
+	// 跳过私有IP
+	if IsInternalIP(ip) || ip == "127.0.0.1" || ip == "::1" || ip == "localhost" {
+		return "Local", "Local", LOCAL_NETWORK, nil
 	}
 
-	// 创建HTTP客户端
+	if ils.usePconline {
+		return ils.getLocationFromPconline(ip)
+	}
+	return ils.getLocationFromIPAPI(ip)
+}
+
+// getLocationFromPconline 从pconline API获取地理位置（国内IP更准确）
+func (ils *IPLocationService) getLocationFromPconline(ip string) (country, city, location string, err error) {
 	client := &http.Client{
-		Timeout: 5 * time.Second,
+		Timeout: ils.timeout,
 	}
 
-	// 构建请求URL
-	url := fmt.Sprintf("%s?ip=%s&json=true", IP_URL, ip)
-
-	// 发送GET请求
+	url := fmt.Sprintf("%s?ip=%s&json=true", ils.apiURL, ip)
 	resp, err := client.Get(url)
 	if err != nil {
-		fmt.Printf("获取地理位置异常 %s: %v\n", ip, err)
-		return UNKNOWN
+		ils.logger.Warn("Failed to get IP location from pconline", zap.String("ip", ip), zap.Error(err))
+		return UNKNOWN, UNKNOWN, UNKNOWN, nil
 	}
 	defer resp.Body.Close()
 
-	// 读取响应体
-	body, err := io.ReadAll(resp.Body)
-	if err != nil {
-		fmt.Printf("读取响应体异常 %s: %v\n", ip, err)
-		return UNKNOWN
+	if resp.StatusCode != http.StatusOK {
+		ils.logger.Warn("Pconline API returned non-200 status", zap.String("ip", ip), zap.Int("status", resp.StatusCode))
+		return UNKNOWN, UNKNOWN, UNKNOWN, nil
 	}
 
-	// 解析响应
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		ils.logger.Warn("Failed to read pconline response", zap.String("ip", ip), zap.Error(err))
+		return UNKNOWN, UNKNOWN, UNKNOWN, nil
+	}
+
 	var locationResp IPLocationResponse
 	err = json.Unmarshal(body, &locationResp)
 	if err != nil {
-		fmt.Printf("解析地理位置响应异常 %s: %v\n", ip, err)
-		return UNKNOWN
+		ils.logger.Warn("Failed to parse pconline response", zap.String("ip", ip), zap.Error(err))
+		return UNKNOWN, UNKNOWN, UNKNOWN, nil
 	}
 
-	// 检查是否获取到有效数据
-	if locationResp.Pro == "" && locationResp.City == "" {
-		fmt.Printf("获取地理位置异常 %s: 响应数据为空\n", ip)
-		return UNKNOWN
-	}
-
-	// 格式化返回地址
 	region := strings.TrimSpace(locationResp.Pro)
-	city := strings.TrimSpace(locationResp.City)
+	city = strings.TrimSpace(locationResp.City)
 
 	if region == "" {
 		region = "未知"
@@ -107,23 +158,80 @@ func GetRealAddressByIP(ip string) string {
 		city = "未知"
 	}
 
-	return fmt.Sprintf("%s %s", region, city)
+	// pconline返回的是省份和城市，国家默认为中国
+	country = "中国"
+	location = fmt.Sprintf("%s %s", region, city)
+
+	return country, city, location, nil
 }
 
-// TestIPLocation 测试IP地理位置查询功能
-func TestIPLocation() {
-	// 测试内网IP
-	internalIP := "192.168.1.100"
-	internalAddress := GetRealAddressByIP(internalIP)
-	fmt.Printf("Internal IP (%s): %s\n", internalIP, internalAddress)
+// getLocationFromIPAPI 从ip-api.com获取地理位置（国际IP更准确）
+func (ils *IPLocationService) getLocationFromIPAPI(ip string) (country, city, location string, err error) {
+	url := fmt.Sprintf("%s%s?fields=status,message,country,countryCode,regionName,city,lat,lon,timezone,isp,org,as,query", ils.apiURL, ip)
 
-	// 测试本地IP
-	localIP := "127.0.0.1"
-	localAddress := GetRealAddressByIP(localIP)
-	fmt.Printf("Local IP (%s): %s\n", localIP, localAddress)
+	client := &http.Client{
+		Timeout: ils.timeout,
+	}
 
-	// 测试外网IP（使用一个示例IP）
-	externalIP := "8.8.8.8"
-	externalAddress := GetRealAddressByIP(externalIP)
-	fmt.Printf("External IP (%s): %s\n", externalIP, externalAddress)
+	resp, err := client.Get(url)
+	if err != nil {
+		ils.logger.Warn("Failed to get IP geolocation", zap.String("ip", ip), zap.Error(err))
+		return UNKNOWN, UNKNOWN, UNKNOWN, nil
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		ils.logger.Warn("IP geolocation API returned non-200 status", zap.String("ip", ip), zap.Int("status", resp.StatusCode))
+		return UNKNOWN, UNKNOWN, UNKNOWN, nil
+	}
+
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		ils.logger.Warn("Failed to read IP geolocation response", zap.String("ip", ip), zap.Error(err))
+		return UNKNOWN, UNKNOWN, UNKNOWN, nil
+	}
+
+	var geoResp IPGeolocationResponse
+	if err := json.Unmarshal(body, &geoResp); err != nil {
+		ils.logger.Warn("Failed to parse IP geolocation response", zap.String("ip", ip), zap.Error(err))
+		return UNKNOWN, UNKNOWN, UNKNOWN, nil
+	}
+
+	// 检查API返回状态
+	if geoResp.Status == "fail" {
+		ils.logger.Warn("IP geolocation API returned fail status", zap.String("ip", ip), zap.String("message", geoResp.Message))
+		return UNKNOWN, UNKNOWN, UNKNOWN, nil
+	}
+
+	country = geoResp.Country
+	if country == "" {
+		country = UNKNOWN
+	}
+
+	city = geoResp.City
+	if city == "" {
+		city = UNKNOWN
+	}
+
+	location = fmt.Sprintf("%s, %s", city, country)
+
+	return country, city, location, nil
+}
+
+// GetRealAddressByIP 根据IP获取真实地址（兼容旧接口，返回完整地址字符串）
+func GetRealAddressByIP(ip string) string {
+	// 内网不查询
+	if IsInternalIP(ip) {
+		return INTERNAL_IP
+	}
+
+	// 创建临时服务实例（使用默认配置）
+	service := NewIPLocationService(nil)
+	_, _, location, _ := service.GetLocation(ip)
+
+	if location == UNKNOWN || location == "" {
+		return UNKNOWN
+	}
+
+	return location
 }

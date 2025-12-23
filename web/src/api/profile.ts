@@ -1,4 +1,4 @@
-import { get, put, post, ApiResponse } from '@/utils/request'
+import { get, put, post, del, ApiResponse } from '@/utils/request'
 
 // 用户资料更新表单 - 对应后端 UpdateUserRequest
 export interface UpdateProfileForm {
@@ -66,6 +66,17 @@ export const updatePreferences = async (data: UpdatePreferencesForm): Promise<Ap
 // 修改密码
 export const changePassword = async (data: ChangePasswordForm): Promise<ApiResponse<null>> => {
   return post('/auth/change-password', data)
+}
+
+// 通过邮箱验证码修改密码
+export interface ChangePasswordByEmailForm {
+  emailCode: string
+  newPassword: string
+  confirmPassword: string
+}
+
+export const changePasswordByEmail = async (data: ChangePasswordByEmailForm): Promise<ApiResponse<null>> => {
+  return post('/auth/change-password/email', data)
 }
 
 // 上传头像
@@ -152,4 +163,42 @@ export const getUserActivity = async (params?: {
   const queryString = queryParams.toString()
   const url = queryString ? `/auth/activity?${queryString}` : '/auth/activity'
   return get(url)
+}
+
+// 设备管理相关接口
+export interface UserDevice {
+  id: number
+  userId: number
+  deviceId: string
+  deviceName: string
+  deviceType: string
+  os: string
+  browser: string
+  userAgent: string
+  ipAddress: string
+  location: string
+  isTrusted: boolean
+  isActive: boolean
+  lastUsedAt: string
+  createdAt: string
+  updatedAt: string
+}
+
+export interface UserDevicesResponse {
+  devices: UserDevice[]
+}
+
+// 获取用户设备列表
+export const getUserDevices = async (): Promise<ApiResponse<UserDevicesResponse>> => {
+  return get('/auth/devices')
+}
+
+// 删除用户设备
+export const deleteUserDevice = async (deviceId: string): Promise<ApiResponse<null>> => {
+  return del(`/auth/devices/${deviceId}`)
+}
+
+// 信任用户设备
+export const trustUserDevice = async (deviceId: string): Promise<ApiResponse<null>> => {
+  return post('/auth/devices/trust', { deviceId })
 }

@@ -20,9 +20,10 @@ import (
 )
 
 type Handlers struct {
-	db            *gorm.DB
-	wsHub         *websocket.Hub
-	searchHandler *search.SearchHandlers
+	db                *gorm.DB
+	wsHub             *websocket.Hub
+	searchHandler     *search.SearchHandlers
+	ipLocationService *utils.IPLocationService
 }
 
 // GetSearchHandler gets the search handler (for scheduled tasks)
@@ -86,10 +87,14 @@ func NewHandlers(db *gorm.DB) *Handlers {
 		}
 	}
 
+	// 初始化IP地理位置服务
+	ipLocationService := utils.NewIPLocationService(logger.Lg)
+
 	return &Handlers{
-		db:            db,
-		wsHub:         wsHub,
-		searchHandler: searchHandler,
+		db:                db,
+		wsHub:             wsHub,
+		searchHandler:     searchHandler,
+		ipLocationService: ipLocationService,
 	}
 }
 
@@ -205,6 +210,10 @@ func (h *Handlers) registerAuthRoutes(r *gin.RouterGroup) {
 		auth.POST("/register/email", h.handleUserSignupByEmail)
 		auth.POST("/send/email", h.handleSendEmailCode)
 
+		// captcha
+		auth.GET("/captcha", h.handleGetCaptcha)
+		auth.POST("/captcha/verify", h.handleVerifyCaptcha)
+
 		// login
 		auth.GET("/login", h.handleUserSigninPage)
 		auth.POST("/login", h.handleUserSignin)
@@ -220,6 +229,12 @@ func (h *Handlers) registerAuthRoutes(r *gin.RouterGroup) {
 		auth.POST("/reset-password", h.handleResetPassword)
 		auth.POST("/reset-password/confirm", h.handleResetPasswordConfirm)
 		auth.POST("/change-password", models.AuthRequired, h.handleChangePassword)
+		auth.POST("/change-password/email", models.AuthRequired, h.handleChangePasswordByEmail)
+
+		// device management
+		auth.GET("/devices", models.AuthRequired, h.handleGetUserDevices)
+		auth.DELETE("/devices", models.AuthRequired, h.handleDeleteUserDevice)
+		auth.POST("/devices/trust", models.AuthRequired, h.handleTrustUserDevice)
 
 		// email verification
 		auth.GET("/verify-email", h.handleVerifyEmail)

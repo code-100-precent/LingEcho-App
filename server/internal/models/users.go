@@ -50,6 +50,8 @@ type LoginForm struct {
 	Remember      bool   `json:"remember,omitempty"`
 	AuthToken     string `json:"token,omitempty"`
 	TwoFactorCode string `json:"twoFactorCode,omitempty"` // 两步验证码
+	CaptchaID     string `json:"captchaId,omitempty"`     // 图形验证码ID
+	CaptchaCode   string `json:"captchaCode,omitempty"`   // 图形验证码
 }
 
 type EmailOperatorForm struct {
@@ -60,6 +62,8 @@ type EmailOperatorForm struct {
 	Password    string `json:"password"`
 	AuthToken   bool   `json:"AuthToken,omitempty"`
 	Timezone    string `json:"timezone,omitempty"`
+	CaptchaID   string `json:"captchaId,omitempty"`
+	CaptchaCode string `json:"captchaCode,omitempty"`
 }
 
 type RegisterUserForm struct {
@@ -71,6 +75,8 @@ type RegisterUserForm struct {
 	Locale      string `json:"locale"`
 	Timezone    string `json:"timezone"`
 	Source      string `json:"source"`
+	CaptchaID   string `json:"captchaId"`
+	CaptchaCode string `json:"captchaCode"`
 }
 
 type ChangePasswordForm struct {
