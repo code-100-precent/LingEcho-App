@@ -15,6 +15,7 @@ import (
 	"github.com/code-100-precent/LingEcho/internal/task"
 	workflowdef "github.com/code-100-precent/LingEcho/internal/workflow"
 	"github.com/code-100-precent/LingEcho/pkg/cache"
+	"github.com/code-100-precent/LingEcho/pkg/captcha"
 	"github.com/code-100-precent/LingEcho/pkg/config"
 	"github.com/code-100-precent/LingEcho/pkg/constants"
 	"github.com/code-100-precent/LingEcho/pkg/graph"
@@ -120,6 +121,18 @@ func main() {
 		logger.Info("falling back to default local cache")
 	}
 	utils.InitGlobalCache(1024, 5*time.Minute)
+
+	// Initialize global registration guard
+	utils.InitGlobalRegistrationGuard(logger.Lg)
+
+	// Initialize global distributed lock
+	utils.InitGlobalDistributedLock()
+
+	// Initialize global captcha manager
+	captcha.InitGlobalCaptchaManager(nil) // 使用内存存储，可以替换为Redis存储
+
+	// Initialize global login security manager
+	utils.InitGlobalLoginSecurityManager(logger.Lg)
 
 	// 10. Load Prompt System
 	err = prompt.InitPromptSystem(db)

@@ -5,6 +5,8 @@ import { User, Mail, Lock, Eye, EyeOff, Shield, Clock, Globe, AlertTriangle, X }
 import Modal from '../UI/Modal'
 import Button from '../UI/Button'
 import Input from '../UI/Input'
+import PasswordStrength from './PasswordStrength'
+import CaptchaModal from './CaptchaModal'
 import { useAuthStore } from '@/stores/authStore.ts'
 import { showAlert } from '@/utils/notification.ts'
 import { sendEmailCode, registerUserByEmail, registerUser, loginWithPassword, loginWithEmailCode } from '@/api/auth.ts'
@@ -30,12 +32,14 @@ const AuthModal = ({ isOpen, onClose, initialMode = 'login' }: AuthModalProps) =
   const [loginSuccessData, setLoginSuccessData] = useState<any>(null)
   const [showTwoFactorInput, setShowTwoFactorInput] = useState(false)
   const [twoFactorCode, setTwoFactorCode] = useState('')
+  const [showCaptchaModal, setShowCaptchaModal] = useState(false)
+  const [pendingAction, setPendingAction] = useState<'login' | 'register' | null>(null)
   
   // 系统初始化信息
   const [showMemoryDBWarning, setShowMemoryDBWarning] = useState(false)
   const [emailEnabled, setEmailEnabled] = useState(true) // 默认启用邮箱登录
 
-  const { login } = useAuthStore()
+  const { login, updateProfile: updateAuthStore } = useAuthStore()
   const navigate = useNavigate()
 
   // 表单数据
@@ -45,7 +49,9 @@ const AuthModal = ({ isOpen, onClose, initialMode = 'login' }: AuthModalProps) =
     confirmPassword: '',
     userName: '',
     displayName: '',
-    verificationCode: ''
+    verificationCode: '',
+    captchaId: '',
+    captchaCode: ''
   })
 
   // 获取系统初始化信息
@@ -117,12 +123,24 @@ const AuthModal = ({ isOpen, onClose, initialMode = 'login' }: AuthModalProps) =
       })
       
       if (response.code === 200) {
+        // 获取token：优先从data中获取，如果没有则从user对象中获取
+        const token = response.data.token || response.data.user?.token || response.data.user?.authToken || response.data.user?.AuthToken
+        if (!token) {
+          throw new Error('登录成功但未获取到认证令牌，请重试')
+        }
+        
         // 使用authStore的login方法处理登录成功
-        const loginSuccess = await login(response.data.token)
+        const loginSuccess = await login(token)
         if (loginSuccess) {
+          // 如果登录接口返回了user对象，直接更新authStore（确保显示最新的用户信息）
+          if (response.data.user) {
+            updateAuthStore(response.data.user)
+          }
+          
           setLoginSuccessData(response.data)
           setIsLoginSuccess(true)
-          showAlert(`欢迎回来，${response.data.displayName}！`, 'success', '登录成功')
+          const displayName = response.data.user?.displayName || response.data.user?.DisplayName || response.data.displayName || formData.email
+          showAlert(`欢迎回来，${displayName}！`, 'success', '登录成功')
           
           // 检查是否有重定向路径
           const redirectPath = localStorage.getItem('redirectAfterLogin')
@@ -138,10 +156,12 @@ const AuthModal = ({ isOpen, onClose, initialMode = 'login' }: AuthModalProps) =
             }, 1000)
           }
         } else {
-          throw new Error('登录处理失败')
+          throw new Error('登录处理失败：无法获取用户信息')
         }
       } else {
-        throw new Error(response.msg || '登录失败')
+        // 从data中获取详细错误信息
+        const errorMessage = response.data?.message || response.msg || '登录失败'
+        throw new Error(errorMessage)
       }
     } catch (error: any) {
       showAlert(error?.msg || error?.message || '登录失败', 'error', '登录失败')
@@ -193,12 +213,22 @@ const AuthModal = ({ isOpen, onClose, initialMode = 'login' }: AuthModalProps) =
     }
   }
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault()
-    setIsLoading(true)
+  // 处理验证码验证成功
+  const handleCaptchaVerify = (captchaId: string, captchaCode: string) => {
+    setShowCaptchaModal(false)
+    // 继续执行待处理的操作
+    if (pendingAction === 'login') {
+      performLogin(captchaId, captchaCode)
+    } else if (pendingAction === 'register') {
+      performRegister(captchaId, captchaCode)
+    }
+    setPendingAction(null)
+  }
 
+  // 执行登录
+  const performLogin = async (captchaId: string, captchaCode: string) => {
+    setIsLoading(true)
     try {
-      if (mode === 'login') {
         if (loginType === 'email') {
           // 邮箱验证码登录
           if (!formData.verificationCode) {
@@ -211,16 +241,25 @@ const AuthModal = ({ isOpen, onClose, initialMode = 'login' }: AuthModalProps) =
             code: formData.verificationCode,
             timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
             remember: true,
-            authToken: true
+          authToken: true,
+          captchaId: captchaId,
+          captchaCode: captchaCode
           })
           
           if (response.code === 200) {
+            // 获取token：优先从data中获取，如果没有则从user对象中获取
+            const token = response.data.token || response.data.user?.token || response.data.user?.authToken || response.data.user?.AuthToken
+            if (!token) {
+              throw new Error('登录成功但未获取到认证令牌，请重试')
+            }
+            
             // 使用authStore的login方法处理登录成功
-            const loginSuccess = await login(response.data.token)
+            const loginSuccess = await login(token)
             if (loginSuccess) {
               setLoginSuccessData(response.data)
               setIsLoginSuccess(true)
-              showAlert(`欢迎回来，${response.data.displayName}！`, 'success', '登录成功')
+              const displayName = response.data.user?.displayName || response.data.user?.DisplayName || response.data.displayName || formData.email
+              showAlert(`欢迎回来，${displayName}！`, 'success', '登录成功')
               
               // 检查是否有重定向路径
               const redirectPath = localStorage.getItem('redirectAfterLogin')
@@ -236,13 +275,15 @@ const AuthModal = ({ isOpen, onClose, initialMode = 'login' }: AuthModalProps) =
                 }, 1000)
               }
             } else {
-              throw new Error('登录处理失败')
+              throw new Error('登录处理失败：无法获取用户信息')
             }
           } else {
-            throw new Error(response.msg || '登录失败')
+            // 从data中获取详细错误信息
+            const errorMessage = response.data?.message || response.msg || '登录失败'
+            throw new Error(errorMessage)
           }
         } else {
-          // 密码登录
+        // 密码登录 - 需要验证码
           if (!formData.password) {
             showAlert('请输入密码', 'error', '验证失败')
             return
@@ -253,7 +294,9 @@ const AuthModal = ({ isOpen, onClose, initialMode = 'login' }: AuthModalProps) =
             password: formData.password,
             timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
             remember: true,
-            authToken: true
+          authToken: true,
+          captchaId: captchaId,
+          captchaCode: captchaCode
           })
           
           if (response.code === 200) {
@@ -264,16 +307,19 @@ const AuthModal = ({ isOpen, onClose, initialMode = 'login' }: AuthModalProps) =
               return
             }
             
-            // 调试：打印响应数据
-            console.log('Login response:', response.data)
-            console.log('Token from response:', response.data.token)
+            // 获取token：优先从user对象中获取，如果没有则从data中获取
+            const token = response.data.user?.authToken || response.data.user?.AuthToken || response.data.token
+            if (!token) {
+              throw new Error('登录成功但未获取到认证令牌，请重试')
+            }
             
             // 使用authStore的login方法处理登录成功
-            const loginSuccess = await login(response.data.token)
+            const loginSuccess = await login(token)
             if (loginSuccess) {
               setLoginSuccessData(response.data)
               setIsLoginSuccess(true)
-              showAlert(`欢迎回来，${response.data.displayName}！`, 'success', '登录成功')
+              const displayName = response.data.user?.displayName || response.data.user?.DisplayName || response.data.displayName || formData.email
+              showAlert(`欢迎回来，${displayName}！`, 'success', '登录成功')
               
               // 检查是否有重定向路径
               const redirectPath = localStorage.getItem('redirectAfterLogin')
@@ -289,20 +335,33 @@ const AuthModal = ({ isOpen, onClose, initialMode = 'login' }: AuthModalProps) =
                 }, 1000)
               }
             } else {
-              throw new Error('登录处理失败')
+              throw new Error('登录处理失败：无法获取用户信息')
             }
           } else {
-            throw new Error(response.msg || '登录失败')
+            // 从data中获取详细错误信息
+            const errorMessage = response.data?.message || response.msg || '登录失败'
+            throw new Error(errorMessage)
           }
         }
-      } else {
-        // 注册
+    } catch (error: any) {
+      showAlert(error.message || '登录失败', 'error', '登录错误')
+    } finally {
+      setIsLoading(false)
+    }
+  }
+
+  // 执行注册
+  const performRegister = async (captchaId: string, captchaCode: string) => {
+    setIsLoading(true)
+    try {
         if (formData.password !== formData.confirmPassword) {
           showAlert('密码不匹配', 'error', '验证失败')
+        setIsLoading(false)
           return
         }
         if (!formData.displayName) {
           showAlert('请输入显示名', 'error', '验证失败')
+        setIsLoading(false)
           return
         }
         
@@ -329,14 +388,18 @@ const AuthModal = ({ isOpen, onClose, initialMode = 'login' }: AuthModalProps) =
             lastName: formData.userName.split(' ')[1] || '',
             locale: 'zh-CN',
             timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
-            source: 'WEB'
+          source: 'WEB',
+          captchaId,
+          captchaCode
           })
         } else {
-          // 如果没有配置邮箱，使用普通注册（不需要验证码）
+        // 如果没有配置邮箱，使用普通注册
           response = await registerUser({
             email: formData.email,
             password: formData.password,
             displayName: formData.displayName,
+          captchaId,
+          captchaCode,
             firstName: formData.userName?.split(' ')[0] || formData.displayName,
             lastName: formData.userName?.split(' ')[1] || '',
             locale: 'zh-CN',
@@ -346,9 +409,6 @@ const AuthModal = ({ isOpen, onClose, initialMode = 'login' }: AuthModalProps) =
         }
         
         // 注册成功处理
-        // 后端可能返回两种格式：
-        // 1. 标准格式: {code: 200, msg: "...", data: {...}}
-        // 2. 直接格式: {email: "...", activation: false} (HTTP 200 但响应体直接是对象)
         const responseData = (response.data || response) as any
         
         // 检查是否是成功响应
@@ -375,7 +435,7 @@ const AuthModal = ({ isOpen, onClose, initialMode = 'login' }: AuthModalProps) =
             
             const activationMsg = registerData.activation 
               ? '您的账号已激活，可以立即使用。'
-              : '您的账号已创建，请等待管理员激活。'
+            : `激活邮件已发送至 ${registerData.email}，请查收并激活账号。`
             
             showAlert(
               `注册成功！${activationMsg}`,
@@ -383,16 +443,31 @@ const AuthModal = ({ isOpen, onClose, initialMode = 'login' }: AuthModalProps) =
               '注册完成'
             )
           }
+        
+        // 3秒后关闭弹窗
+        setTimeout(() => {
+          onClose()
+        }, 3000)
         } else {
-          throw new Error(response.msg || (response as any).error || '注册失败')
-        }
+        throw new Error(response.msg || '注册失败')
       }
     } catch (error: any) {
-      console.error('Auth error:', error)
-      const errorMessage = error?.msg || error?.message || (mode === 'login' ? '登录失败' : '注册失败')
-      showAlert(errorMessage, 'error', '操作失败')
+      showAlert(error.message || '注册失败', 'error', '注册错误')
     } finally {
       setIsLoading(false)
+    }
+  }
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault()
+    
+    // 先显示验证码弹窗
+    if (mode === 'login') {
+      setPendingAction('login')
+      setShowCaptchaModal(true)
+    } else {
+      setPendingAction('register')
+      setShowCaptchaModal(true)
     }
   }
 
@@ -403,7 +478,9 @@ const AuthModal = ({ isOpen, onClose, initialMode = 'login' }: AuthModalProps) =
       confirmPassword: '',
       userName: '',
       displayName: '',
-      verificationCode: ''
+      verificationCode: '',
+      captchaId: '',
+      captchaCode: ''
     })
     setCountdown(0)
     setIsRegisterSuccess(false)
@@ -418,6 +495,7 @@ const AuthModal = ({ isOpen, onClose, initialMode = 'login' }: AuthModalProps) =
   }
 
   return (
+    <>
     <Modal
       className="z-20"
       isOpen={isOpen}
@@ -958,10 +1036,11 @@ const AuthModal = ({ isOpen, onClose, initialMode = 'login' }: AuthModalProps) =
               />
             )}
 
+            <div>
             <Input
               label="密码"
               type={showPassword ? 'text' : 'password'}
-              placeholder="请输入密码"
+                placeholder="请输入密码（至少8位）"
               value={formData.password}
               onChange={(e) => handleInputChange('password', e.target.value)}
               leftIcon={<Lock className="w-5 h-5" />}
@@ -976,6 +1055,8 @@ const AuthModal = ({ isOpen, onClose, initialMode = 'login' }: AuthModalProps) =
               }
               required
             />
+              <PasswordStrength password={formData.password} />
+            </div>
 
             <Input
               label="确认密码"
@@ -995,6 +1076,7 @@ const AuthModal = ({ isOpen, onClose, initialMode = 'login' }: AuthModalProps) =
               }
               required
             />
+
           </motion.div>
         )}
 
@@ -1105,6 +1187,18 @@ const AuthModal = ({ isOpen, onClose, initialMode = 'login' }: AuthModalProps) =
       </form>
       )}
     </Modal>
+
+    {/* 验证码弹窗 */}
+    <CaptchaModal
+      isOpen={showCaptchaModal}
+      onClose={() => {
+        setShowCaptchaModal(false)
+        setPendingAction(null)
+      }}
+      onVerify={handleCaptchaVerify}
+      title={mode === 'login' ? '登录验证' : '注册验证'}
+    />
+    </>
   )
 }
 

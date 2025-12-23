@@ -14,7 +14,8 @@ import Switch from '../components/UI/Switch'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '../components/UI/Tabs'
 import FadeIn from '../components/Animations/FadeIn'
 import { showAlert } from '../utils/notification'
-import { getProfile, updateProfile, updatePreferences, changePassword, uploadAvatar, setupTwoFactor, enableTwoFactor, disableTwoFactor, getUserActivity, TwoFactorSetupResponse, ActivityLog } from '../api/profile'
+import { getProfile, updateProfile, updatePreferences, changePassword, changePasswordByEmail, uploadAvatar, setupTwoFactor, enableTwoFactor, disableTwoFactor, getUserActivity, getUserDevices, deleteUserDevice, trustUserDevice, TwoFactorSetupResponse, ActivityLog, UserDevice } from '../api/profile'
+import { sendEmailCode } from '../api/auth'
 import { motion, AnimatePresence } from 'framer-motion'
 import AudioController from '../components/UI/AudioController'
 import AuthModal from '../components/Auth/AuthModal'
@@ -43,6 +44,10 @@ const Profile = () => {
   const [isLoadingActivities, setIsLoadingActivities] = useState(false)
   const [activityPage, setActivityPage] = useState(1)
   const [activityTotalPages, setActivityTotalPages] = useState(1)
+  
+  // 设备管理相关状态
+  const [devices, setDevices] = useState<UserDevice[]>([])
+  const [isLoadingDevices, setIsLoadingDevices] = useState(false)
   const [formData, setFormData] = useState({
     email: user?.email || '',
     phone: user?.phone || '',
@@ -61,6 +66,12 @@ const Profile = () => {
     newPassword: '',
     confirmPassword: '',
   })
+  
+  // 密码更改方式：'password' | 'email'
+  const [passwordChangeMethod, setPasswordChangeMethod] = useState<'password' | 'email'>('password')
+  const [emailCode, setEmailCode] = useState('')
+  const [isSendingCode, setIsSendingCode] = useState(false)
+  const [countdown, setCountdown] = useState(0)
 
   // 页面加载时获取最新用户信息
   useEffect(() => {
@@ -113,6 +124,13 @@ const Profile = () => {
   useEffect(() => {
     if (activeTab === 'activity' && isAuthenticated) {
       loadActivities(1)
+    }
+  }, [activeTab, isAuthenticated])
+
+  // 当切换到安全设置标签页时加载设备列表
+  useEffect(() => {
+    if (activeTab === 'security' && isAuthenticated) {
+      loadDevices()
     }
   }, [activeTab, isAuthenticated])
 
@@ -189,6 +207,63 @@ const Profile = () => {
       showAlert(error?.msg || error?.message || '禁用失败', 'error', '操作失败')
     } finally {
       setIsTwoFactorLoading(false)
+    }
+  }
+
+  // 加载设备列表
+  const loadDevices = async () => {
+    setIsLoadingDevices(true)
+    try {
+      const response = await getUserDevices()
+      if (response.code === 200) {
+        setDevices(response.data.devices || [])
+      } else {
+        throw new Error(response.msg || '获取设备列表失败')
+      }
+    } catch (error: any) {
+      showAlert(error?.msg || error?.message || '获取设备列表失败', 'error', '操作失败')
+    } finally {
+      setIsLoadingDevices(false)
+    }
+  }
+
+  // 删除设备
+  const handleDeleteDevice = async (deviceId: string) => {
+    if (!confirm('确定要删除此设备吗？删除后该设备将无法继续登录。')) {
+      return
+    }
+
+    setIsLoading(true)
+    try {
+      const response = await deleteUserDevice(deviceId)
+      if (response.code === 200) {
+        showAlert('设备删除成功', 'success', '操作成功')
+        loadDevices() // 重新加载设备列表
+      } else {
+        throw new Error(response.msg || '删除设备失败')
+      }
+    } catch (error: any) {
+      showAlert(error?.msg || error?.message || '删除设备失败', 'error', '操作失败')
+    } finally {
+      setIsLoading(false)
+    }
+  }
+
+  // 信任设备
+  const handleTrustDevice = async (deviceId: string) => {
+    setIsLoading(true)
+    try {
+      const response = await trustUserDevice(deviceId)
+      if (response.code === 200) {
+        showAlert('设备已信任', 'success', '操作成功')
+        loadDevices() // 重新加载设备列表
+      } else {
+        throw new Error(response.msg || '信任设备失败')
+      }
+    } catch (error: any) {
+      showAlert(error?.msg || error?.message || '信任设备失败', 'error', '操作失败')
+    } finally {
+      setIsLoading(false)
     }
   }
 
@@ -315,6 +390,38 @@ const Profile = () => {
     setIsEditing(false)
   }
 
+  // 发送邮箱验证码
+  const handleSendEmailCode = async () => {
+    if (!user?.email) {
+      showAlert('邮箱地址不存在', 'error', '操作失败')
+      return
+    }
+
+    setIsSendingCode(true)
+    try {
+      const response = await sendEmailCode({ email: user.email })
+      if (response.code === 200) {
+        showAlert('验证码已发送到您的邮箱', 'success', '发送成功')
+        setCountdown(60)
+        const timer = setInterval(() => {
+          setCountdown((prev) => {
+            if (prev <= 1) {
+              clearInterval(timer)
+              return 0
+            }
+            return prev - 1
+          })
+        }, 1000)
+      } else {
+        throw new Error(response.msg || '发送验证码失败')
+      }
+    } catch (error: any) {
+      showAlert(error?.msg || error?.message || '发送验证码失败', 'error', '操作失败')
+    } finally {
+      setIsSendingCode(false)
+    }
+  }
+
   const handlePasswordChange = async () => {
     if (passwordData.newPassword !== passwordData.confirmPassword) {
       showAlert(t('profile.passwordMismatch'), 'error', t('profile.messages.verifyFailed'))
@@ -323,11 +430,43 @@ const Profile = () => {
 
     setIsLoading(true)
     try {
-      const response = await changePassword(passwordData)
+      let response
+      if (passwordChangeMethod === 'password') {
+        // 使用原密码方式
+        if (!passwordData.currentPassword) {
+          showAlert('请输入当前密码', 'error', '验证失败')
+          setIsLoading(false)
+          return
+        }
+        response = await changePassword(passwordData)
+      } else {
+        // 使用邮箱验证码方式
+        if (!emailCode) {
+          showAlert('请输入邮箱验证码', 'error', '验证失败')
+          setIsLoading(false)
+          return
+        }
+        response = await changePasswordByEmail({
+          emailCode,
+          newPassword: passwordData.newPassword,
+          confirmPassword: passwordData.confirmPassword,
+        })
+      }
+
       if (response.code === 200) {
         setPasswordData({ currentPassword: '', newPassword: '', confirmPassword: '' })
+        setEmailCode('')
         setIsChangingPassword(false)
+        setPasswordChangeMethod('password')
+        setCountdown(0)
         showAlert(t('profile.messages.passwordChangeSuccess'), 'success', t('profile.messages.loadSuccess'))
+        
+        // 如果返回了logout标识，说明需要重新登录
+        if ((response.data as any)?.logout) {
+          setTimeout(() => {
+            window.location.href = '/'
+          }, 2000)
+        }
       } else {
         throw new Error(response.msg || '密码修改失败')
       }
@@ -471,14 +610,25 @@ const Profile = () => {
                     </div>
                     <div className="flex-1 min-w-0">
                       <h2 className="text-lg font-semibold text-gray-900 dark:text-white truncate">
-                        {user?.displayName || '用户'}
+                        {(() => {
+                          if (user?.displayName) return user.displayName
+                          if (user?.firstName && user?.lastName) return `${user.firstName} ${user.lastName}`
+                          if (user?.firstName) return user.firstName
+                          if (user?.lastName) return user.lastName
+                          if (user?.email) return user.email.split('@')[0]
+                          return '用户'
+                        })()}
                       </h2>
                       <p className="text-sm text-gray-600 dark:text-gray-400 truncate">
-                        {user?.email}
+                        {user?.email || '未设置邮箱'}
                       </p>
                       <div className="flex items-center mt-1">
                         <div className="w-2 h-2 bg-green-500 rounded-full mr-2"></div>
-                        <span className="text-xs text-gray-500 dark:text-gray-400">{t('profile.online')}</span>
+                        <span className="text-xs text-gray-500 dark:text-gray-400">
+                          {user?.lastLogin 
+                            ? `${t('profile.lastLogin')}: ${new Date(user.lastLogin).toLocaleString('zh-CN')}` 
+                            : t('profile.online')}
+                        </span>
                       </div>
                     </div>
                   </div>
@@ -868,23 +1018,93 @@ const Profile = () => {
                               exit={{ opacity: 0, height: 0 }}
                               className="space-y-4 p-4 bg-gray-50 dark:bg-gray-800 rounded-lg"
                             >
-                              <Input
-                                label="当前密码"
-                                type={showCurrentPassword ? 'text' : 'password'}
-                                value={passwordData.currentPassword}
-                                onChange={(e) => setPasswordData(prev => ({ ...prev, currentPassword: e.target.value }))}
-                                leftIcon={<Lock className="w-4 h-4" />}
-                                rightIcon={
+                              {/* 更改密码方式选择 */}
+                              <div className="mb-4">
+                                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                                  更改密码方式
+                                </label>
+                                <div className="flex space-x-4">
                                   <button
                                     type="button"
-                                    onClick={() => setShowCurrentPassword(!showCurrentPassword)}
-                                    className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300"
+                                    onClick={() => {
+                                      setPasswordChangeMethod('password')
+                                      setEmailCode('')
+                                    }}
+                                    className={`flex-1 px-4 py-2 rounded-md text-sm font-medium transition-colors ${
+                                      passwordChangeMethod === 'password'
+                                        ? 'bg-blue-500 text-white'
+                                        : 'bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-300 dark:hover:bg-gray-600'
+                                    }`}
                                   >
-                                    {showCurrentPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                                    使用当前密码
                                   </button>
-                                }
-                                placeholder="请输入当前密码"
-                              />
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      setPasswordChangeMethod('email')
+                                      setPasswordData(prev => ({ ...prev, currentPassword: '' }))
+                                    }}
+                                    className={`flex-1 px-4 py-2 rounded-md text-sm font-medium transition-colors ${
+                                      passwordChangeMethod === 'email'
+                                        ? 'bg-blue-500 text-white'
+                                        : 'bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-300 dark:hover:bg-gray-600'
+                                    }`}
+                                  >
+                                    使用邮箱验证码
+                                  </button>
+                                </div>
+                              </div>
+
+                              {/* 根据选择的方式显示不同的输入 */}
+                              {passwordChangeMethod === 'password' ? (
+                                <Input
+                                  label="当前密码"
+                                  type={showCurrentPassword ? 'text' : 'password'}
+                                  value={passwordData.currentPassword}
+                                  onChange={(e) => setPasswordData(prev => ({ ...prev, currentPassword: e.target.value }))}
+                                  leftIcon={<Lock className="w-4 h-4" />}
+                                  rightIcon={
+                                    <button
+                                      type="button"
+                                      onClick={() => setShowCurrentPassword(!showCurrentPassword)}
+                                      className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300"
+                                    >
+                                      {showCurrentPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                                    </button>
+                                  }
+                                  placeholder="请输入当前密码"
+                                />
+                              ) : (
+                                <div className="space-y-2">
+                                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                                    邮箱验证码
+                                  </label>
+                                  <div className="flex space-x-2">
+                                    <div className="flex-1">
+                                      <Input
+                                        label=""
+                                        type="text"
+                                        value={emailCode}
+                                        onChange={(e) => setEmailCode(e.target.value)}
+                                        leftIcon={<Mail className="w-4 h-4" />}
+                                        placeholder="请输入邮箱验证码"
+                                      />
+                                    </div>
+                                    <Button
+                                      variant="outline"
+                                      size="sm"
+                                      onClick={handleSendEmailCode}
+                                      disabled={isSendingCode || countdown > 0}
+                                      className="whitespace-nowrap self-end"
+                                    >
+                                      {countdown > 0 ? `${countdown}秒` : isSendingCode ? '发送中...' : '发送验证码'}
+                                    </Button>
+                                  </div>
+                                  <p className="text-xs text-gray-500 dark:text-gray-400">
+                                    验证码将发送到 {user?.email}
+                                  </p>
+                                </div>
+                              )}
                               
                               <Input
                                 label="新密码"
@@ -928,6 +1148,9 @@ const Profile = () => {
                                   onClick={() => {
                                     setIsChangingPassword(false)
                                     setPasswordData({ currentPassword: '', newPassword: '', confirmPassword: '' })
+                                    setEmailCode('')
+                                    setPasswordChangeMethod('password')
+                                    setCountdown(0)
                                   }}
                                   disabled={isLoading}
                                 >
@@ -990,6 +1213,94 @@ const Profile = () => {
                               </Button>
                             )}
                           </div>
+                        </div>
+
+                        {/* 设备管理 */}
+                        <div className="mt-6">
+                          <div className="flex items-center justify-between mb-4">
+                            <h4 className="text-md font-semibold text-gray-900 dark:text-white">设备管理</h4>
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={loadDevices}
+                              disabled={isLoadingDevices}
+                            >
+                              {isLoadingDevices ? '加载中...' : '刷新'}
+                            </Button>
+                          </div>
+                          
+                          {isLoadingDevices ? (
+                            <div className="flex items-center justify-center py-8">
+                              <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
+                              <span className="ml-2 text-gray-600 dark:text-gray-400">加载中...</span>
+                            </div>
+                          ) : devices.length === 0 ? (
+                            <div className="text-center py-8 bg-gray-50 dark:bg-gray-800 rounded-lg">
+                              <Settings className="w-12 h-12 text-gray-400 mx-auto mb-4" />
+                              <p className="text-gray-500 dark:text-gray-400">暂无设备记录</p>
+                            </div>
+                          ) : (
+                            <div className="space-y-3">
+                              {devices.map((device) => (
+                                <motion.div
+                                  key={device.id}
+                                  initial={{ opacity: 0, y: 20 }}
+                                  animate={{ opacity: 1, y: 0 }}
+                                  className="flex items-center justify-between p-4 bg-gray-50 dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700"
+                                >
+                                  <div className="flex items-center space-x-4 flex-1">
+                                    <div className={`p-2 rounded-lg ${
+                                      device.isTrusted 
+                                        ? 'bg-green-100 dark:bg-green-900/30' 
+                                        : 'bg-gray-100 dark:bg-gray-700'
+                                    }`}>
+                                      <Settings className={`w-5 h-5 ${
+                                        device.isTrusted 
+                                          ? 'text-green-600 dark:text-green-400' 
+                                          : 'text-gray-600 dark:text-gray-400'
+                                      }`} />
+                                    </div>
+                                    <div className="flex-1">
+                                      <div className="flex items-center space-x-2">
+                                        <h5 className="text-sm font-medium text-gray-900 dark:text-white">
+                                          {device.deviceName || `${device.browser} on ${device.os}`}
+                                        </h5>
+                                        {device.isTrusted && (
+                                          <Badge variant="success" className="text-xs">已信任</Badge>
+                                        )}
+                                      </div>
+                                      <p className="text-xs text-gray-600 dark:text-gray-400 mt-1">
+                                        {device.os} • {device.browser}
+                                      </p>
+                                      <p className="text-xs text-gray-500 dark:text-gray-500 mt-1">
+                                        {device.location || device.ipAddress} • 最后使用: {new Date(device.lastUsedAt).toLocaleString('zh-CN')}
+                                      </p>
+                                    </div>
+                                  </div>
+                                  <div className="flex items-center space-x-2">
+                                    {!device.isTrusted && (
+                                      <Button
+                                        variant="outline"
+                                        size="sm"
+                                        onClick={() => handleTrustDevice(device.deviceId)}
+                                        disabled={isLoading}
+                                      >
+                                        信任
+                                      </Button>
+                                    )}
+                                    <Button
+                                      variant="destructive"
+                                      size="sm"
+                                      onClick={() => handleDeleteDevice(device.deviceId)}
+                                      disabled={isLoading}
+                                    >
+                                      删除
+                                    </Button>
+                                  </div>
+                                </motion.div>
+                              ))}
+                            </div>
+                          )}
                         </div>
                       </div>
                     </div>

@@ -178,5 +178,9 @@ func RunMigrations(db *gorm.DB) error {
 		&models.WorkflowInstance{},
 		&models.WorkflowVersion{},
 		&models.OverviewConfig{},
+		// Login security models
+		&models.UserDevice{},   // 用户设备管理表
+		&models.LoginHistory{}, // 登录历史记录表
+		&models.AccountLock{},  // 账号锁定记录表
 	})
 }
