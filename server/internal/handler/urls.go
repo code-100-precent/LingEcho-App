@@ -214,6 +214,9 @@ func (h *Handlers) registerAuthRoutes(r *gin.RouterGroup) {
 		auth.GET("/captcha", h.handleGetCaptcha)
 		auth.POST("/captcha/verify", h.handleVerifyCaptcha)
 
+		// password encryption salt
+		auth.GET("/salt", h.handleGetSalt)
+
 		// login
 		auth.GET("/login", h.handleUserSigninPage)
 		auth.POST("/login", h.handleUserSignin)

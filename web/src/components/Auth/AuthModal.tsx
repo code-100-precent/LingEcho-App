@@ -10,6 +10,7 @@ import CaptchaModal from './CaptchaModal'
 import { useAuthStore } from '@/stores/authStore.ts'
 import { showAlert } from '@/utils/notification.ts'
 import { sendEmailCode, registerUserByEmail, registerUser, loginWithPassword, loginWithEmailCode } from '@/api/auth.ts'
+import { encryptPasswordToString } from '@/utils/passwordEncrypt.ts'
 import { getSystemInit } from '@/api/system.ts'
 
 interface AuthModalProps {
@@ -113,9 +114,12 @@ const AuthModal = ({ isOpen, onClose, initialMode = 'login' }: AuthModalProps) =
 
     setIsLoading(true)
     try {
+      // 加密密码
+      const encryptedPassword = await encryptPasswordToString(formData.password)
+      
       const response = await loginWithPassword({
         email: formData.email,
-        password: formData.password,
+        password: encryptedPassword,
         timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
         remember: true,
         authToken: true,
@@ -289,9 +293,12 @@ const AuthModal = ({ isOpen, onClose, initialMode = 'login' }: AuthModalProps) =
             return
           }
           
+          // 加密密码
+          const encryptedPassword = await encryptPasswordToString(formData.password)
+          
           const response = await loginWithPassword({
             email: formData.email,
-            password: formData.password,
+            password: encryptedPassword,
             timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
             remember: true,
           authToken: true,
@@ -378,9 +385,12 @@ const AuthModal = ({ isOpen, onClose, initialMode = 'login' }: AuthModalProps) =
             return
           }
           
+          // 加密密码
+          const encryptedPassword = await encryptPasswordToString(formData.password)
+          
           response = await registerUserByEmail({
             email: formData.email,
-            password: formData.password,
+            password: encryptedPassword,
             userName: formData.userName,
             displayName: formData.displayName,
             code: formData.verificationCode,
@@ -394,9 +404,12 @@ const AuthModal = ({ isOpen, onClose, initialMode = 'login' }: AuthModalProps) =
           })
         } else {
         // 如果没有配置邮箱，使用普通注册
+          // 加密密码
+          const encryptedPassword = await encryptPasswordToString(formData.password)
+          
           response = await registerUser({
             email: formData.email,
-            password: formData.password,
+            password: encryptedPassword,
             displayName: formData.displayName,
           captchaId,
           captchaCode,
@@ -641,7 +654,7 @@ const AuthModal = ({ isOpen, onClose, initialMode = 'login' }: AuthModalProps) =
             transition={{ delay: 0.4 }}
             className="text-gray-600 dark:text-gray-400 mb-6"
           >
-            欢迎回来，<span className="font-medium text-primary">{loginSuccessData.displayName}</span>！
+            欢迎回来，<span className="font-medium text-primary">{loginSuccessData.user?.displayName || loginSuccessData.user?.DisplayName || loginSuccessData.displayName || '用户'}</span>！
           </motion.p>
           
           <motion.div
@@ -653,15 +666,15 @@ const AuthModal = ({ isOpen, onClose, initialMode = 'login' }: AuthModalProps) =
             <div className="text-sm text-gray-500 dark:text-gray-400 space-y-2 text-center">
               <div className="flex items-center justify-center gap-2">
                 <Mail className="w-4 h-4" />
-                <span>邮箱：{loginSuccessData.email}</span>
+                <span>邮箱：{loginSuccessData.user?.email || loginSuccessData.email || ''}</span>
               </div>
               <div className="flex items-center justify-center gap-2">
                 <User className="w-4 h-4" />
-                <span>显示名：{loginSuccessData.displayName}</span>
+                <span>显示名：{loginSuccessData.user?.displayName || loginSuccessData.user?.DisplayName || loginSuccessData.displayName || '用户'}</span>
               </div>
               <div className="flex items-center justify-center gap-2">
                 <Clock className="w-4 h-4" />
-                <span>最后登录：{new Date(loginSuccessData.lastLogin).toLocaleString()}</span>
+                <span>最后登录：{loginSuccessData.user?.lastLogin ? new Date(loginSuccessData.user.lastLogin).toLocaleString('zh-CN') : loginSuccessData.lastLogin ? new Date(loginSuccessData.lastLogin).toLocaleString('zh-CN') : '未知'}</span>
               </div>
             </div>
             

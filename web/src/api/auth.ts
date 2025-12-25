@@ -75,18 +75,41 @@ export interface EmailCodeLoginForm {
 
 // 登录响应数据类型
 export interface LoginResponseData {
-  createdAt: string
-  updatedAt: string
-  displayName: string
-  email: string
-  emailNotifications: boolean
-  firstName: string
-  hasFilledDetails: boolean
-  lastLogin: string
-  lastName: string
-  timezone: string
-  token: string
-  requiresTwoFactor: boolean
+  token?: string
+  user?: {
+    id?: number | string
+    createdAt?: string
+    updatedAt?: string
+    displayName?: string
+    DisplayName?: string
+    email?: string
+    emailNotifications?: boolean
+    firstName?: string
+    hasFilledDetails?: boolean
+    lastLogin?: string
+    lastName?: string
+    timezone?: string
+    token?: string
+    authToken?: string
+    AuthToken?: string
+    requiresTwoFactor?: boolean
+    [key: string]: any
+  }
+  createdAt?: string
+  updatedAt?: string
+  displayName?: string
+  DisplayName?: string
+  email?: string
+  emailNotifications?: boolean
+  firstName?: string
+  hasFilledDetails?: boolean
+  lastLogin?: string
+  lastName?: string
+  timezone?: string
+  requiresTwoFactor?: boolean
+  message?: string
+  suspiciousLogin?: boolean
+  [key: string]: any
 }
 
 // 注册响应数据类型

@@ -328,7 +328,6 @@ func (h *Handlers) handleUserSigninByPassword(c *gin.Context) {
 		}
 		if isProxy {
 			logger.Warn("Login attempt from proxy IP", zap.String("ip", clientIP), zap.String("email", form.Email))
-			// 可以记录但不阻止，或者根据策略决定是否阻止
 		}
 	}
 
@@ -403,7 +402,6 @@ func (h *Handlers) handleUserSigninByPassword(c *gin.Context) {
 			}
 			if needsEmailVerification {
 				// 需要邮箱验证码，但这里先检查密码是否正确
-				// 如果密码错误，直接返回
 				if !models.CheckPassword(user, form.Password) {
 					logger.Warn("Login failed: incorrect password (email verification required)", zap.String("email", form.Email), zap.Uint("userID", user.ID), zap.String("ip", clientIP))
 					if utils.GlobalLoginSecurityManager != nil {
@@ -457,8 +455,18 @@ func (h *Handlers) handleUserSigninByPassword(c *gin.Context) {
 			}
 		}
 
-		// 7. 验证密码
-		if !models.CheckPassword(user, form.Password) {
+		// 7. 验证密码（支持加密密码和明文密码）
+		passwordValid := false
+		// 检查是否是加密密码格式（passwordHash:encryptedHash:salt:timestamp）
+		if strings.Contains(form.Password, ":") && len(strings.Split(form.Password, ":")) == 4 {
+			// 加密密码验证
+			passwordValid = models.VerifyEncryptedPassword(form.Password, user.Password)
+		} else {
+			// 明文密码（向后兼容）
+			passwordValid = models.CheckPassword(user, form.Password)
+		}
+
+		if !passwordValid {
 			logger.Warn("Login failed: incorrect password", zap.String("email", form.Email), zap.Uint("userID", user.ID), zap.String("ip", clientIP))
 			// 记录失败登录
 			if utils.GlobalLoginSecurityManager != nil {
@@ -774,7 +782,17 @@ func (h *Handlers) handleUserSignup(c *gin.Context) {
 		return
 	}
 
-	user, err := models.CreateUser(db, form.Email, form.Password)
+	// 处理加密密码：如果是加密格式，提取原始密码哈希
+	passwordToStore := form.Password
+	if strings.Contains(form.Password, ":") && len(strings.Split(form.Password, ":")) == 4 {
+		// 加密密码格式：passwordHash:encryptedHash:salt:timestamp
+		parts := strings.Split(form.Password, ":")
+		passwordHash := parts[0]
+		// 提取原始密码的哈希，加上 sha256$ 前缀
+		passwordToStore = fmt.Sprintf("sha256$%s", passwordHash)
+	}
+
+	user, err := models.CreateUser(db, form.Email, passwordToStore)
 	if err != nil {
 		if utils.GlobalRegistrationGuard != nil {
 			utils.GlobalRegistrationGuard.RecordRegistrationAttempt(clientIP, form.Email, false, err.Error())
@@ -931,7 +949,17 @@ func (h *Handlers) handleUserSignupByEmail(c *gin.Context) {
 	// 清除已用验证码
 	utils.GlobalCache.Remove(form.Email)
 
-	user, err := models.CreateUserByEmail(db, form.UserName, form.DisplayName, form.Email, form.Password)
+	// 处理加密密码：如果是加密格式，提取原始密码哈希
+	passwordToStore := form.Password
+	if strings.Contains(form.Password, ":") && len(strings.Split(form.Password, ":")) == 4 {
+		// 加密密码格式：passwordHash:encryptedHash:salt:timestamp
+		parts := strings.Split(form.Password, ":")
+		passwordHash := parts[0]
+		// 提取原始密码的哈希，加上 sha256$ 前缀（HashPassword 会检查并直接返回）
+		passwordToStore = fmt.Sprintf("sha256$%s", passwordHash)
+	}
+
+	user, err := models.CreateUserByEmail(db, form.UserName, form.DisplayName, form.Email, passwordToStore)
 	if err != nil {
 		if utils.GlobalRegistrationGuard != nil {
 			utils.GlobalRegistrationGuard.RecordRegistrationAttempt(clientIP, form.Email, false, err.Error())
@@ -1414,6 +1442,26 @@ func (h *Handlers) handleVerifyPhone(c *gin.Context) {
 	}
 
 	response.Success(c, "Phone verified successfully", nil)
+}
+
+// handleGetSalt 获取随机盐（用于密码加密）
+func (h *Handlers) handleGetSalt(c *gin.Context) {
+	// 生成随机盐（32字符）
+	salt := utils.GenerateRandomString(32)
+	timestamp := time.Now().Unix()
+	expiresIn := int64(300) // 5分钟有效期
+
+	// 将盐和时间戳存储到缓存中，用于验证
+	key := fmt.Sprintf("password_salt:%s", salt)
+	if utils.GlobalCache != nil {
+		utils.GlobalCache.Add(key, timestamp)
+	}
+
+	response.Success(c, "success", gin.H{
+		"salt":      salt,
+		"timestamp": timestamp,
+		"expiresIn": expiresIn,
+	})
 }
 
 // handleSendPhoneVerification 发送手机验证码

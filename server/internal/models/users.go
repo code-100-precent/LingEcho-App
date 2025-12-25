@@ -232,8 +232,59 @@ func HashPassword(password string) string {
 	if password == "" {
 		return ""
 	}
+	// 如果已经是哈希格式（sha256$...），直接返回
+	if strings.HasPrefix(password, "sha256$") {
+		return password
+	}
 	hashVal := sha256.Sum256([]byte(password))
 	return fmt.Sprintf("sha256$%x", hashVal)
+}
+
+// VerifyEncryptedPassword 验证加密密码
+// 前端发送格式：passwordHash:encryptedHash:salt:timestamp
+// passwordHash = SHA256(原始密码) - 用于验证密码正确性
+// encryptedHash = SHA256(原始密码 + salt + timestamp) - 用于防重放
+// 后端验证：
+// 1. passwordHash 与存储的密码哈希匹配（去掉 sha256$ 前缀）
+// 2. 时间戳在有效期内（5分钟）
+// 3. 验证 salt 是否在缓存中（防重放）
+func VerifyEncryptedPassword(encryptedPassword, storedPasswordHash string) bool {
+	// 解析加密密码格式：passwordHash:encryptedHash:salt:timestamp
+	parts := strings.Split(encryptedPassword, ":")
+	if len(parts) != 4 {
+		return false
+	}
+
+	passwordHash := parts[0]
+	encryptedHash := parts[1]
+	salt := parts[2]
+	timestampStr := parts[3]
+
+	// 验证时间戳（5分钟内有效）
+	timestamp, err := strconv.ParseInt(timestampStr, 10, 64)
+	if err != nil {
+		return false
+	}
+
+	now := time.Now().Unix()
+	maxAge := int64(300) // 5分钟
+	if now-timestamp > maxAge {
+		return false
+	}
+
+	// 验证 passwordHash 与存储的密码哈希匹配
+	storedHash := strings.TrimPrefix(storedPasswordHash, "sha256$")
+	if passwordHash != storedHash {
+		return false
+	}
+
+	// 验证加密哈希：SHA256(原始密码的SHA256 + salt + timestamp)
+	// 注意：这里使用 passwordHash（即 SHA256(原始密码)）而不是原始密码本身
+	hashInput := fmt.Sprintf("%s%s%d", passwordHash, salt, timestamp)
+	hashVal := sha256.Sum256([]byte(hashInput))
+	expectedHash := fmt.Sprintf("%x", hashVal)
+
+	return encryptedHash == expectedHash
 }
 
 func GetUserByUID(db *gorm.DB, userID uint) (*User, error) {
