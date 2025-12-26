@@ -116,7 +116,6 @@ lingecho.com_bundle.pem
 
 xiaozhi-esp32-server-main/
 .env
-search
 pnpm-lock.yaml
 
 __pycache__
