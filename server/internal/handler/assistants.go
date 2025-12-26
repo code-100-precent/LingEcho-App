@@ -18,6 +18,7 @@ import (
 	"github.com/code-100-precent/LingEcho/internal/models"
 	"github.com/code-100-precent/LingEcho/pkg/config"
 	"github.com/code-100-precent/LingEcho/pkg/constants"
+	"github.com/code-100-precent/LingEcho/pkg/graph"
 	"github.com/code-100-precent/LingEcho/pkg/logger"
 	"github.com/code-100-precent/LingEcho/pkg/response"
 	"github.com/code-100-precent/LingEcho/pkg/utils"
@@ -311,6 +312,56 @@ func (h *Handlers) UpdateAssistantJS(c *gin.Context) {
 	}
 
 	response.Success(c, "Update successful", nil)
+}
+
+// GetAssistantGraphData 获取助手在图数据库中的图数据
+func (h *Handlers) GetAssistantGraphData(c *gin.Context) {
+	user := models.CurrentUser(c)
+	if user == nil {
+		response.Fail(c, "unauthorized", "User not logged in")
+		return
+	}
+
+	id, _ := strconv.ParseInt(c.Param("id"), 10, 64)
+	var assistant models.Assistant
+	if err := h.db.First(&assistant, id).Error; err != nil {
+		response.Fail(c, "not found", "Assistant does not exist")
+		return
+	}
+
+	if assistant.UserID != user.ID {
+		response.Fail(c, "forbidden", "No permission to access this assistant")
+		return
+	}
+
+	// 检查是否启用了 Neo4j
+	if !config.GlobalConfig.Neo4jEnabled {
+		response.Fail(c, "Neo4j not enabled", "Neo4j is not enabled in the system")
+		return
+	}
+
+	// 检查助手是否启用了图记忆
+	if !assistant.EnableGraphMemory {
+		response.Fail(c, "Graph memory not enabled", "Graph memory is not enabled for this assistant")
+		return
+	}
+
+	// 获取图数据
+	store := graph.GetDefaultStore()
+	if store == nil {
+		response.Fail(c, "Graph store not available", "Graph store is not initialized")
+		return
+	}
+
+	ctx := c.Request.Context()
+	graphData, err := store.GetAssistantGraphData(ctx, id)
+	if err != nil {
+		logger.Error("Failed to get assistant graph data", zap.Error(err), zap.Int64("assistantID", id))
+		response.Fail(c, "Failed to get graph data", err.Error())
+		return
+	}
+
+	response.Success(c, "Graph data retrieved successfully", graphData)
 }
 
 // DeleteAssistant Delete assistant

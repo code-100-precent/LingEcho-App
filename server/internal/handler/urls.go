@@ -453,6 +453,8 @@ func (h *Handlers) registerAssistantRoutes(r *gin.RouterGroup) {
 
 		assistant.GET("/:id", models.AuthRequired, h.GetAssistant)
 
+		assistant.GET("/:id/graph", models.AuthRequired, h.GetAssistantGraphData)
+
 		assistant.PUT("/:id", models.AuthRequired, h.UpdateAssistant)
 
 		assistant.DELETE("/:id", models.AuthRequired, h.DeleteAssistant)

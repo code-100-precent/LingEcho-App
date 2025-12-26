@@ -52,6 +52,7 @@
     "react-router-dom": "^6.20.1",
     "recharts": "^3.5.1",
     "tailwind-merge": "^2.2.0",
+    "vis-network": "^10.0.2",
     "ws": "^8.18.3",
     "zustand": "^4.4.7"
   },
