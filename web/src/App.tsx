@@ -23,6 +23,7 @@ import ProtectedRoute from "@/components/Auth/ProtectedRoute.tsx";
 import JSTemplateManager from "@/pages/JSTemplateManager.tsx";
 import Assistants from '@/pages/Assistants.tsx';
 import AssistantTools from '@/pages/AssistantTools.tsx';
+import AssistantGraph from '@/pages/AssistantGraph.tsx';
 import Billing from '@/pages/Billing.tsx';
 import Groups from '@/pages/Groups.tsx';
 import GroupMembers from '@/pages/GroupMembers.tsx';
@@ -101,6 +102,13 @@ function App() {
                             <ProtectedRoute>
                                 <Layout>
                                     <AssistantTools />
+                                </Layout>
+                            </ProtectedRoute>
+                        } />
+                        <Route path="/assistants/:id/graph" element={
+                            <ProtectedRoute>
+                                <Layout>
+                                    <AssistantGraph />
                                 </Layout>
                             </ProtectedRoute>
                         } />

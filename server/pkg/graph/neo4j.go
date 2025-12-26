@@ -30,6 +30,9 @@ type Store interface {
 	// GetUserContext 获取用户上下文（偏好、历史主题等）
 	GetUserContext(ctx context.Context, userID uint, assistantID int64) (*UserContext, error)
 
+	// GetAssistantGraphData 获取助手在图数据库中的完整图数据
+	GetAssistantGraphData(ctx context.Context, assistantID int64) (*AssistantGraphData, error)
+
 	// Close 关闭连接
 	Close() error
 }
@@ -318,6 +321,327 @@ func (s *Neo4jStore) GetUserContext(ctx context.Context, userID uint, assistantI
 	}
 
 	return result.(*UserContext), nil
+}
+
+// GetAssistantGraphData 获取助手在图数据库中的完整图数据
+func (s *Neo4jStore) GetAssistantGraphData(ctx context.Context, assistantID int64) (*AssistantGraphData, error) {
+	session := s.driver.NewSession(ctx, neo4j.SessionConfig{
+		DatabaseName: s.db,
+		AccessMode:   neo4j.AccessModeRead,
+	})
+	defer session.Close(ctx)
+
+	result, err := session.ExecuteRead(ctx, func(tx neo4j.ManagedTransaction) (any, error) {
+		return s.getDetailedGraphData(tx, ctx, assistantID)
+	})
+
+	if err != nil {
+		return nil, fmt.Errorf("failed to get assistant graph data: %w", err)
+	}
+
+	return result.(*AssistantGraphData), nil
+}
+
+// getDetailedGraphData 获取详细的图数据（当简单查询返回空时使用）
+func (s *Neo4jStore) getDetailedGraphData(tx neo4j.ManagedTransaction, ctx context.Context, assistantID int64) (*AssistantGraphData, error) {
+	nodesMap := make(map[string]GraphNode)
+	edges := []GraphEdge{}
+
+	// 1. 获取助手节点
+	assistantQuery := `
+		MATCH (a:Assistant {id: $assistantID})
+		RETURN a`
+	result, err := tx.Run(ctx, assistantQuery, map[string]any{"assistantID": assistantID})
+	if err == nil {
+		if record, err := result.Single(ctx); err == nil {
+			if aNode, ok := record.Get("a"); ok {
+				if node, ok := aNode.(neo4j.Node); ok {
+					nodeID := fmt.Sprintf("Assistant_%d", assistantID)
+					name := ""
+					if nameVal, ok := node.Props["name"].(string); ok {
+						name = nameVal
+					}
+					nodesMap[nodeID] = GraphNode{
+						ID:    nodeID,
+						Label: name,
+						Type:  "Assistant",
+						Props: node.Props,
+					}
+				}
+			}
+		}
+	}
+
+	// 2. 获取对话节点及其关系
+	conversationQuery := `
+		MATCH (a:Assistant {id: $assistantID})<-[:WITH_ASSISTANT]-(c:Conversation)
+		OPTIONAL MATCH (u:User)-[:HAS_CONVERSATION]->(c)
+		RETURN c, c.sessionID as sessionID, collect(DISTINCT u.id) as userIds`
+	result, err = tx.Run(ctx, conversationQuery, map[string]any{"assistantID": assistantID})
+	if err == nil {
+		edgeCounter := 0
+		for result.Next(ctx) {
+			record := result.Record()
+			if cNode, ok := record.Get("c"); ok {
+				if node, ok := cNode.(neo4j.Node); ok {
+					sessionID := ""
+					if sessionVal, ok := record.Get("sessionID"); ok {
+						if s, ok := sessionVal.(string); ok {
+							sessionID = s
+						}
+					}
+					nodeID := fmt.Sprintf("Conversation_%s", sessionID)
+					label := sessionID
+					if len(label) > 20 {
+						label = label[:20] + "..."
+					}
+					nodesMap[nodeID] = GraphNode{
+						ID:    nodeID,
+						Label: label,
+						Type:  "Conversation",
+						Props: node.Props,
+					}
+					// 添加对话-助手边
+					assistantNodeID := fmt.Sprintf("Assistant_%d", assistantID)
+					edges = append(edges, GraphEdge{
+						ID:     fmt.Sprintf("edge_conv_assistant_%d", edgeCounter),
+						Source: nodeID,
+						Target: assistantNodeID,
+						Type:   "WITH_ASSISTANT",
+						Props:  map[string]interface{}{},
+					})
+					edgeCounter++
+					// 添加用户-对话边
+					if userIds, ok := record.Get("userIds"); ok {
+						if ids, ok := userIds.([]interface{}); ok {
+							for _, idVal := range ids {
+								userID := int64(0)
+								// 处理不同的数字类型
+								if id, ok := idVal.(int64); ok {
+									userID = id
+								} else if id, ok := idVal.(int32); ok {
+									userID = int64(id)
+								} else if id, ok := idVal.(float64); ok {
+									userID = int64(id)
+								}
+								if userID > 0 {
+									userNodeID := fmt.Sprintf("User_%d", userID)
+									edges = append(edges, GraphEdge{
+										ID:     fmt.Sprintf("edge_user_conv_%d_%d", edgeCounter, userID),
+										Source: userNodeID,
+										Target: nodeID,
+										Type:   "HAS_CONVERSATION",
+										Props:  map[string]interface{}{},
+									})
+									edgeCounter++
+								}
+							}
+						}
+					}
+				}
+			}
+		}
+	}
+
+	// 3. 获取用户节点
+	userQuery := `
+		MATCH (a:Assistant {id: $assistantID})<-[:WITH_ASSISTANT]-(c:Conversation)<-[:HAS_CONVERSATION]-(u:User)
+		RETURN DISTINCT u`
+	result, err = tx.Run(ctx, userQuery, map[string]any{"assistantID": assistantID})
+	if err == nil {
+		for result.Next(ctx) {
+			record := result.Record()
+			if uNode, ok := record.Get("u"); ok {
+				if node, ok := uNode.(neo4j.Node); ok {
+					userID := int64(0)
+					// 处理不同的数字类型
+					if idVal, ok := node.Props["id"].(int64); ok {
+						userID = idVal
+					} else if idVal, ok := node.Props["id"].(int32); ok {
+						userID = int64(idVal)
+					} else if idVal, ok := node.Props["id"].(float64); ok {
+						userID = int64(idVal)
+					}
+					nodeID := fmt.Sprintf("User_%d", userID)
+					nodesMap[nodeID] = GraphNode{
+						ID:    nodeID,
+						Label: fmt.Sprintf("User %d", userID),
+						Type:  "User",
+						Props: node.Props,
+					}
+				}
+			}
+		}
+	}
+
+	// 4. 获取主题节点及其关系
+	topicQuery := `
+		MATCH (a:Assistant {id: $assistantID})<-[:WITH_ASSISTANT]-(c:Conversation)-[r:DISCUSSES]->(t:Topic)
+		RETURN DISTINCT t, c.sessionID as sessionID`
+	result, err = tx.Run(ctx, topicQuery, map[string]any{"assistantID": assistantID})
+	if err == nil {
+		edgeCounter := len(edges)
+		for result.Next(ctx) {
+			record := result.Record()
+			if tNode, ok := record.Get("t"); ok {
+				if node, ok := tNode.(neo4j.Node); ok {
+					topicName := ""
+					if nameVal, ok := node.Props["name"].(string); ok {
+						topicName = nameVal
+					}
+					nodeID := fmt.Sprintf("Topic_%s", topicName)
+					nodesMap[nodeID] = GraphNode{
+						ID:    nodeID,
+						Label: topicName,
+						Type:  "Topic",
+						Props: node.Props,
+					}
+					// 添加对话-主题边
+					if sessionID, ok := record.Get("sessionID"); ok {
+						if s, ok := sessionID.(string); ok {
+							convNodeID := fmt.Sprintf("Conversation_%s", s)
+							edges = append(edges, GraphEdge{
+								ID:     fmt.Sprintf("edge_conv_topic_%d", edgeCounter),
+								Source: convNodeID,
+								Target: nodeID,
+								Type:   "DISCUSSES",
+								Props:  map[string]interface{}{},
+							})
+							edgeCounter++
+						}
+					}
+				}
+			}
+		}
+	}
+
+	// 5. 获取意图节点及其关系
+	intentQuery := `
+		MATCH (a:Assistant {id: $assistantID})<-[:WITH_ASSISTANT]-(c:Conversation)-[r:HAS_INTENT]->(i:Intent)
+		RETURN DISTINCT i, c.sessionID as sessionID`
+	result, err = tx.Run(ctx, intentQuery, map[string]any{"assistantID": assistantID})
+	if err == nil {
+		edgeCounter := len(edges)
+		for result.Next(ctx) {
+			record := result.Record()
+			if iNode, ok := record.Get("i"); ok {
+				if node, ok := iNode.(neo4j.Node); ok {
+					intentName := ""
+					if nameVal, ok := node.Props["name"].(string); ok {
+						intentName = nameVal
+					}
+					nodeID := fmt.Sprintf("Intent_%s", intentName)
+					nodesMap[nodeID] = GraphNode{
+						ID:    nodeID,
+						Label: intentName,
+						Type:  "Intent",
+						Props: node.Props,
+					}
+					// 添加对话-意图边
+					if sessionID, ok := record.Get("sessionID"); ok {
+						if s, ok := sessionID.(string); ok {
+							convNodeID := fmt.Sprintf("Conversation_%s", s)
+							edges = append(edges, GraphEdge{
+								ID:     fmt.Sprintf("edge_conv_intent_%d", edgeCounter),
+								Source: convNodeID,
+								Target: nodeID,
+								Type:   "HAS_INTENT",
+								Props:  map[string]interface{}{},
+							})
+							edgeCounter++
+						}
+					}
+				}
+			}
+		}
+	}
+
+	// 6. 获取知识节点
+	knowledgeQuery := `
+		MATCH (a:Assistant {id: $assistantID})-[:HAS_KNOWLEDGE]->(k:Knowledge)
+		RETURN DISTINCT k`
+	result, err = tx.Run(ctx, knowledgeQuery, map[string]any{"assistantID": assistantID})
+	if err == nil {
+		for result.Next(ctx) {
+			record := result.Record()
+			if kNode, ok := record.Get("k"); ok {
+				if node, ok := kNode.(neo4j.Node); ok {
+					knowledgeID := ""
+					if idVal, ok := node.Props["id"].(string); ok {
+						knowledgeID = idVal
+					}
+					nodeID := fmt.Sprintf("Knowledge_%s", knowledgeID)
+					content := ""
+					if contentVal, ok := node.Props["content"].(string); ok {
+						content = contentVal[:min(30, len(contentVal))] + "..."
+					}
+					nodesMap[nodeID] = GraphNode{
+						ID:    nodeID,
+						Label: content,
+						Type:  "Knowledge",
+						Props: node.Props,
+					}
+					// 添加边
+					assistantNodeID := fmt.Sprintf("Assistant_%d", assistantID)
+					edges = append(edges, GraphEdge{
+						ID:     fmt.Sprintf("edge_knowledge_%s", knowledgeID),
+						Source: assistantNodeID,
+						Target: nodeID,
+						Type:   "HAS_KNOWLEDGE",
+						Props:  map[string]interface{}{},
+					})
+				}
+			}
+		}
+	}
+
+	// 转换为切片
+	nodes := make([]GraphNode, 0, len(nodesMap))
+	for _, node := range nodesMap {
+		nodes = append(nodes, node)
+	}
+
+	// 计算统计信息
+	stats := s.calculateStats(nodes)
+	stats.TotalEdges = len(edges)
+
+	return &AssistantGraphData{
+		AssistantID: assistantID,
+		Nodes:       nodes,
+		Edges:       edges,
+		Stats:       stats,
+	}, nil
+}
+
+// calculateStats 计算图统计信息
+func (s *Neo4jStore) calculateStats(nodes []GraphNode) GraphStats {
+	stats := GraphStats{
+		TotalNodes: len(nodes),
+	}
+
+	for _, node := range nodes {
+		switch node.Type {
+		case "User":
+			stats.UsersCount++
+		case "Conversation":
+			stats.ConversationsCount++
+		case "Topic":
+			stats.TopicsCount++
+		case "Intent":
+			stats.IntentsCount++
+		case "Knowledge":
+			stats.KnowledgeCount++
+		}
+	}
+
+	return stats
+}
+
+func min(a, b int) int {
+	if a < b {
+		return a
+	}
+	return b
 }
 
 // Close 关闭连接

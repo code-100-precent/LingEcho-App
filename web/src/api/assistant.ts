@@ -351,3 +351,46 @@ export interface TestToolResponse {
 export const testAssistantTool = async (assistantId: number, toolId: number, args: Record<string, any>): Promise<ApiResponse<TestToolResponse>> => {
   return post(`/assistant/${assistantId}/tools/${toolId}/test`, { args })
 }
+
+// ========== Assistant Graph Data 相关接口 ==========
+
+// 图节点
+export interface GraphNode {
+  id: string
+  label: string
+  type: string // Assistant, User, Conversation, Topic, Intent, Knowledge等
+  props: Record<string, any>
+}
+
+// 图边（关系）
+export interface GraphEdge {
+  id: string
+  source: string
+  target: string
+  type: string // HAS_CONVERSATION, WITH_ASSISTANT, DISCUSSES等
+  props: Record<string, any>
+}
+
+// 图统计信息
+export interface GraphStats {
+  totalNodes: number
+  totalEdges: number
+  usersCount: number
+  conversationsCount: number
+  topicsCount: number
+  intentsCount: number
+  knowledgeCount: number
+}
+
+// 助手图数据
+export interface AssistantGraphData {
+  assistantId: number
+  nodes: GraphNode[]
+  edges: GraphEdge[]
+  stats: GraphStats
+}
+
+// 获取助手图数据
+export const getAssistantGraphData = async (assistantId: number): Promise<ApiResponse<AssistantGraphData>> => {
+  return get(`/assistant/${assistantId}/graph`)
+}
