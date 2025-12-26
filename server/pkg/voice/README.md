@@ -65,7 +65,7 @@ voicev3/
 
 ```go
 import (
-    "github.com/code-100-precent/LingEcho/pkg/voicev3"
+    "github.com/code-100-precent/LingEcho/pkg/voice"
     "github.com/gorilla/websocket"
 )
 
@@ -93,7 +93,7 @@ handler.HandleWebSocket(
 
 ```go
 import (
-    voicev3 "github.com/code-100-precent/LingEcho/pkg/voicev3"
+    voicev3 "github.com/code-100-precent/LingEcho/pkg/voice"
 )
 
 func (h *Handlers) HandleWebSocketVoice(c *gin.Context) {
@@ -106,7 +106,7 @@ func (h *Handlers) HandleWebSocketVoice(c *gin.Context) {
         return
     }
     
-    // 使用 voicev3 处理器
+    // 使用 voice 处理器
     handler := voicev3.NewHandler(h.logger)
     handler.HandleWebSocket(
         c.Request.Context(),

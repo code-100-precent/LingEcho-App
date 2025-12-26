@@ -1,4 +1,4 @@
-package voicev3
+package voice
 
 import (
 	"context"
@@ -7,14 +7,14 @@ import (
 
 	"github.com/code-100-precent/LingEcho/internal/models"
 	"github.com/code-100-precent/LingEcho/pkg/recognizer"
-	"github.com/code-100-precent/LingEcho/pkg/voicev3/asr"
-	"github.com/code-100-precent/LingEcho/pkg/voicev3/errhandler"
-	"github.com/code-100-precent/LingEcho/pkg/voicev3/factory"
-	"github.com/code-100-precent/LingEcho/pkg/voicev3/filter"
-	"github.com/code-100-precent/LingEcho/pkg/voicev3/llm"
-	"github.com/code-100-precent/LingEcho/pkg/voicev3/message"
-	"github.com/code-100-precent/LingEcho/pkg/voicev3/state"
-	"github.com/code-100-precent/LingEcho/pkg/voicev3/tts"
+	"github.com/code-100-precent/LingEcho/pkg/voice/asr"
+	"github.com/code-100-precent/LingEcho/pkg/voice/errhandler"
+	"github.com/code-100-precent/LingEcho/pkg/voice/factory"
+	"github.com/code-100-precent/LingEcho/pkg/voice/filter"
+	"github.com/code-100-precent/LingEcho/pkg/voice/llm"
+	"github.com/code-100-precent/LingEcho/pkg/voice/message"
+	"github.com/code-100-precent/LingEcho/pkg/voice/state"
+	"github.com/code-100-precent/LingEcho/pkg/voice/tts"
 	"github.com/gorilla/websocket"
 	"go.uber.org/zap"
 	"gorm.io/gorm"
@@ -146,7 +146,7 @@ func NewSession(config *SessionConfig) (*Session, error) {
 	)
 
 	// 创建过滤词管理器
-	filterManager, err := filter.NewManager("scripts/filter_blacklist.txt", config.Logger)
+	filterManager, err := filter.NewManager(config.Logger)
 	if err != nil {
 		config.Logger.Warn("创建过滤词管理器失败，将不使用过滤功能", zap.Error(err))
 		filterManager = nil

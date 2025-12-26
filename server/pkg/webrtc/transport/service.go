@@ -16,7 +16,6 @@ import (
 	"github.com/code-100-precent/LingEcho/pkg/recognizer"
 	"github.com/code-100-precent/LingEcho/pkg/synthesizer"
 	"github.com/code-100-precent/LingEcho/pkg/utils"
-	"github.com/code-100-precent/LingEcho/pkg/voice"
 	"github.com/code-100-precent/LingEcho/pkg/webrtc/rtcmedia"
 	"github.com/gorilla/websocket"
 	"github.com/pion/webrtc/v3"
@@ -283,11 +282,8 @@ func NewAIClientWithCredential(
 		}
 	}
 
-	// Create ASR parser factory
-	asrParserFactory := voice.NewASRConfigParserFactory()
-
-	// Parse ASR configuration
-	asrParsedConfig, err := asrParserFactory.Parse(normalizedProvider, asrConfig, language)
+	// Parse ASR configuration using recognizer package (replacing voice package)
+	asrParsedConfig, err := recognizer.NewTranscriberConfigFromMap(normalizedProvider, asrConfig, language)
 	if err != nil {
 		return nil, fmt.Errorf("failed to parse ASR configuration: %w", err)
 	}

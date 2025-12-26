@@ -8,7 +8,7 @@ import (
 	"github.com/code-100-precent/LingEcho/pkg/llm"
 	"github.com/code-100-precent/LingEcho/pkg/recognizer"
 	"github.com/code-100-precent/LingEcho/pkg/synthesizer"
-	"github.com/code-100-precent/LingEcho/pkg/voicev3/errhandler"
+	"github.com/code-100-precent/LingEcho/pkg/voice/errhandler"
 	"go.uber.org/zap"
 )
 

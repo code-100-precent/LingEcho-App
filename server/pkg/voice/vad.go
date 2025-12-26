@@ -1,4 +1,4 @@
-package voicev3
+package voice
 
 import (
 	"math"

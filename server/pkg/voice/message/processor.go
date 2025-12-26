@@ -7,11 +7,11 @@ import (
 
 	"github.com/code-100-precent/LingEcho/pkg/llm"
 	"github.com/code-100-precent/LingEcho/pkg/synthesizer"
-	"github.com/code-100-precent/LingEcho/pkg/voicev3/errhandler"
-	"github.com/code-100-precent/LingEcho/pkg/voicev3/filter"
-	llmv3 "github.com/code-100-precent/LingEcho/pkg/voicev3/llm"
-	"github.com/code-100-precent/LingEcho/pkg/voicev3/state"
-	"github.com/code-100-precent/LingEcho/pkg/voicev3/tts"
+	"github.com/code-100-precent/LingEcho/pkg/voice/errhandler"
+	"github.com/code-100-precent/LingEcho/pkg/voice/filter"
+	llmv3 "github.com/code-100-precent/LingEcho/pkg/voice/llm"
+	"github.com/code-100-precent/LingEcho/pkg/voice/state"
+	"github.com/code-100-precent/LingEcho/pkg/voice/tts"
 	"go.uber.org/zap"
 )
 

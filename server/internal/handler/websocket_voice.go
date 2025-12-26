@@ -13,7 +13,7 @@ import (
 	"github.com/code-100-precent/LingEcho/pkg/hardware"
 	"github.com/code-100-precent/LingEcho/pkg/logger"
 	"github.com/code-100-precent/LingEcho/pkg/response"
-	"github.com/code-100-precent/LingEcho/pkg/voicev3"
+	"github.com/code-100-precent/LingEcho/pkg/voice"
 	"github.com/gin-gonic/gin"
 	"github.com/gorilla/websocket"
 )
@@ -123,7 +123,7 @@ func (h *Handlers) HandleWebSocketVoice(c *gin.Context) {
 	}
 
 	// 创建WebSocket处理器
-	handler := voicev3.NewHandler(logger.Lg)
+	handler := voice.NewHandler(logger.Lg)
 
 	// 处理WebSocket连接
 	// 使用 gin 的 context，这样可以继承请求的取消信号

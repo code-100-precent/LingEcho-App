@@ -135,7 +135,7 @@ func NewSession(config *SessionConfig) (*Session, error) {
 	)
 
 	// 创建过滤词管理器
-	filterManager, err := filter.NewManager("scripts/filter_blacklist.txt", config.Logger)
+	filterManager, err := filter.NewManager(config.Logger)
 	if err != nil {
 		config.Logger.Warn("创建过滤词管理器失败，将不使用过滤功能", zap.Error(err))
 		filterManager = nil
