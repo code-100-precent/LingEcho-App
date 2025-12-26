@@ -46,7 +46,7 @@ func (s *SeedService) seedConfigs() error {
 			if config.GlobalConfig.ServerUrl != "" {
 				return config.GlobalConfig.ServerUrl
 			}
-			return "https://hibiscus.fit"
+			return "https://lingecho.com"
 		}()},
 		{Key: constants.KEY_SITE_NAME, Desc: "Site Name", Autoload: true, Public: true, Format: "text", Value: func() string {
 			if config.GlobalConfig.ServerName != "" {
