@@ -263,7 +263,7 @@ const JSTemplateManager = () => {
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <meta http-equiv="Content-Security-Policy" content="default-src 'self' 'unsafe-inline' 'unsafe-eval'; script-src 'unsafe-inline' 'unsafe-eval' ${baseURL}; style-src 'unsafe-inline'; img-src 'self' data: https:; font-src 'self' data:; connect-src ${baseURL} ws: wss:;">
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self' 'unsafe-inline' 'unsafe-eval'; script-src 'unsafe-inline' 'unsafe-eval' ${baseURL} https:; style-src 'unsafe-inline'; img-src 'self' data: https:; font-src 'self' data:; connect-src ${baseURL} ws: wss:;">
     <title>JS Code Preview</title>
 </head>
 <body style="margin: 0; padding: 20px; background: #f9fafb; font-family: system-ui, -apple-system, sans-serif;">
@@ -323,10 +323,6 @@ const JSTemplateManager = () => {
                 };
                 script.onerror = function() {
                     console.error('[Preview] Failed to load SDK');
-                    const errorDiv = document.createElement('div');
-                    errorDiv.style.cssText = 'background: #fee2e2; border: 2px solid #ef4444; border-radius: 8px; padding: 15px; margin: 20px 0; color: #991b1b;';
-                    errorDiv.textContent = '⚠️ 无法加载LingEcho SDK，请检查网络连接';
-                    document.getElementById('preview-content').appendChild(errorDiv);
                 };
                 document.head.appendChild(script);
             } else {
