@@ -147,10 +147,21 @@ func NewSession(config *SessionConfig) (*Session, error) {
 
 	// 创建 VAD 检测器，使用配置中的参数
 	vadDetector := NewVADDetector()
+	vadDetector.SetLogger(config.Logger) // 设置日志记录器
 	if config.EnableVAD {
 		vadDetector.SetEnabled(true)
 		vadDetector.SetThreshold(config.VADThreshold)
-		vadDetector.SetConsecutiveFrames(config.VADConsecutiveFrames)
+		// 如果阈值很低（<200），自动降低连续帧数要求以提高灵敏度
+		consecutiveFrames := config.VADConsecutiveFrames
+		if config.VADThreshold < 200 && consecutiveFrames > 1 {
+			consecutiveFrames = 1
+			config.Logger.Info("VAD阈值较低，自动降低连续帧数要求以提高灵敏度",
+				zap.Float64("threshold", config.VADThreshold),
+				zap.Int("originalFrames", config.VADConsecutiveFrames),
+				zap.Int("adjustedFrames", consecutiveFrames),
+			)
+		}
+		vadDetector.SetConsecutiveFrames(consecutiveFrames)
 	} else {
 		vadDetector.SetEnabled(false)
 	}
@@ -636,6 +647,12 @@ func (s *Session) IsActive() bool {
 
 // messageLoop 消息处理循环
 func (s *Session) messageLoop() {
+	defer func() {
+		// 当消息循环退出时，触发优雅关闭
+		s.config.Logger.Info("消息循环退出，触发会话关闭")
+		s.cancel()
+	}()
+
 	for {
 		select {
 		case <-s.ctx.Done():
@@ -646,8 +663,15 @@ func (s *Session) messageLoop() {
 
 		messageType, message, err := s.config.Conn.ReadMessage()
 		if err != nil {
-			s.config.Logger.Debug("读取WebSocket消息失败", zap.Error(err))
-			break
+			// 检查是否是正常的关闭错误
+			if websocket.IsCloseError(err, websocket.CloseNormalClosure, websocket.CloseGoingAway, websocket.CloseNoStatusReceived) {
+				s.config.Logger.Debug("WebSocket连接正常关闭", zap.Error(err))
+			} else {
+				s.config.Logger.Debug("读取WebSocket消息失败", zap.Error(err))
+			}
+			// 取消context，触发优雅关闭
+			s.cancel()
+			return
 		}
 
 		switch messageType {

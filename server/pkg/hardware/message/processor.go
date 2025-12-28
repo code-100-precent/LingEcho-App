@@ -84,14 +84,25 @@ func (p *Processor) ProcessASRResult(ctx context.Context, text string) {
 		return
 	}
 
-	// 快速状态检查（合并检查，减少锁操作）
-	canProcess, isFatal, isProcessing := p.stateManager.CanProcess()
-	if !canProcess {
-		p.logger.Debug("状态检查失败，忽略ASR结果",
-			zap.Bool("fatal_error", isFatal),
-			zap.Bool("processing", isProcessing),
-		)
+	// 检查致命错误
+	if p.stateManager.IsFatalError() {
+		p.logger.Debug("致命错误状态，忽略ASR结果")
 		return
+	}
+
+	// 如果 TTS 正在播放，取消 TTS 播放（用户打断）
+	if p.stateManager.IsTTSPlaying() {
+		p.logger.Info("ASR检测到用户说话，中断TTS播放",
+			zap.String("user_text", text),
+		)
+		// 先取消 TTS context，停止音频合成和发送
+		p.stateManager.CancelTTS()
+		// 然后设置 TTS 播放状态为 false
+		p.stateManager.SetTTSPlaying(false)
+		// 发送 TTS 结束消息，通知前端停止播放
+		if err := p.writer.SendTTSEnd(); err != nil {
+			p.logger.Warn("发送TTS结束消息失败", zap.Error(err))
+		}
 	}
 
 	// 提前发送ASR结果给前端，不阻塞后续处理
@@ -113,12 +124,12 @@ func (p *Processor) ProcessASRResult(ctx context.Context, text string) {
 		return
 	}
 
-	// 如果正在处理，取消当前TTS播放，优先处理新请求
-	if isProcessing {
-		p.logger.Debug("检测到新的完整句子，取消当前TTS播放以处理新请求",
+	// 如果正在处理 LLM，取消当前的处理，优先处理新请求
+	if p.stateManager.IsProcessing() {
+		p.logger.Debug("检测到新的完整句子，取消当前处理以处理新请求",
 			zap.String("new_text", text),
 		)
-		p.stateManager.CancelTTS()
+		// 重置处理状态，允许处理新请求
 		p.stateManager.SetProcessing(false)
 	}
 
@@ -273,6 +284,7 @@ func (p *Processor) synthesizeTTS(ctx context.Context, text string) {
 	for {
 		select {
 		case <-ttsCtx.Done():
+			p.logger.Info("TTS合成被取消（context done）")
 			return
 		case data, ok := <-audioChan:
 			if !ok {
@@ -321,6 +333,14 @@ func (p *Processor) synthesizeTTS(ctx context.Context, text string) {
 
 				// 逐帧编码和发送
 				for len(pcmBuffer) >= frameSize {
+					// 检查 context 是否被取消
+					select {
+					case <-ttsCtx.Done():
+						p.logger.Info("TTS合成被取消，停止发送音频")
+						return
+					default:
+					}
+
 					// 取出一帧数据
 					frameData := pcmBuffer[:frameSize]
 					pcmBuffer = pcmBuffer[frameSize:]
@@ -358,6 +378,13 @@ func (p *Processor) synthesizeTTS(ctx context.Context, text string) {
 				}
 			} else {
 				// PCM格式，直接发送（带流控）
+				// 检查 context 是否被取消
+				select {
+				case <-ttsCtx.Done():
+					p.logger.Info("TTS合成被取消，停止发送音频")
+					return
+				default:
+				}
 				// 使用固定延迟（60ms）发送，避免长时间播放时时间同步累积误差导致发送过快
 				if err := p.writer.SendTTSAudioWithFlowControl(data, 60, 60); err != nil {
 					p.logger.Error("发送TTS音频失败", zap.Error(err))

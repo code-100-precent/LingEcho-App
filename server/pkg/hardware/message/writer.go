@@ -100,10 +100,21 @@ func (w *Writer) writeLoop() {
 				return
 			}
 			w.mu.Lock()
-			if err := w.conn.WriteMessage(websocket.TextMessage, msg); err != nil {
-				w.logger.Error("写入WebSocket消息失败", zap.Error(err))
-			}
+			err := w.conn.WriteMessage(websocket.TextMessage, msg)
 			w.mu.Unlock()
+
+			if err != nil {
+				// 检查是否是正常的关闭错误，不记录为错误
+				if websocket.IsCloseError(err, websocket.CloseNormalClosure, websocket.CloseGoingAway, websocket.CloseNoStatusReceived) {
+					// 连接已关闭，取消context，停止继续写入
+					w.logger.Debug("WebSocket连接已关闭，停止写入文本消息", zap.Error(err))
+				} else {
+					w.logger.Error("写入WebSocket消息失败", zap.Error(err))
+				}
+				// 取消context，停止继续写入（无论什么错误）
+				w.cancel()
+				return
+			}
 		}
 	}
 }
@@ -120,10 +131,21 @@ func (w *Writer) writeBinaryLoop() {
 				return
 			}
 			w.mu.Lock()
-			if err := w.conn.WriteMessage(websocket.BinaryMessage, data); err != nil {
-				w.logger.Error("写入WebSocket二进制消息失败", zap.Error(err))
-			}
+			err := w.conn.WriteMessage(websocket.BinaryMessage, data)
 			w.mu.Unlock()
+
+			if err != nil {
+				// 检查是否是正常的关闭错误，不记录为错误
+				if websocket.IsCloseError(err, websocket.CloseNormalClosure, websocket.CloseGoingAway, websocket.CloseNoStatusReceived) {
+					// 连接已关闭，取消context，停止继续写入
+					w.logger.Debug("WebSocket连接已关闭，停止写入二进制消息", zap.Error(err))
+				} else {
+					w.logger.Error("写入WebSocket二进制消息失败", zap.Error(err))
+				}
+				// 取消context，停止继续写入（无论什么错误）
+				w.cancel()
+				return
+			}
 		}
 	}
 }
