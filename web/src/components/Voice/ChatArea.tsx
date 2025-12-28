@@ -4,6 +4,7 @@ import { Bot, User, Volume2, VolumeX, RefreshCw } from 'lucide-react'
 import { cn } from '@/utils/cn'
 import MarkdownPreview from '@/components/UI/MarkdownPreview.tsx'
 import { Typewriter } from '@/components/UX/MicroInteractions'
+import { getApiBaseURL } from '@/config/apiConfig'
 
 interface ChatMessage {
   type: 'user' | 'agent'
@@ -131,7 +132,12 @@ const ChatArea: React.FC<ChatAreaProps> = ({
   // 播放音频
   const playAudio = async (audioUrl: string, messageId: string) => {
     if (isMuted) return
-    audioUrl = audioUrl.replace('/media/', 'http://localhost:7072/uploads/');
+    // 处理音频URL - 如果是相对路径，添加服务器基础URL
+    if (audioUrl.startsWith('/media/') || audioUrl.startsWith('/uploads/')) {
+      const apiBaseURL = getApiBaseURL()
+      const baseURL = apiBaseURL.replace('/api', '')
+      audioUrl = audioUrl.replace('/media/', `${baseURL}/uploads/`)
+    }
 
       // 停止当前播放的音频
     stopCurrentAudio()

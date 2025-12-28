@@ -11,6 +11,7 @@ import FormField from '@/components/Forms/FormField'
 import { Upload, RefreshCw, History, Play, Pause, Volume2, Trash2, Edit3, Zap, Settings, Save } from 'lucide-react'
 import { get, post } from '@/utils/request'
 import { getSystemInit, saveVoiceCloneConfig } from '@/api/system'
+import { getApiBaseURL } from '@/config/apiConfig'
 
 interface VoiceClone {
     id: number
@@ -196,10 +197,16 @@ const VoiceTrainingVolcengine: React.FC = () => {
         // 处理音频URL - 如果是相对路径，添加服务器基础URL
         // 直接使用数据库中的 URL，不做格式转换（因为旧数据可能是 .pcm，新数据是 .wav）
         let fullAudioUrl = audioUrl
-        if (audioUrl.startsWith('/media/')) {
-            fullAudioUrl = `http://localhost:7072${audioUrl}`
-        } else if (audioUrl.startsWith('/')) {
-            fullAudioUrl = `http://localhost:7072${audioUrl}`
+        if (audioUrl.startsWith('/media/') || audioUrl.startsWith('/uploads/')) {
+            // 从 API base URL 提取基础 URL（去掉 /api 后缀）
+            const apiBaseURL = getApiBaseURL()
+            const baseURL = apiBaseURL.replace('/api', '')
+            fullAudioUrl = `${baseURL}${audioUrl}`
+        } else if (audioUrl.startsWith('/') && !audioUrl.startsWith('http://') && !audioUrl.startsWith('https://')) {
+            // 如果是其他相对路径，也添加基础 URL
+            const apiBaseURL = getApiBaseURL()
+            const baseURL = apiBaseURL.replace('/api', '')
+            fullAudioUrl = `${baseURL}${audioUrl}`
         }
 
         // 创建新的音频元素

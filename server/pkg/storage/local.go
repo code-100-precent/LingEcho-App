@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/code-100-precent/LingEcho/pkg/config"
 	"github.com/code-100-precent/LingEcho/pkg/utils"
 )
 
@@ -116,7 +117,15 @@ func (l *LocalStore) PublicURL(key string) string {
 	// 同时规范化路径，移除多余斜杠
 	mediaPrefix = strings.TrimSuffix(mediaPrefix, "/")
 	key = strings.TrimPrefix(key, "/")
-	return path.Join("/", mediaPrefix, key)
+	relativePath := path.Join("/", mediaPrefix, key)
+
+	// 如果配置了 SERVER_URL，返回完整 URL；否则返回相对路径
+	if config.GlobalConfig != nil && config.GlobalConfig.ServerUrl != "" {
+		baseURL := strings.TrimSuffix(config.GlobalConfig.ServerUrl, "/")
+		return baseURL + relativePath
+	}
+
+	return relativePath
 }
 
 func NewLocalStore() Store {

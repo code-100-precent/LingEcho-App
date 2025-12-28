@@ -16,6 +16,7 @@ import (
 	"github.com/code-100-precent/LingEcho/pkg/voice"
 	"github.com/gin-gonic/gin"
 	"github.com/gorilla/websocket"
+	"go.uber.org/zap"
 )
 
 var voiceUpgrader = websocket.Upgrader{
@@ -151,8 +152,17 @@ func (h *Handlers) HandleHardwareWebSocketVoice(c *gin.Context) {
 		deviceID = c.Query("device-id")
 	}
 
+	logger.Info("硬件WebSocket连接请求",
+		zap.String("deviceID", deviceID),
+		zap.String("path", c.Request.URL.Path),
+		zap.String("remoteAddr", c.Request.RemoteAddr),
+		zap.String("userAgent", c.Request.UserAgent()))
+
 	if deviceID == "" {
 		// WebSocket升级前返回错误
+		logger.Warn("硬件WebSocket连接缺少Device-Id参数",
+			zap.String("path", c.Request.URL.Path),
+			zap.String("headers", fmt.Sprintf("%v", c.Request.Header)))
 		c.JSON(http.StatusBadRequest, gin.H{
 			"code": 500,
 			"msg":  "缺少Device-Id参数",
@@ -241,11 +251,19 @@ func (h *Handlers) HandleHardwareWebSocketVoice(c *gin.Context) {
 	}
 
 	// 升级为WebSocket连接
+	logger.Info("准备升级WebSocket连接",
+		zap.String("deviceID", deviceID),
+		zap.Int64("assistantID", int64(assistantID)))
 	conn, err := voiceUpgrader.Upgrade(c.Writer, c.Request, nil)
 	if err != nil {
-		log.Println("Error upgrading connection:", err)
+		logger.Error("WebSocket升级失败",
+			zap.String("deviceID", deviceID),
+			zap.Error(err))
 		return
 	}
+	logger.Info("WebSocket连接已建立",
+		zap.String("deviceID", deviceID),
+		zap.Int64("assistantID", int64(assistantID)))
 
 	// 使用助手配置中的参数
 	language := assistant.Language

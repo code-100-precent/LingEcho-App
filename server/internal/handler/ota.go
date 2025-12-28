@@ -209,22 +209,21 @@ func (h *Handlers) buildOTAResponse(deviceID, clientID string, req *models.Devic
 
 	// Build WebSocket configuration (仅在设备已激活时返回)
 	if device != nil {
-		// For xiaozhi-esp32 compatibility, ensure the path is /xiaozhi/v1/ (root path, not under /api)
+		// 实际路由路径是 /api/voice/lingecho/v1/（在 registerVoiceTrainingRoutes 中注册）
 		wsURL := utils.GetValue(h.db, constants.KEY_SERVER_WEBSOCKET)
 		if wsURL == "" || wsURL == "null" {
 			// Use default WebSocket URL based on config
-			// Route is registered at root path: /xiaozhi/v1/ (not /api/xiaozhi/v1/)
+			// 实际路由路径：/api/voice/lingecho/v1/
 			if config.GlobalConfig.ServerUrl != "" {
 				baseURL := strings.TrimSuffix(config.GlobalConfig.ServerUrl, "/")
-				// Remove API prefix if present in base URL
-				baseURL = strings.TrimSuffix(baseURL, config.GlobalConfig.APIPrefix)
-				baseURL = strings.TrimSuffix(baseURL, "/")
+				// 保留 API prefix，因为路由在 /api 下
 				wsURL = strings.Replace(baseURL, "http://", "ws://", 1)
 				wsURL = strings.Replace(wsURL, "https://", "wss://", 1)
-				wsURL = fmt.Sprintf("%s/xiaozhi/v1/", wsURL)
+				// 实际路由路径：/api/voice/lingecho/v1/
+				wsURL = fmt.Sprintf("%s/api/voice/lingecho/v1/", wsURL)
 			} else {
-				// Default to localhost with root path /xiaozhi/v1/ (no API prefix)
-				wsURL = "ws://localhost:7072/xiaozhi/v1/"
+				// Default to localhost with correct path
+				wsURL = "ws://localhost:7072/api/voice/lingecho/v1/"
 			}
 		} else {
 			// Use configured WebSocket URL directly
