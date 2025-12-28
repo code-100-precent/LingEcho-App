@@ -71,13 +71,22 @@ func (p *Processor) ProcessASRResult(ctx context.Context, text string) {
 		return
 	}
 
-	// 如果正在处理，取消当前的TTS播放，优先处理新的请求
-	if p.stateManager.IsProcessing() {
-		p.logger.Debug("检测到新的完整句子，取消当前TTS播放以处理新请求",
-			zap.String("new_text", text),
+	// 如果 TTS 正在播放，取消 TTS 播放（用户打断）
+	if p.stateManager.IsTTSPlaying() {
+		p.logger.Info("ASR检测到用户说话，中断TTS播放",
+			zap.String("user_text", text),
 		)
 		// 取消当前TTS播放
 		p.stateManager.CancelTTS()
+		// 设置 TTS 播放状态为 false
+		p.stateManager.SetTTSPlaying(false)
+	}
+
+	// 如果正在处理 LLM，取消当前的处理，优先处理新的请求
+	if p.stateManager.IsProcessing() {
+		p.logger.Debug("检测到新的完整句子，取消当前处理以处理新请求",
+			zap.String("new_text", text),
+		)
 		// 重置处理状态，允许处理新请求
 		p.stateManager.SetProcessing(false)
 	}
