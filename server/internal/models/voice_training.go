@@ -67,14 +67,15 @@ type VoiceSynthesis struct {
 
 // VoiceTrainingText 训练文本（缓存讯飞的训练文本）
 type VoiceTrainingText struct {
-	ID        uint           `json:"id" gorm:"primaryKey"`
-	TextID    int64          `json:"text_id" gorm:"uniqueIndex:idx_text_id;not null"` // 讯飞的文本ID
-	TextName  string         `json:"text_name" gorm:"not null"`                       // 文本名称
-	Language  string         `json:"language" gorm:"default:'zh'"`                    // 语言
-	IsActive  bool           `json:"is_active" gorm:"default:true"`                   // 是否可用
-	CreatedAt time.Time      `json:"created_at"`
-	UpdatedAt time.Time      `json:"updated_at"`
-	DeletedAt gorm.DeletedAt `json:"deleted_at" gorm:"index"`
+	ID           uint                       `json:"id" gorm:"primaryKey"`
+	TextID       int64                      `json:"text_id" gorm:"uniqueIndex:idx_text_id;not null"` // 讯飞的文本ID
+	TextName     string                     `json:"text_name" gorm:"not null"`                       // 文本名称
+	Language     string                     `json:"language" gorm:"default:'zh'"`                    // 语言
+	IsActive     bool                       `json:"is_active" gorm:"default:true"`                   // 是否可用
+	CreatedAt    time.Time                  `json:"created_at"`
+	UpdatedAt    time.Time                  `json:"updated_at"`
+	DeletedAt    gorm.DeletedAt             `json:"deleted_at" gorm:"index"`
+	TextSegments []VoiceTrainingTextSegment `json:"text_segments" gorm:"-"` // 关联的段落（不保存到数据库）
 }
 
 // TableName 指定表名

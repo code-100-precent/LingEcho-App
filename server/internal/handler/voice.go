@@ -555,14 +555,48 @@ func (h *Handlers) SynthesizeWithVoice(c *gin.Context) {
 		return
 	}
 
-	// 3) 记录合成历史
+	// 3) 获取音频文件信息（大小和时长）
+	store := stores.Default()
+	audioSize := int64(0)
+	audioDuration := float64(0)
+
+	// 从存储中读取文件获取大小（Read 方法返回文件大小）
+	reader, size, err := store.Read(req.StorageKey)
+	if err == nil && size > 0 {
+		reader.Close() // 关闭读取器，我们只需要大小
+		audioSize = size
+		// 计算音频时长
+		// MP3 文件：使用近似估算，128kbps 比特率
+		// 时长 = (文件大小 * 8) / (比特率 * 1000) 秒
+		if strings.HasSuffix(req.StorageKey, ".mp3") {
+			// MP3 128kbps 比特率估算
+			bitrate := 128000 // 128 kbps = 128000 bps
+			audioDuration = float64(audioSize) * 8.0 / float64(bitrate)
+		} else {
+			// WAV/PCM 文件：PCM数据大小 / (采样率 * 声道数 * 位深度/8)
+			// 讯飞默认：24000Hz, 1声道, 16bit
+			// WAV文件有44字节头部，需要减去
+			pcmDataSize := audioSize - 44
+			if pcmDataSize > 0 {
+				sampleRate := 24000
+				channels := 1
+				bitDepth := 16
+				bytesPerSecond := sampleRate * channels * (bitDepth / 8)
+				audioDuration = float64(pcmDataSize) / float64(bytesPerSecond)
+			}
+		}
+	}
+
+	// 4) 记录合成历史
 	synthesis := &models.VoiceSynthesis{
-		UserID:       user.ID,
-		VoiceCloneID: clone.ID,
-		Text:         req.Text,
-		Language:     req.Language,
-		AudioURL:     audioURL,
-		Status:       "success",
+		UserID:        user.ID,
+		VoiceCloneID:  clone.ID,
+		Text:          req.Text,
+		Language:      req.Language,
+		AudioURL:      audioURL,
+		AudioDuration: audioDuration,
+		AudioSize:     audioSize,
+		Status:        "success",
 	}
 	if err := h.db.Create(synthesis).Error; err != nil {
 		response.Fail(c, "保存合成记录失败", err.Error())
@@ -1038,6 +1072,7 @@ func (h *Handlers) GetTrainingTexts(c *gin.Context) {
 		// 查询关联的段落
 		var segments []models.VoiceTrainingTextSegment
 		h.db.Where("text_id = ?", text.ID).Find(&segments)
+		text.TextSegments = segments
 		response.Success(c, "获取训练文本成功", text)
 		return
 	}
@@ -1086,6 +1121,10 @@ func (h *Handlers) GetTrainingTexts(c *gin.Context) {
 		response.Fail(c, "加载训练文本失败", err.Error())
 		return
 	}
+	// 加载关联的段落
+	var segments []models.VoiceTrainingTextSegment
+	h.db.Where("text_id = ?", text.ID).Find(&segments)
+	text.TextSegments = segments
 	response.Success(c, "获取训练文本成功", text)
 }
 
