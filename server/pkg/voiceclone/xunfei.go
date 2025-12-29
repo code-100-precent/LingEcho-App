@@ -7,13 +7,17 @@ import (
 	"crypto/md5"
 	"crypto/sha256"
 	"encoding/base64"
+	"encoding/binary"
 	"encoding/json"
 	"fmt"
 	"io"
 	"mime/multipart"
 	"net/http"
 	"net/url"
+	"os"
+	"os/exec"
 	"strconv"
+	"strings"
 	"time"
 
 	stores "github.com/code-100-precent/LingEcho/pkg/storage"
@@ -684,12 +688,121 @@ func (s *XunfeiService) SynthesizeToStorage(ctx context.Context, req *Synthesize
 		return "", err
 	}
 
+	// 将 PCM 转换为 WAV 格式（先转WAV，再转MP3）
+	// 讯飞默认参数：24000Hz, 16bit, 单声道
+	sampleRate := 24000
+	channels := 1
+	bitDepth := 16
+	wavData, err := s.convertPCMToWAV(resp.AudioData, sampleRate, channels, bitDepth)
+	if err != nil {
+		return "", fmt.Errorf("failed to convert PCM to WAV: %w", err)
+	}
+
+	// 将 WAV 转换为 MP3 格式（浏览器兼容性更好）
+	mp3Data, err := s.convertWAVToMP3(wavData)
+	if err != nil {
+		// 如果转换失败，降级使用 WAV
+		fmt.Printf("Warning: failed to convert WAV to MP3, using WAV instead: %v\n", err)
+		mp3Data = wavData
+		// 如果存储路径是 .mp3 或 .pcm，改为 .wav
+		if strings.HasSuffix(storageKey, ".mp3") {
+			storageKey = strings.TrimSuffix(storageKey, ".mp3") + ".wav"
+		} else if strings.HasSuffix(storageKey, ".pcm") {
+			storageKey = strings.TrimSuffix(storageKey, ".pcm") + ".wav"
+		} else if !strings.HasSuffix(storageKey, ".wav") {
+			storageKey = storageKey + ".wav"
+		}
+	} else {
+		// 转换成功，使用 MP3
+		if strings.HasSuffix(storageKey, ".wav") {
+			storageKey = strings.TrimSuffix(storageKey, ".wav") + ".mp3"
+		} else if strings.HasSuffix(storageKey, ".pcm") {
+			storageKey = strings.TrimSuffix(storageKey, ".pcm") + ".mp3"
+		} else if !strings.HasSuffix(storageKey, ".mp3") {
+			storageKey = storageKey + ".mp3"
+		}
+	}
+
 	// 保存到存储
 	store := stores.Default()
-	if err := store.Write(storageKey, bytes.NewReader(resp.AudioData)); err != nil {
+	if err := store.Write(storageKey, bytes.NewReader(mp3Data)); err != nil {
 		return "", fmt.Errorf("failed to write to storage: %w", err)
 	}
 
 	// 获取URL
 	return store.PublicURL(storageKey), nil
+}
+
+// convertPCMToWAV 将 PCM 音频数据转换为 WAV 格式（添加 WAV 文件头）
+func (s *XunfeiService) convertPCMToWAV(pcmData []byte, sampleRate int, channels int, bitDepth int) ([]byte, error) {
+	// 创建44字节的WAV头部
+	header := make([]byte, 44)
+	dataSize := len(pcmData)
+
+	// RIFF header
+	copy(header[0:4], "RIFF")
+	binary.LittleEndian.PutUint32(header[4:8], uint32(36+dataSize)) // File size
+	copy(header[8:12], "WAVE")
+
+	// fmt chunk
+	copy(header[12:16], "fmt ")
+	binary.LittleEndian.PutUint32(header[16:20], 16)                                     // fmt chunk size
+	binary.LittleEndian.PutUint16(header[20:22], 1)                                      // Audio format (PCM)
+	binary.LittleEndian.PutUint16(header[22:24], uint16(channels))                       // Number of channels
+	binary.LittleEndian.PutUint32(header[24:28], uint32(sampleRate))                     // Sample rate
+	binary.LittleEndian.PutUint32(header[28:32], uint32(sampleRate*channels*bitDepth/8)) // Byte rate
+	binary.LittleEndian.PutUint16(header[32:34], uint16(channels*bitDepth/8))            // Block align
+	binary.LittleEndian.PutUint16(header[34:36], uint16(bitDepth))                       // Bits per sample
+
+	// data chunk
+	copy(header[36:40], "data")
+	binary.LittleEndian.PutUint32(header[40:44], uint32(dataSize)) // Data size
+
+	// 合并头部和音频数据
+	wavData := append(header, pcmData...)
+	return wavData, nil
+}
+
+// convertWAVToMP3 使用 ffmpeg 将 WAV 音频数据转换为 MP3 格式
+func (s *XunfeiService) convertWAVToMP3(wavData []byte) ([]byte, error) {
+	// 创建临时文件
+	tmpWavFile, err := os.CreateTemp("", "voice_synthesis_*.wav")
+	if err != nil {
+		return nil, fmt.Errorf("failed to create temp WAV file: %w", err)
+	}
+	defer os.Remove(tmpWavFile.Name())
+	defer tmpWavFile.Close()
+
+	// 写入 WAV 数据
+	if _, err := tmpWavFile.Write(wavData); err != nil {
+		return nil, fmt.Errorf("failed to write WAV data: %w", err)
+	}
+	tmpWavFile.Close()
+
+	// 使用 ffmpeg 转换为 MP3
+	cmd := exec.Command("ffmpeg",
+		"-v", "quiet", // 安静模式
+		"-y",                    // 覆盖输出文件
+		"-i", tmpWavFile.Name(), // 输入文件
+		"-acodec", "libmp3lame", // MP3 编码器
+		"-ab", "128k", // 音频比特率
+		"-ar", "24000", // 采样率
+		"-ac", "1", // 单声道
+		"-f", "mp3", // 输出格式
+		"-", // 输出到标准输出
+	)
+
+	var out bytes.Buffer
+	cmd.Stdout = &out
+	cmd.Stderr = &bytes.Buffer{} // 忽略错误输出（已使用 quiet 模式）
+
+	if err := cmd.Run(); err != nil {
+		return nil, fmt.Errorf("ffmpeg conversion failed: %w", err)
+	}
+
+	if out.Len() == 0 {
+		return nil, fmt.Errorf("ffmpeg produced empty output")
+	}
+
+	return out.Bytes(), nil
 }
