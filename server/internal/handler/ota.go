@@ -75,14 +75,6 @@ func (h *Handlers) HandleOTACheck(c *gin.Context) {
 		req = models.DeviceReportReq{}
 	}
 
-	// 确保Application字段不为nil，避免后续访问panic
-	// xiaozhi-esp32 要求必须有 application 字段
-	if req.Application == nil {
-		// 返回错误，与 xiaozhi-esp32 保持一致
-		response.Fail(c, "Application field is required", nil)
-		return
-	}
-
 	// Build response - 与 xiaozhi-esp32 完全一致的流程
 	resp := h.buildOTAResponse(deviceID, clientID, &req)
 	logger.Info("OTA响应",

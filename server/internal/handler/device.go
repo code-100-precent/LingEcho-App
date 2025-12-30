@@ -438,3 +438,84 @@ func (h *Handlers) ManualAddDevice(c *gin.Context) {
 
 	response.Success(c, "Device added successfully", newDevice)
 }
+
+// GetDeviceConfig 通过Device-Id获取设备配置（供xiaozhi-server调用）
+// GET /device/config/:deviceId
+// 不需要认证，因为xiaozhi-server需要调用此接口
+func (h *Handlers) GetDeviceConfig(c *gin.Context) {
+	deviceID := c.Param("deviceId")
+
+	// 支持从Header获取Device-Id（兼容性）
+	if deviceID == "" {
+		deviceID = c.GetHeader("Device-Id")
+		if deviceID == "" {
+			deviceID = c.GetHeader("device-id")
+		}
+	}
+
+	if deviceID == "" {
+		response.Fail(c, "Device ID is required", nil)
+		return
+	}
+
+	// 根据Device-Id查询设备
+	device, err := models.GetDeviceByMacAddress(h.db, deviceID)
+	if err != nil || device == nil {
+		response.Fail(c, "Device not found or not activated", nil)
+		return
+	}
+
+	// 检查设备是否绑定了助手
+	if device.AssistantID == nil {
+		response.Fail(c, "Device is not bound to an assistant", nil)
+		return
+	}
+
+	assistantID := *device.AssistantID
+
+	// 获取助手配置
+	var assistant models.Assistant
+	if err := h.db.Where("id = ?", assistantID).First(&assistant).Error; err != nil {
+		logger.Error("Failed to get assistant", zap.Error(err), zap.Uint("assistantID", assistantID))
+		response.Fail(c, "Failed to get assistant configuration", nil)
+		return
+	}
+	if assistant.ID == 0 {
+		response.Fail(c, "Assistant does not exist", nil)
+		return
+	}
+
+	// 检查助手是否配置了API凭证
+	if assistant.ApiKey == "" || assistant.ApiSecret == "" {
+		response.Fail(c, "Assistant API credentials not configured", nil)
+		return
+	}
+
+	// 返回配置信息
+	config := map[string]interface{}{
+		"deviceId":             deviceID,
+		"assistantId":          assistantID,
+		"apiKey":               assistant.ApiKey,
+		"apiSecret":            assistant.ApiSecret,
+		"language":             assistant.Language,
+		"speaker":              assistant.Speaker,
+		"llmModel":             assistant.LLMModel,
+		"temperature":          assistant.Temperature,
+		"systemPrompt":         assistant.SystemPrompt,
+		"maxTokens":            assistant.MaxTokens,
+		"enableVAD":            assistant.EnableVAD,
+		"vadThreshold":         assistant.VADThreshold,
+		"vadConsecutiveFrames": assistant.VADConsecutiveFrames,
+	}
+
+	// 知识库ID（可选）
+	if assistant.KnowledgeBaseID != nil && *assistant.KnowledgeBaseID != "" {
+		config["knowledgeBaseId"] = *assistant.KnowledgeBaseID
+	}
+
+	logger.Info("Device config requested",
+		zap.String("deviceID", deviceID),
+		zap.Int64("assistantID", int64(assistantID)))
+
+	response.Success(c, "Success", config)
+}

@@ -336,6 +336,10 @@ func (h *Handlers) registerOTARoutes(r *gin.RouterGroup) {
 // registerDeviceRoutes Device Module (与 xiaozhi-esp32 完全一致)
 func (h *Handlers) registerDeviceRoutes(r *gin.RouterGroup) {
 	device := r.Group("device")
+
+	// 获取设备配置接口（不需要认证，供xiaozhi-server调用）
+	device.GET("/config/:deviceId", h.GetDeviceConfig)
+
 	device.Use(models.AuthRequired) // 需要用户登录
 	{
 		// 绑定设备（激活设备）- 与 xiaozhi-esp32 路径完全一致
