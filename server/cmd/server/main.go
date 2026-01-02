@@ -23,6 +23,7 @@ import (
 	"github.com/code-100-precent/LingEcho/pkg/metrics"
 	"github.com/code-100-precent/LingEcho/pkg/middleware"
 	"github.com/code-100-precent/LingEcho/pkg/prompt"
+	"github.com/code-100-precent/LingEcho/pkg/sip"
 	"github.com/code-100-precent/LingEcho/pkg/utils"
 	"github.com/code-100-precent/LingEcho/pkg/utils/backup"
 	"github.com/code-100-precent/LingEcho/pkg/utils/search"
@@ -142,6 +143,39 @@ func main() {
 
 	//// 11. New App
 	app := NewLingEchoApp(db)
+
+	// 11.5. Initialize SIP Server (if enabled)
+	// Check if SIP server should be enabled via environment variable
+	sipEnabled := utils.GetBoolEnv("SIP_ENABLED")
+	if sipEnabled {
+		sipPortInt64 := utils.GetIntEnv("SIP_PORT")
+		if sipPortInt64 == 0 {
+			sipPortInt64 = 5060 // Default SIP port
+		}
+		sipPort := int(sipPortInt64)
+
+		rtpPortInt64 := utils.GetIntEnv("SIP_RTP_PORT")
+		if rtpPortInt64 == 0 {
+			rtpPortInt64 = 10000 // Default RTP port
+		}
+		rtpPort := int(rtpPortInt64)
+
+		sipServer := sip.NewSipServer(rtpPort)
+		sipServer.SetDBConfig(db)
+
+		// Set SIP server to handlers (wrap to match interface)
+		app.handlers.SetSipServer(sipServer)
+
+		// Start SIP server in background (pass empty targetURI to avoid auto-call)
+		go func() {
+			logger.Info("Starting SIP server", zap.Int("sip_port", sipPort), zap.Int("rtp_port", rtpPort))
+			sipServer.Start(sipPort, "") // Empty targetURI means no auto-call
+		}()
+
+		logger.Info("SIP server initialized", zap.Int("sip_port", sipPort), zap.Int("rtp_port", rtpPort))
+	} else {
+		logger.Info("SIP server is disabled (set SIP_ENABLED=true to enable)")
+	}
 
 	// 12. Initialize Monitoring System
 	// Optimized for small memory servers: Reduce monitoring system memory usage
