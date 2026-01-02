@@ -37,6 +37,7 @@ import UserQuotas from '@/pages/UserQuotas.tsx';
 import DeviceManagement from '@/pages/DeviceManagement.tsx';
 import WorkflowManager from '@/pages/WorkflowManager.tsx';
 import Overview from '@/pages/Overview.tsx';
+import CallCenter from '@/pages/CallCenter.tsx';
 
 function App() {
     const [showPerformanceMonitor, setShowPerformanceMonitor] = useState(false);
@@ -243,6 +244,13 @@ function App() {
                             <ProtectedRoute>
                                 <Layout>
                                     <WorkflowManager />
+                                </Layout>
+                            </ProtectedRoute>
+                        } />
+                        <Route path="/call-center" element={
+                            <ProtectedRoute>
+                                <Layout>
+                                    <CallCenter />
                                 </Layout>
                             </ProtectedRoute>
                         } />

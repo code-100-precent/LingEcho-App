@@ -182,5 +182,9 @@ func RunMigrations(db *gorm.DB) error {
 		&models.UserDevice{},   // 用户设备管理表
 		&models.LoginHistory{}, // 登录历史记录表
 		&models.AccountLock{},  // 账号锁定记录表
+		// SIP user model
+		&models.SipUser{}, // SIP用户表
+		// SIP call model
+		&models.SipCall{}, // SIP通话记录表
 	})
 }

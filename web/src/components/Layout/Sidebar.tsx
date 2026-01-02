@@ -20,6 +20,7 @@ import {
   Library, // 知识库图标
   GitBranch, // 工作流图标
   LayoutDashboard, // 概览图标
+  Phone, // 外呼中心图标
 } from 'lucide-react'
 import { useAuthStore } from '@/stores/authStore'
 import { useI18nStore } from '@/stores/i18nStore'
@@ -93,12 +94,13 @@ const Sidebar = () => {
     { name: t('nav.sidebar.billing'), href: '/billing', icon: FileText },
     { name: t('nav.sidebar.groups'), href: '/groups', icon: Users },
     { name: t('nav.sidebar.deviceManagement'), href: '/devices', icon: Smartphone },
+    { name: t('nav.sidebar.callCenter'), href: '/call-center', icon: Phone },
     { name: t('nav.docs'), href: '/docs', icon: BookOpen },
   ]
 
   const publicNavs = [t('nav.docs'), t('nav.about')]
   // 受保护页面名称
-  const privateNavs = [t('nav.sidebar.overview'), t('nav.sidebar.smartAssistant'), t('nav.sidebar.voiceTraining'), t('nav.sidebar.knowledgeBase'), t('nav.sidebar.workflow'), t('nav.sidebar.notification'), t('nav.sidebar.alerts'), t('nav.sidebar.jsTemplate'), t('nav.sidebar.billing'), t('nav.sidebar.groups'), t('nav.sidebar.deviceManagement')]
+  const privateNavs = [t('nav.sidebar.overview'), t('nav.sidebar.smartAssistant'), t('nav.sidebar.voiceTraining'), t('nav.sidebar.knowledgeBase'), t('nav.sidebar.workflow'), t('nav.sidebar.notification'), t('nav.sidebar.alerts'), t('nav.sidebar.jsTemplate'), t('nav.sidebar.billing'), t('nav.sidebar.groups'), t('nav.sidebar.deviceManagement'), t('nav.sidebar.callCenter')]
 
   const isActive = (path: string) => location.pathname === path
 

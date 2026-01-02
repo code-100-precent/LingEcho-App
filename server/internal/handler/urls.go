@@ -24,6 +24,7 @@ type Handlers struct {
 	wsHub             *websocket.Hub
 	searchHandler     *search.SearchHandlers
 	ipLocationService *utils.IPLocationService
+	sipHandler        *SipHandler
 }
 
 // GetSearchHandler gets the search handler (for scheduled tasks)
@@ -90,11 +91,22 @@ func NewHandlers(db *gorm.DB) *Handlers {
 	// 初始化IP地理位置服务
 	ipLocationService := utils.NewIPLocationService(logger.Lg)
 
+	// 初始化SIP handler（SipServer可以通过SetSipServer方法设置）
+	sipHandler := NewSipHandler(db, nil)
+
 	return &Handlers{
 		db:                db,
 		wsHub:             wsHub,
 		searchHandler:     searchHandler,
 		ipLocationService: ipLocationService,
+		sipHandler:        sipHandler,
+	}
+}
+
+// SetSipServer 设置SIP服务器（用于依赖注入）
+func (h *Handlers) SetSipServer(sipServer SipServerInterface) {
+	if h.sipHandler != nil {
+		h.sipHandler.sipServer = sipServer
 	}
 }
 
@@ -166,6 +178,10 @@ func (h *Handlers) Register(engine *gin.Engine) {
 	h.registerOTARoutes(r)
 	// Register Device routes
 	h.registerDeviceRoutes(r)
+	// Register SIP routes (if SIP handler is available)
+	if h.sipHandler != nil {
+		h.registerSipRoutes(r)
+	}
 	// Register Business Module Routes
 	h.registerAuthRoutes(r)
 	h.registerNotificationRoutes(r)
@@ -679,5 +695,23 @@ func (h *Handlers) registerBillingRoutes(r *gin.RouterGroup) {
 		billing.POST("/bills/:id/archive", h.ArchiveBill)
 		billing.PUT("/bills/:id/notes", h.UpdateBillNotes)
 		billing.GET("/bills/:id/export", h.ExportBill)
+	}
+}
+
+// registerSipRoutes SIP Module
+func (h *Handlers) registerSipRoutes(r *gin.RouterGroup) {
+	sip := r.Group("sip")
+	{
+		// SIP用户管理
+		sip.GET("/users", models.AuthRequired, h.sipHandler.GetSipUsers)
+
+		// 呼出相关
+		sip.POST("/calls/outgoing", models.AuthRequired, h.sipHandler.MakeOutgoingCall)
+		sip.GET("/calls/outgoing/:callId", models.AuthRequired, h.sipHandler.GetOutgoingCallStatus)
+		sip.POST("/calls/outgoing/:callId/cancel", models.AuthRequired, h.sipHandler.CancelOutgoingCall)
+		sip.POST("/calls/outgoing/:callId/hangup", models.AuthRequired, h.sipHandler.HangupOutgoingCall)
+
+		// 通话历史
+		sip.GET("/calls", models.AuthRequired, h.sipHandler.GetCallHistory)
 	}
 }
