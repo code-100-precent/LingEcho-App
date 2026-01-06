@@ -7,7 +7,7 @@ import (
 	"io"
 	"net/http"
 
-	"github.com/code-100-precent/LingEcho/pkg/censor/qiniu/auth"
+	"github.com/code-100-precent/LingEcho/pkg/utils/qiniu/auth"
 )
 
 const (
