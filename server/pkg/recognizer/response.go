@@ -1,11 +1,11 @@
-package sauc_go
+package recognizer
 
 import (
 	"encoding/binary"
 	"encoding/json"
 )
 
-type AsrResponsePayload struct {
+type ResponsePayload struct {
 	AudioInfo struct {
 		Duration int `json:"duration"`
 	} `json:"audio_info"`
@@ -26,20 +26,19 @@ type AsrResponsePayload struct {
 	Error string `json:"error,omitempty"`
 }
 
-// AsrResponse
-type AsrResponse struct {
-	Code            int                 `json:"code"`
-	Event           int                 `json:"event"`
-	IsLastPackage   bool                `json:"is_last_package"`
-	PayloadSequence int32               `json:"payload_sequence"`
-	PayloadSize     int                 `json:"payload_size"`
-	PayloadMsg      *AsrResponsePayload `json:"payload_msg"`
+type Response struct {
+	Code            int              `json:"code"`
+	Event           int              `json:"event"`
+	IsLastPackage   bool             `json:"is_last_package"`
+	PayloadSequence int32            `json:"payload_sequence"`
+	PayloadSize     int              `json:"payload_size"`
+	PayloadMsg      *ResponsePayload `json:"payload_msg"`
 	Err             error
 }
 
 // ParseResponse parses the response message
-func ParseResponse(msg []byte) *AsrResponse {
-	var result AsrResponse
+func ParseResponse(msg []byte) *Response {
+	var result Response
 
 	headerSize := msg[0] & 0x0f
 	messageType := MessageType(msg[1] >> 4)
@@ -54,7 +53,7 @@ func ParseResponse(msg []byte) *AsrResponse {
 		payload = payload[4:]
 	}
 	// Check if this is the last audio result (0b0011 = 3)
-	if messageTypeSpecificFlags == NEG_WITH_SEQUENCE {
+	if messageTypeSpecificFlags == FlagNegWithSequence {
 		result.IsLastPackage = true
 	}
 	if messageTypeSpecificFlags&0x04 != 0 {
@@ -64,10 +63,10 @@ func ParseResponse(msg []byte) *AsrResponse {
 
 	// Parse messageType
 	switch messageType {
-	case SERVER_FULL_RESPONSE:
+	case MessageTypeServerFullResponse:
 		result.PayloadSize = int(binary.BigEndian.Uint32(payload[:4]))
 		payload = payload[4:]
-	case SERVER_ERROR_RESPONSE:
+	case MessageTypeServerErrorResponse:
 		result.Code = int(binary.BigEndian.Uint32(payload[:4]))
 		result.PayloadSize = int(binary.BigEndian.Uint32(payload[4:8]))
 		payload = payload[8:]
@@ -78,16 +77,16 @@ func ParseResponse(msg []byte) *AsrResponse {
 	}
 
 	// Decompress if needed
-	if messageCompression == GZIP {
+	if messageCompression == CompressionGZIP {
 		payload = GzipDecompress(payload)
 	}
 
 	// Parse payload
-	var asrResponse AsrResponsePayload
+	var asrResponse ResponsePayload
 	switch serializationMethod {
-	case JSON:
+	case SerializationJSON:
 		_ = json.Unmarshal(payload, &asrResponse)
-	case NO_SERIALIZATION:
+	case SerializationNone:
 	}
 	result.PayloadMsg = &asrResponse
 	return &result

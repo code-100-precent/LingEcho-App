@@ -30,7 +30,6 @@ require (
 	github.com/gorilla/csrf v1.7.3
 	github.com/gorilla/websocket v1.5.3
 	github.com/hashicorp/golang-lru/v2 v2.0.7
-	github.com/hraban/opus v0.0.0-20251117090126-c76ea7e21bf3
 	github.com/jinzhu/inflection v1.0.0
 	github.com/joho/godotenv v1.5.1
 	github.com/mark3labs/mcp-go v0.43.0

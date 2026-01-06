@@ -157,6 +157,9 @@ docker-compose --profile dev up -d
 #### Method 2: Manual Installation
 
 ```bash
+brew install pkg-config
+brew install opus opusfile
+
 # Clone the project
 git clone https://github.com/your-username/LingEcho.git
 cd LingEcho

@@ -1,4 +1,4 @@
-package sauc_go
+package recognizer
 
 import (
 	"context"
@@ -8,7 +8,7 @@ import (
 	"time"
 )
 
-type RecognitionResult struct {
+type Result struct {
 	Text      string    `json:"text"`
 	IsFinal   bool      `json:"is_final"`
 	Timestamp time.Time `json:"timestamp"`
@@ -16,45 +16,45 @@ type RecognitionResult struct {
 }
 
 // ResultCallback defines the callback interface for handling recognition results
-type ResultCallback func(*RecognitionResult)
+type ResultCallback func(*Result)
 
 type Recognizer struct {
-	client *AsrClient
+	client *Client
 	ctx    context.Context
 	cancel context.CancelFunc
 	mu     sync.Mutex
 
-	// 音频缓冲
+	// Audio buffer
 	audioBuffer   []byte
-	bufferSize    int // 目标缓冲大小（字节）
+	bufferSize    int // Target buffer size (bytes)
 	sampleRate    int
 	bitsPerSample int
 	channels      int
 
-	// 回调函数
+	// Callback functions
 	resultCallback ResultCallback
 	errorCallback  func(error)
 
-	// 控制参数
+	// Control parameters
 	sendTimeout time.Duration
 	readTimeout time.Duration
 
-	// 状态标志
+	// Status flags
 	hasSentEndFrame bool
 }
 
-func NewRecognizer(config *AsrConfig) *Recognizer {
-	// 默认缓冲100ms的音频数据
+func NewRecognizer(config *Config) *Recognizer {
+	// Default buffer 100ms of audio data
 	bufferDurationMs := config.Buffer.SegmentDurationMs
 	if bufferDurationMs == 0 {
 		bufferDurationMs = 100
 	}
 
-	// 计算缓冲大小
+	// Calculate buffer size
 	bufferSize := config.Audio.Rate * config.Audio.Bits / 8 * config.Audio.Channel * bufferDurationMs / 1000
 
 	return &Recognizer{
-		client:        NewAsrClient(config),
+		client:        NewClient(config),
 		audioBuffer:   make([]byte, 0, bufferSize),
 		bufferSize:    bufferSize,
 		sampleRate:    config.Audio.Rate,
@@ -78,7 +78,7 @@ func (r *Recognizer) SetErrorCallback(callback func(error)) {
 func (r *Recognizer) Start() error {
 	r.ctx, r.cancel = context.WithCancel(context.Background())
 
-	// 设置 client 的错误回调，将底层错误转发给 recognizer
+	// Set client error callback to forward underlying errors to recognizer
 	r.client.SetErrorCallback(func(err error) {
 		if r.errorCallback != nil {
 			r.errorCallback(err)
@@ -99,18 +99,12 @@ func (r *Recognizer) SendAudioFrame(frame []byte, end bool) error {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 
-	// 如果已经发送了结束帧，丢弃所有后续帧
+	// If end frame has been sent, discard all subsequent frames
 	if r.hasSentEndFrame {
 		return nil
 	}
 
-	//select {
-	//case <-r.ctx.Done():
-	//	return errors.New("recognizer stopped")
-	//default:
-	//}
-
-	// 如果是结束帧，立即发送所有缓冲的数据
+	// If it's an end frame, send all buffered data immediately
 	if end {
 		if len(r.audioBuffer) > 0 {
 			if err := r.sendAudioDataLocked(r.audioBuffer); err != nil {
@@ -181,7 +175,7 @@ func (r *Recognizer) resultReceiver() {
 				r.errorCallback(resp.Err)
 			}
 
-			result := &RecognitionResult{
+			result := &Result{
 				Text:      "",
 				IsFinal:   resp.IsLastPackage,
 				Timestamp: time.Now(),

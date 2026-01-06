@@ -7,7 +7,6 @@ import (
 	"time"
 
 	"github.com/code-100-precent/LingEcho/pkg/media"
-	"github.com/code-100-precent/LingEcho/pkg/recognizer/sauc_go"
 	gonanoid "github.com/matoous/go-nanoid"
 
 	"github.com/sirupsen/logrus"
@@ -21,7 +20,7 @@ type VolcengineLLMASR struct {
 	dialogID     string
 	ttfbDone     bool
 	audioDataLen int
-	recognizer   *sauc_go.Recognizer
+	recognizer   *Recognizer
 	tr           TranscribeResult
 	er           ProcessError
 }
@@ -71,21 +70,21 @@ func (v *VolcengineLLMASR) Vendor() string {
 func (v *VolcengineLLMASR) ConnAndReceive(dialogID string) error {
 	v.dialogID = dialogID
 
-	config := sauc_go.DefaultConfig().
+	config := DefaultConfig().
 		WithURL(v.opt.Url).
-		WithAuth(sauc_go.AuthConfig{
+		WithAuth(AuthConfig{
 			ResourceId: v.opt.ResourceId,
 			AccessKey:  v.opt.AccessToken,
 			AppKey:     v.opt.AppID,
 		}).
-		WithAudio(sauc_go.AudioConfig{
+		WithAudio(AudioConfig{
 			Format:  v.opt.Format,
 			Codec:   v.opt.Codec,
 			Rate:    v.opt.SampleRate,
 			Bits:    v.opt.BitDepth,
 			Channel: v.opt.Channel,
 		}).
-		WithBuffer(sauc_go.BufferConfig{
+		WithBuffer(BufferConfig{
 			SegmentDurationMs: 100,
 		})
 
@@ -94,7 +93,7 @@ func (v *VolcengineLLMASR) ConnAndReceive(dialogID string) error {
 		config.Request.Corpus.Context = GenerateCorpusContext(v.opt.HotWords)
 	}
 
-	v.recognizer = sauc_go.NewRecognizer(config)
+	v.recognizer = NewRecognizer(config)
 	v.sendReqTime = time.Now()
 
 	err := v.recognizer.Start()
@@ -103,7 +102,7 @@ func (v *VolcengineLLMASR) ConnAndReceive(dialogID string) error {
 		return err
 	}
 
-	v.recognizer.SetResultCallback(func(result *sauc_go.RecognitionResult) {
+	v.recognizer.SetResultCallback(func(result *Result) {
 		v.handleRecognitionResult(result)
 	})
 
@@ -119,7 +118,7 @@ func (v *VolcengineLLMASR) ConnAndReceive(dialogID string) error {
 	return nil
 }
 
-func (v *VolcengineLLMASR) handleRecognitionResult(result *sauc_go.RecognitionResult) {
+func (v *VolcengineLLMASR) handleRecognitionResult(result *Result) {
 	duration := time.Since(v.sendReqTime)
 	v.tr(result.Text, result.IsFinal, duration, v.dialogID)
 	if result.IsFinal {
@@ -155,7 +154,7 @@ func (v *VolcengineLLMASR) RestartClient() {
 func (v *VolcengineLLMASR) SendAudioBytes(data []byte) error {
 	if v.recognizer != nil {
 		err := v.recognizer.SendAudioFrame(data, false)
-		if errors.Is(err, sauc_go.ErrClientClosed) {
+		if errors.Is(err, ErrClientClosed) {
 			return nil
 		}
 		return err
