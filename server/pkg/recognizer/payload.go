@@ -1,4 +1,4 @@
-package sauc_go
+package recognizer
 
 import (
 	"bytes"
@@ -8,9 +8,9 @@ import (
 )
 
 type UserMeta struct {
-	Uid        string `json:"uid,omitempty"`
-	Did        string `json:"did,omitempty"`
-	Platform   string `json:"platform,omitempty" `
+	UID        string `json:"uid,omitempty"`
+	DID        string `json:"did,omitempty"`
+	Platform   string `json:"platform,omitempty"`
 	SDKVersion string `json:"sdk_version,omitempty"`
 	APPVersion string `json:"app_version,omitempty"`
 }
@@ -39,20 +39,20 @@ type RequestMeta struct {
 	Corpus          CorpusMeta `json:"corpus,omitempty"`
 }
 
-type AsrRequestPayload struct {
+type RequestPayload struct {
 	User    UserMeta    `json:"user"`
 	Audio   AudioMeta   `json:"audio"`
 	Request RequestMeta `json:"request"`
 }
 
-// Context represents the context structure for SAUC
-func NewFullClientRequest(config *AsrConfig) []byte {
+// NewFullClientRequest creates a full client request payload
+func NewFullClientRequest(config *Config) []byte {
 	var request bytes.Buffer
-	request.Write(DefaultHeader().WithMessageTypeSpecificFlags(POS_SEQUENCE).toBytes())
-	payload := AsrRequestPayload{
+	request.Write(DefaultHeader().WithMessageTypeSpecificFlags(FlagPosSequence).toBytes())
+	payload := RequestPayload{
 		User: UserMeta{
-			Uid:        config.User.UID,
-			Did:        config.User.DID,
+			UID:        config.User.UID,
+			DID:        config.User.DID,
 			Platform:   config.User.Platform,
 			SDKVersion: config.User.SDKVersion,
 			APPVersion: config.User.APPVersion,
@@ -93,11 +93,11 @@ func NewAudioOnlyRequest(seq int, segment []byte) []byte {
 	var request bytes.Buffer
 	header := DefaultHeader()
 	if seq < 0 {
-		header.WithMessageTypeSpecificFlags(NEG_WITH_SEQUENCE)
+		header.WithMessageTypeSpecificFlags(FlagNegWithSequence)
 	} else {
-		header.WithMessageTypeSpecificFlags(POS_SEQUENCE)
+		header.WithMessageTypeSpecificFlags(FlagPosSequence)
 	}
-	header.WithMessageType(CLIENT_AUDIO_ONLY_REQUEST)
+	header.WithMessageType(MessageTypeClientAudioOnlyRequest)
 	request.Write(header.toBytes())
 
 	// write seq

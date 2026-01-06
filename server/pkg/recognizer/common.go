@@ -1,4 +1,4 @@
-package sauc_go
+package recognizer
 
 import (
 	"bytes"
@@ -21,28 +21,29 @@ type SerializationType byte
 type CompressionType byte
 
 const (
-	PROTOCOL_VERSION = ProtocolVersion(0b0001)
+	ProtocolVersionV1 = ProtocolVersion(0b0001)
 
 	// Message Type
-	CLIENT_FULL_REQUEST       = MessageType(0b0001)
-	CLIENT_AUDIO_ONLY_REQUEST = MessageType(0b0010)
-	SERVER_FULL_RESPONSE      = MessageType(0b1001)
-	SERVER_ERROR_RESPONSE     = MessageType(0b1111)
+	MessageTypeClientFullRequest      = MessageType(0b0001)
+	MessageTypeClientAudioOnlyRequest = MessageType(0b0010)
+	MessageTypeServerFullResponse     = MessageType(0b1001)
+	MessageTypeServerErrorResponse    = MessageType(0b1111)
 
 	// Message Type Specific Flags
-	NO_SEQUENCE       = MessageTypeSpecificFlags(0b0000) // no check sequence
-	POS_SEQUENCE      = MessageTypeSpecificFlags(0b0001)
-	NEG_SEQUENCE      = MessageTypeSpecificFlags(0b0010)
-	NEG_WITH_SEQUENCE = MessageTypeSpecificFlags(0b0011)
+	FlagNoSequence      = MessageTypeSpecificFlags(0b0000) // no check sequence
+	FlagPosSequence     = MessageTypeSpecificFlags(0b0001)
+	FlagNegSequence     = MessageTypeSpecificFlags(0b0010)
+	FlagNegWithSequence = MessageTypeSpecificFlags(0b0011)
 
 	// Message Serialization
-	NO_SERIALIZATION = SerializationType(0b0000)
-	JSON             = SerializationType(0b0001)
+	SerializationNone = SerializationType(0b0000)
+	SerializationJSON = SerializationType(0b0001)
 
 	// Message Compression
-	GZIP = CompressionType(0b0001)
+	CompressionGZIP = CompressionType(0b0001)
 )
 
+// GzipCompress compresses input data using gzip
 func GzipCompress(input []byte) []byte {
 	var b bytes.Buffer
 	w := gzip.NewWriter(&b)
@@ -52,6 +53,7 @@ func GzipCompress(input []byte) []byte {
 	return b.Bytes()
 }
 
+// GzipDecompress decompresses input data using gzip
 func GzipDecompress(input []byte) []byte {
 	b := bytes.NewBuffer(input)
 	r, _ := gzip.NewReader(b)
@@ -60,8 +62,8 @@ func GzipDecompress(input []byte) []byte {
 	return out
 }
 
-// JudgeWav checks if the byte array is a valid WAV file
-func JudgeWav(data []byte) bool {
+// IsWAVFile checks if the byte array is a valid WAV file
+func IsWAVFile(data []byte) bool {
 	if len(data) < 44 {
 		return false
 	}
@@ -71,8 +73,8 @@ func JudgeWav(data []byte) bool {
 	return false
 }
 
-// ConvertWavWithPath converts an audio file to WAV format with the specified sample rate
-func ConvertWavWithPath(audioPath string, sampleRate int) ([]byte, error) {
+// ConvertToWAV converts an audio file to WAV format with the specified sample rate
+func ConvertToWAV(audioPath string, sampleRate int) ([]byte, error) {
 	cmd := exec.Command("ffmpeg", "-v", "quiet", "-y", "-i", audioPath, "-acodec",
 		"pcm_s16le", "-ac", "1", "-ar", strconv.Itoa(sampleRate), "-f", "wav", "-")
 
@@ -111,7 +113,7 @@ func ConvertWavWithPath(audioPath string, sampleRate int) ([]byte, error) {
 	return out.Bytes(), nil
 }
 
-type WavHeader struct {
+type WAVHeader struct {
 	ChunkID       [4]byte
 	ChunkSize     uint32
 	Format        [4]byte
@@ -127,10 +129,10 @@ type WavHeader struct {
 	Subchunk2Size uint32
 }
 
-// ReadWavInfo reads WAV file info and returns channels, sample width, sample rate, packet count, data, and error
-func ReadWavInfo(data []byte) (int, int, int, int, []byte, error) {
+// ReadWAVInfo reads WAV file info and returns channels, sample width, sample rate, packet count, data, and error
+func ReadWAVInfo(data []byte) (int, int, int, int, []byte, error) {
 	reader := bytes.NewReader(data)
-	var header WavHeader
+	var header WAVHeader
 
 	if err := binary.Read(reader, binary.LittleEndian, &header); err != nil {
 		return 0, 0, 0, 0, nil, fmt.Errorf("failed to read WAV header: %v", err)

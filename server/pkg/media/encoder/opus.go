@@ -1,3 +1,6 @@
+//go:build opus
+// +build opus
+
 package encoder
 
 import (

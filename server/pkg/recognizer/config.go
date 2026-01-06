@@ -1,4 +1,4 @@
-package sauc_go
+package recognizer
 
 // AuthConfig represents authentication configuration
 type AuthConfig struct {
@@ -7,8 +7,8 @@ type AuthConfig struct {
 	AppKey     string `json:"app_key" yaml:"app_key"`
 }
 
-// AsrConfig represents the configuration for SAUC ASR client
-type AsrConfig struct {
+// Config represents the configuration for SAUC ASR client
+type Config struct {
 	// Connection settings
 	URL string `json:"url" yaml:"url"`
 
@@ -71,8 +71,8 @@ type BufferConfig struct {
 }
 
 // DefaultConfig returns a default configuration
-func DefaultConfig() *AsrConfig {
-	return &AsrConfig{
+func DefaultConfig() *Config {
+	return &Config{
 		Auth: AuthConfig{
 			ResourceId: "volc.bigasr.sauc.duration",
 			AccessKey:  "",
@@ -106,43 +106,43 @@ func DefaultConfig() *AsrConfig {
 }
 
 // WithURL sets the URL for the ASR service
-func (c *AsrConfig) WithURL(url string) *AsrConfig {
+func (c *Config) WithURL(url string) *Config {
 	c.URL = url
 	return c
 }
 
 // WithAuth sets the auth configuration
-func (c *AsrConfig) WithAuth(auth AuthConfig) *AsrConfig {
+func (c *Config) WithAuth(auth AuthConfig) *Config {
 	c.Auth = auth
 	return c
 }
 
 // WithUser sets the user configuration
-func (c *AsrConfig) WithUser(user UserConfig) *AsrConfig {
+func (c *Config) WithUser(user UserConfig) *Config {
 	c.User = user
 	return c
 }
 
 // WithAudio sets the audio configuration
-func (c *AsrConfig) WithAudio(audio AudioConfig) *AsrConfig {
+func (c *Config) WithAudio(audio AudioConfig) *Config {
 	c.Audio = audio
 	return c
 }
 
 // WithRequest sets the request configuration
-func (c *AsrConfig) WithRequest(request RequestConfig) *AsrConfig {
+func (c *Config) WithRequest(request RequestConfig) *Config {
 	c.Request = request
 	return c
 }
 
 // WithBuffer sets the buffer configuration
-func (c *AsrConfig) WithBuffer(buffer BufferConfig) *AsrConfig {
+func (c *Config) WithBuffer(buffer BufferConfig) *Config {
 	c.Buffer = buffer
 	return c
 }
 
 // CalculateBufferSize calculates the buffer size based on audio format and segment duration
-func (c *AsrConfig) CalculateBufferSize() int {
+func (c *Config) CalculateBufferSize() int {
 	if c.Buffer.MaxBufferSize > 0 {
 		return c.Buffer.MaxBufferSize
 	}

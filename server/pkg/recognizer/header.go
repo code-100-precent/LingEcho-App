@@ -1,4 +1,4 @@
-package sauc_go
+package recognizer
 
 import (
 	"bytes"
@@ -7,7 +7,7 @@ import (
 	"github.com/google/uuid"
 )
 
-type AsrRequestHeader struct {
+type RequestHeader struct {
 	messageType              MessageType
 	messageTypeSpecificFlags MessageTypeSpecificFlags
 	serializationType        SerializationType
@@ -15,46 +15,46 @@ type AsrRequestHeader struct {
 	reservedData             []byte
 }
 
-func (h *AsrRequestHeader) toBytes() []byte {
+func (h *RequestHeader) toBytes() []byte {
 	header := bytes.NewBuffer([]byte{})
-	header.WriteByte(byte(PROTOCOL_VERSION<<4 | 1))
+	header.WriteByte(byte(ProtocolVersionV1<<4 | 1))
 	header.WriteByte(byte(h.messageType<<4) | byte(h.messageTypeSpecificFlags))
 	header.WriteByte(byte(h.serializationType<<4) | byte(h.compressionType))
 	header.Write(h.reservedData)
 	return header.Bytes()
 }
 
-func (h *AsrRequestHeader) WithMessageType(messageType MessageType) *AsrRequestHeader {
+func (h *RequestHeader) WithMessageType(messageType MessageType) *RequestHeader {
 	h.messageType = messageType
 	return h
 }
 
-func (h *AsrRequestHeader) WithMessageTypeSpecificFlags(messageTypeSpecificFlags MessageTypeSpecificFlags) *AsrRequestHeader {
+func (h *RequestHeader) WithMessageTypeSpecificFlags(messageTypeSpecificFlags MessageTypeSpecificFlags) *RequestHeader {
 	h.messageTypeSpecificFlags = messageTypeSpecificFlags
 	return h
 }
 
-func (h *AsrRequestHeader) WithSerializationType(serializationType SerializationType) *AsrRequestHeader {
+func (h *RequestHeader) WithSerializationType(serializationType SerializationType) *RequestHeader {
 	h.serializationType = serializationType
 	return h
 }
 
-func (h *AsrRequestHeader) WithCompressionType(compressionType CompressionType) *AsrRequestHeader {
+func (h *RequestHeader) WithCompressionType(compressionType CompressionType) *RequestHeader {
 	h.compressionType = compressionType
 	return h
 }
 
-func (h *AsrRequestHeader) WithReservedData(reservedData []byte) *AsrRequestHeader {
+func (h *RequestHeader) WithReservedData(reservedData []byte) *RequestHeader {
 	h.reservedData = reservedData
 	return h
 }
 
-func DefaultHeader() *AsrRequestHeader {
-	return &AsrRequestHeader{
-		messageType:              CLIENT_FULL_REQUEST,
-		messageTypeSpecificFlags: POS_SEQUENCE,
-		serializationType:        JSON,
-		compressionType:          GZIP,
+func DefaultHeader() *RequestHeader {
+	return &RequestHeader{
+		messageType:              MessageTypeClientFullRequest,
+		messageTypeSpecificFlags: FlagPosSequence,
+		serializationType:        SerializationJSON,
+		compressionType:          CompressionGZIP,
 		reservedData:             []byte{0x00},
 	}
 }
