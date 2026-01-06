@@ -1,9 +1,11 @@
-package qiniu
+package text
 
 import (
 	"encoding/json"
 	"strings"
 	"testing"
+
+	"github.com/code-100-precent/LingEcho/pkg/utils"
 )
 
 func TestTextCensorRequest_Marshal(t *testing.T) {
@@ -31,12 +33,20 @@ func TestTextCensorRequest_Marshal(t *testing.T) {
 	}
 }
 
-func TestNewTextCensorClient(t *testing.T) {
-	client := NewTextCensorClient("test_access_key", "test_secret_key")
-	if client.AccessKey != "test_access_key" {
+func TestNewQiniuTextCensor(t *testing.T) {
+	accessKey := utils.GetEnv("QINIU_ACCESS_KEY")
+	secretKey := utils.GetEnv("QINIU_SECRET_KEY")
+	if accessKey == "" || secretKey == "" {
+		t.Skipf("not found QINIU_ACCESS_KEY or QINIU_SECRET_KEY")
+	}
+	client, err := NewQiniuTextCensor()
+	if err != nil {
+		t.Fatalf("Failed to create client: %v", err)
+	}
+	if client.AccessKey != utils.GetEnv("QINIU_ACCESS_KEY") {
 		t.Error("AccessKey was set incorrectly")
 	}
-	if client.SecretKey != "test_secret_key" {
+	if client.SecretKey != utils.GetEnv("QINIU_SECRET_KEY") {
 		t.Error("SecretKey was set incorrectly")
 	}
 	if client.Host != TextCensorHost {

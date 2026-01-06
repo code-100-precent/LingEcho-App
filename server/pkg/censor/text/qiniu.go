@@ -1,4 +1,4 @@
-package qiniu
+package text
 
 import (
 	"bytes"
@@ -7,14 +7,16 @@ import (
 	"io"
 	"net/http"
 
-	"github.com/code-100-precent/LingEcho/pkg/censor/qiniu/auth"
+	"github.com/code-100-precent/LingEcho/pkg/utils"
+	"github.com/code-100-precent/LingEcho/pkg/utils/qiniu/auth"
 )
 
 const (
 	// TextCensorEndpoint is the text moderation API endpoint
 	TextCensorEndpoint = "/v3/text/censor"
 	// TextCensorHost is the text moderation API host
-	TextCensorHost = "ai.qiniuapi.com"
+	TextCensorHost   = "ai.qiniuapi.com"
+	TextCensorScenes = "antispam"
 )
 
 // TextCensorRequest represents the request parameters for text moderation
@@ -59,26 +61,31 @@ type TextSceneDetail struct {
 	Description string  `json:"description"` // Description of violation content
 }
 
-// TextCensorClient is the client for text content moderation
-type TextCensorClient struct {
+// QiniuTextCensor is the client for text content moderation
+type QiniuTextCensor struct {
 	AccessKey string
 	SecretKey string
 	Host      string
 	Client    *http.Client
 }
 
-// NewTextCensorClient creates a new text moderation client
-func NewTextCensorClient(accessKey, secretKey string) *TextCensorClient {
-	return &TextCensorClient{
+// NewQiniuTextCensor creates a new text moderation client
+func NewQiniuTextCensor() (*QiniuTextCensor, error) {
+	accessKey := utils.GetEnv("QINIU_ACCESS_KEY")
+	secretKey := utils.GetEnv("QINIU_SECRET_KEY")
+	if accessKey == "" || secretKey == "" {
+		return nil, fmt.Errorf("not found QINIU_ACCESS_KEY or QINIU_SECRET_KEY")
+	}
+	return &QiniuTextCensor{
 		AccessKey: accessKey,
 		SecretKey: secretKey,
 		Host:      TextCensorHost,
 		Client:    &http.Client{},
-	}
+	}, nil
 }
 
 // Censor performs text content moderation
-func (c *TextCensorClient) Censor(req TextCensorRequest) (*TextCensorResponse, error) {
+func (c *QiniuTextCensor) Censor(req TextCensorRequest) (*TextCensorResponse, error) {
 	// Serialize request body
 	bodyJSON, err := json.Marshal(req)
 	if err != nil {
@@ -139,14 +146,40 @@ func (c *TextCensorClient) Censor(req TextCensorRequest) (*TextCensorResponse, e
 
 // CensorText is a convenience method to moderate text content
 // text: text content to be moderated
-func (c *TextCensorClient) CensorText(text string) (*TextCensorResponse, error) {
+func (c *QiniuTextCensor) CensorText(text string) (*CensorResult, error) {
 	req := TextCensorRequest{
 		Data: TextCensorData{
 			Text: text,
 		},
 		Params: TextCensorParams{
-			Scenes: []string{"antispam"},
+			Scenes: []string{TextCensorScenes},
 		},
 	}
-	return c.Censor(req)
+	censor, err := c.Censor(req)
+	if err != nil {
+		return nil, err
+	}
+
+	result := &CensorResult{
+		Suggestion: censor.Result.Suggestion,
+	}
+
+	// Extract label and score from scenes
+	if censor.Result.Scenes != nil {
+		if antispam, ok := censor.Result.Scenes[TextCensorScenes]; ok {
+			if len(antispam.Details) > 0 {
+				detail := antispam.Details[0]
+				result.Label = detail.Label
+				result.Score = detail.Score
+				if detail.Description != "" {
+					result.Details = detail.Description
+				}
+			}
+		}
+	}
+
+	// Build message based on label
+	result.Msg = buildCensorMsg(result.Label)
+
+	return result, nil
 }
