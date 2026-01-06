@@ -43,6 +43,13 @@ type SendEmailVerifyEmail struct {
 	UserAgent string `json:"userAgent"`
 }
 
+type UserBasicInfoUpdate struct {
+	FatherCallName string `json:"fatherCallName"`
+	MotherCallName string `json:"motherCallName"`
+	WifiName       string `json:"wifiName"`
+	WifiPassword   string `json:"wifiPassword"`
+}
+
 type LoginForm struct {
 	Email         string `json:"email" comment:"Email address"`
 	Password      string `json:"password,omitempty"`
@@ -161,7 +168,6 @@ func AuthRequired(c *gin.Context) {
 	if token == "Bearer test-token-123" || token == "test-token-123" {
 		// Create a test user
 		testUser := &User{
-			ID:          1,
 			Email:       "test@example.com",
 			DisplayName: "Test User",
 			IsStaff:     true,
@@ -831,9 +837,6 @@ func CalculateProfileComplete(user *User) int {
 	// 地址信息 (20%)
 	total += 2
 	if user.City != "" {
-		complete++
-	}
-	if user.Country != "" {
 		complete++
 	}
 
