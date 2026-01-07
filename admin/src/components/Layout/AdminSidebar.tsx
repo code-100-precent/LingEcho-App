@@ -5,18 +5,11 @@ import {
   LayoutDashboard,
   Users,
   Settings,
-  FileText,
   LogOut,
   Menu,
   X,
   ChevronRight,
   User as UserIcon,
-  ShoppingBag,
-  Gamepad2,
-  Tag,
-  MessageSquare,
-  TrendingUp,
-  Heart,
 } from 'lucide-react'
 import { useAuthStore } from '@/stores/authStore'
 import { cn } from '@/utils/cn'
@@ -60,13 +53,6 @@ const AdminSidebar = () => {
   const navigation: NavItem[] = [
     { name: '仪表板', href: '/dashboard', icon: LayoutDashboard },
     { name: '用户管理', href: '/users', icon: Users },
-    { name: '订单管理', href: '/orders', icon: ShoppingBag },
-    { name: '陪玩管理', href: '/playmates', icon: Gamepad2 },
-    { name: '帖子管理', href: '/posts', icon: FileText },
-    { name: '标签管理', href: '/tags', icon: Tag },
-    { name: '话题管理', href: '/topics', icon: MessageSquare },
-    { name: '排行榜', href: '/rankings', icon: TrendingUp },
-    { name: '社交管理', href: '/social', icon: Heart },
     { name: '系统设置', href: '/settings', icon: Settings },
   ]
 
@@ -112,7 +98,7 @@ const AdminSidebar = () => {
               </div>
             </div>
             <span className="font-bold text-lg bg-gradient-to-r via-indigo-600">
-              PlaymateHub
+              灵语回响
             </span>
           </Link>
         )}
@@ -354,7 +340,7 @@ const AdminSidebar = () => {
                     />
                   </div>
                   <span className="font-bold text-lg bg-gradient-to-r from-blue-600 via-indigo-600 to-purple-600 bg-clip-text text-transparent">
-                    PlaymateHub
+                    灵语回响
                   </span>
                 </div>
                 <button

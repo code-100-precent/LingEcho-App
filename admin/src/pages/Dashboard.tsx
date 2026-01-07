@@ -1,6 +1,6 @@
 import { motion } from 'framer-motion'
 import { useMemo, useEffect, useState } from 'react'
-import { Users, Activity, ArrowUpRight, ArrowDownRight, ShoppingBag, Gamepad2 } from 'lucide-react'
+import { Users, Activity, ArrowUpRight, ArrowDownRight } from 'lucide-react'
 import AdminLayout from '@/components/Layout/AdminLayout'
 import Card from '@/components/UI/Card'
 import { cn } from '@/utils/cn'
@@ -83,121 +83,199 @@ const Dashboard = () => {
   const stats = useMemo(() => {
     if (!statsData) {
       return [
-        { title: '总用户数', value: '0', change: '0%', trend: 'up' as const, icon: Users },
-        { title: '订单总数', value: '0', change: '0%', trend: 'up' as const, icon: ShoppingBag },
-        { title: '陪玩数量', value: '0', change: '0%', trend: 'up' as const, icon: Gamepad2 },
-        { title: '活跃度', value: '0%', change: '0%', trend: 'down' as const, icon: Activity },
+        { title: '页面访问量 (PV)', value: '0', change: '0%', trend: 'up' as const, icon: Activity },
+        { title: '独立访客 (UV)', value: '0', change: '0%', trend: 'up' as const, icon: Users },
+        { title: 'API调用次数', value: '0', change: '0%', trend: 'up' as const, icon: Activity },
+        { title: '活跃用户', value: '0', change: '0%', trend: 'up' as const, icon: Users },
       ]
     }
+    
+    // 使用新的数据格式
+    const pv = statsData.pv?.today ?? 0
+    const pvChange = statsData.pv?.change ?? 0
+    const uv = statsData.uv?.today ?? 0
+    const uvChange = statsData.uv?.change ?? 0
+    const apiCalls = statsData.apiCalls?.today ?? 0
+    const apiCallsChange = statsData.apiCalls?.change ?? 0
+    const activeUsers = statsData.activeUsers?.today ?? 0
+    
+    // 兼容旧数据格式
+    const totalUsers = statsData.totalUsers ?? 0
+    const userGrowth = statsData.userGrowth ?? 0
+    
     return [
       {
-        title: '总用户数',
-        value: statsData.totalUsers.toLocaleString(),
-        change: `${statsData.userGrowth >= 0 ? '+' : ''}${statsData.userGrowth.toFixed(1)}%`,
-        trend: statsData.userGrowth >= 0 ? 'up' as const : 'down' as const,
+        title: '页面访问量 (PV)',
+        value: pv.toLocaleString(),
+        change: `${pvChange >= 0 ? '+' : ''}${pvChange.toFixed(1)}%`,
+        trend: pvChange >= 0 ? 'up' as const : 'down' as const,
+        icon: Activity,
+      },
+      {
+        title: '独立访客 (UV)',
+        value: uv.toLocaleString(),
+        change: `${uvChange >= 0 ? '+' : ''}${uvChange.toFixed(1)}%`,
+        trend: uvChange >= 0 ? 'up' as const : 'down' as const,
         icon: Users,
       },
       {
-        title: '订单总数',
-        value: statsData.totalOrders.toLocaleString(),
-        change: `${statsData.orderGrowth >= 0 ? '+' : ''}${statsData.orderGrowth.toFixed(1)}%`,
-        trend: statsData.orderGrowth >= 0 ? 'up' as const : 'down' as const,
-        icon: ShoppingBag,
-      },
-      {
-        title: '陪玩数量',
-        value: statsData.totalPlaymates.toLocaleString(),
-        change: '+0%',
-        trend: 'up' as const,
-        icon: Gamepad2,
-      },
-      {
-        title: '活跃度',
-        value: statsData.activeUsers > 0 
-          ? `${((statsData.activeUsers / statsData.totalUsers) * 100).toFixed(1)}%`
-          : '0%',
-        change: '0%',
-        trend: 'down' as const,
+        title: 'API调用次数',
+        value: apiCalls.toLocaleString(),
+        change: `${apiCallsChange >= 0 ? '+' : ''}${apiCallsChange.toFixed(1)}%`,
+        trend: apiCallsChange >= 0 ? 'up' as const : 'down' as const,
         icon: Activity,
+      },
+      {
+        title: '活跃用户',
+        value: activeUsers > 0 ? activeUsers.toLocaleString() : (totalUsers > 0 ? totalUsers.toLocaleString() : '0'),
+        change: userGrowth !== 0 ? `${userGrowth >= 0 ? '+' : ''}${userGrowth.toFixed(1)}%` : '0%',
+        trend: (userGrowth >= 0 || activeUsers > 0) ? 'up' as const : 'down' as const,
+        icon: Users,
       },
     ]
   }, [statsData])
 
-  // 访问趋势折线图配置
+  // 访问趋势折线图配置 - 展示PV和UV的对比
   const visitTrendOption = useMemo(() => {
-    const visitData = statsData?.visitTrend || [0, 0, 0, 0, 0, 0, 0]
+    // 如果没有visitTrend数据，使用PV和UV数据创建示例数据
+    const visitData = statsData?.visitTrend || []
+    const pvData = statsData?.pv ? [statsData.pv.yesterday || 0, statsData.pv.today || 0] : [0, 0]
+    const uvData = statsData?.uv ? [statsData.uv.yesterday || 0, statsData.uv.today || 0] : [0, 0]
     return {
-    tooltip: {
-      trigger: 'axis',
-      backgroundColor: isDark ? 'rgba(0, 0, 0, 0.9)' : 'rgba(0, 0, 0, 0.8)',
-      borderColor: 'transparent',
-      textStyle: {
-        color: '#fff'
-      }
-    },
-    grid: {
-      left: '3%',
-      right: '4%',
-      bottom: '3%',
-      containLabel: true
-    },
-    xAxis: {
-      type: 'category',
-      boundaryGap: false,
-      data: ['周一', '周二', '周三', '周四', '周五', '周六', '周日'],
-      axisLine: {
-        lineStyle: {
-          color: axisLineColor
+      tooltip: {
+        trigger: 'axis',
+        backgroundColor: isDark ? 'rgba(0, 0, 0, 0.9)' : 'rgba(0, 0, 0, 0.8)',
+        borderColor: 'transparent',
+        textStyle: {
+          color: '#fff'
         }
       },
-      axisLabel: {
-        color: textColor
-      }
-    },
-    yAxis: {
-      type: 'value',
-      axisLine: {
-        lineStyle: {
-          color: axisLineColor
-        }
+      legend: visitData.length === 0 ? {
+        data: ['PV (页面访问)', 'UV (独立访客)'],
+        textStyle: {
+          color: textColor
+        },
+        top: 10
+      } : undefined,
+      grid: {
+        left: '3%',
+        right: '4%',
+        bottom: '3%',
+        top: visitData.length === 0 ? '15%' : '3%',
+        containLabel: true
       },
-      axisLabel: {
-        color: textColor
-      },
-      splitLine: {
-        lineStyle: {
-          color: splitLineColor
-        }
-      }
-    },
-    series: [
-      {
-        name: '访问量',
-        type: 'line',
-        smooth: true,
-        data: visitData,
-        areaStyle: {
-          color: {
-            type: 'linear',
-            x: 0,
-            y: 0,
-            x2: 0,
-            y2: 1,
-            colorStops: [
-              { offset: 0, color: 'rgba(59, 130, 246, 0.3)' },
-              { offset: 1, color: 'rgba(59, 130, 246, 0.05)' }
-            ]
+      xAxis: {
+        type: 'category',
+        boundaryGap: false,
+        data: visitData.length > 0 
+          ? ['周一', '周二', '周三', '周四', '周五', '周六', '周日']
+          : ['昨天', '今天'],
+        axisLine: {
+          lineStyle: {
+            color: axisLineColor
           }
         },
-        lineStyle: {
-          color: '#3b82f6',
-          width: 3
-        },
-        itemStyle: {
-          color: '#3b82f6'
+        axisLabel: {
+          color: textColor
         }
-      }
-    ]
+      },
+      yAxis: {
+        type: 'value',
+        axisLine: {
+          lineStyle: {
+            color: axisLineColor
+          }
+        },
+        axisLabel: {
+          color: textColor
+        },
+        splitLine: {
+          lineStyle: {
+            color: splitLineColor
+          }
+        }
+      },
+      series: visitData.length > 0 ? [
+        {
+          name: '访问量',
+          type: 'line',
+          smooth: true,
+          data: visitData,
+          areaStyle: {
+            color: {
+              type: 'linear',
+              x: 0,
+              y: 0,
+              x2: 0,
+              y2: 1,
+              colorStops: [
+                { offset: 0, color: 'rgba(59, 130, 246, 0.3)' },
+                { offset: 1, color: 'rgba(59, 130, 246, 0.05)' }
+              ]
+            }
+          },
+          lineStyle: {
+            color: '#3b82f6',
+            width: 3
+          },
+          itemStyle: {
+            color: '#3b82f6'
+          }
+        }
+      ] : [
+        {
+          name: 'PV (页面访问)',
+          type: 'line',
+          smooth: true,
+          data: pvData,
+          lineStyle: {
+            color: '#3b82f6',
+            width: 3
+          },
+          itemStyle: {
+            color: '#3b82f6'
+          },
+          areaStyle: {
+            color: {
+              type: 'linear',
+              x: 0,
+              y: 0,
+              x2: 0,
+              y2: 1,
+              colorStops: [
+                { offset: 0, color: 'rgba(59, 130, 246, 0.3)' },
+                { offset: 1, color: 'rgba(59, 130, 246, 0.05)' }
+              ]
+            }
+          }
+        },
+        {
+          name: 'UV (独立访客)',
+          type: 'line',
+          smooth: true,
+          data: uvData,
+          lineStyle: {
+            color: '#10b981',
+            width: 3
+          },
+          itemStyle: {
+            color: '#10b981'
+          },
+          areaStyle: {
+            color: {
+              type: 'linear',
+              x: 0,
+              y: 0,
+              x2: 0,
+              y2: 1,
+              colorStops: [
+                { offset: 0, color: 'rgba(16, 185, 129, 0.3)' },
+                { offset: 1, color: 'rgba(16, 185, 129, 0.05)' }
+              ]
+            }
+          }
+        }
+      ]
     }
   }, [isDark, textColor, axisLineColor, splitLineColor, statsData])
 
@@ -240,161 +318,18 @@ const Dashboard = () => {
             fontWeight: 'bold'
           }
         },
-        data: statsData?.userDistribution.map(item => ({
+        data: (statsData?.userDistribution || []).map(item => ({
           value: item.value,
           name: item.name,
           itemStyle: { 
             color: item.name === '普通用户' ? '#3b82f6' :
-                   item.name === '陪玩用户' ? '#8b5cf6' :
                    item.name === 'VIP用户' ? '#10b981' : '#f59e0b'
           }
-        })) || []
+        }))
       }
     ]
   }), [isDark, textColor, statsData])
 
-  // 订单统计柱状图配置
-  const orderStatsOption = useMemo(() => ({
-    tooltip: {
-      trigger: 'axis',
-      backgroundColor: isDark ? 'rgba(0, 0, 0, 0.9)' : 'rgba(0, 0, 0, 0.8)',
-      borderColor: 'transparent',
-      textStyle: {
-        color: '#fff'
-      }
-    },
-    grid: {
-      left: '3%',
-      right: '4%',
-      bottom: '3%',
-      containLabel: true
-    },
-    xAxis: {
-      type: 'category',
-      data: statsData?.orderStats.map(item => item.month) || [],
-      axisLine: {
-        lineStyle: {
-          color: axisLineColor
-        }
-      },
-      axisLabel: {
-        color: textColor
-      }
-    },
-    yAxis: {
-      type: 'value',
-      axisLine: {
-        lineStyle: {
-          color: axisLineColor
-        }
-      },
-      axisLabel: {
-        color: textColor
-      },
-      splitLine: {
-        lineStyle: {
-          color: splitLineColor
-        }
-      }
-    },
-    series: [
-      {
-        name: '订单数',
-        type: 'bar',
-        data: statsData?.orderStats.map(item => item.count) || [],
-        itemStyle: {
-          color: {
-            type: 'linear',
-            x: 0,
-            y: 0,
-            x2: 0,
-            y2: 1,
-            colorStops: [
-              { offset: 0, color: '#3b82f6' },
-              { offset: 1, color: '#1d4ed8' }
-            ]
-          },
-          borderRadius: [4, 4, 0, 0]
-        }
-      }
-    ]
-  }), [isDark, textColor, axisLineColor, splitLineColor, statsData])
-
-  // 收入趋势折线图配置
-  const revenueTrendOption = useMemo(() => ({
-    tooltip: {
-      trigger: 'axis',
-      backgroundColor: isDark ? 'rgba(0, 0, 0, 0.9)' : 'rgba(0, 0, 0, 0.8)',
-      borderColor: 'transparent',
-      textStyle: {
-        color: '#fff'
-      }
-    },
-    grid: {
-      left: '3%',
-      right: '4%',
-      bottom: '3%',
-      containLabel: true
-    },
-    xAxis: {
-      type: 'category',
-      boundaryGap: false,
-      data: statsData?.orderStats.map(item => item.month) || [],
-      axisLine: {
-        lineStyle: {
-          color: axisLineColor
-        }
-      },
-      axisLabel: {
-        color: textColor
-      }
-    },
-    yAxis: {
-      type: 'value',
-      axisLine: {
-        lineStyle: {
-          color: axisLineColor
-        }
-      },
-      axisLabel: {
-        color: textColor,
-        formatter: (value: number) => `¥${value / 1000}k`
-      },
-      splitLine: {
-        lineStyle: {
-          color: splitLineColor
-        }
-      }
-    },
-    series: [
-      {
-        name: '收入',
-        type: 'line',
-        smooth: true,
-        data: statsData?.orderStats.map(item => item.amount) || [],
-        lineStyle: {
-          color: '#10b981',
-          width: 3
-        },
-        itemStyle: {
-          color: '#10b981'
-        },
-        areaStyle: {
-          color: {
-            type: 'linear',
-            x: 0,
-            y: 0,
-            x2: 0,
-            y2: 1,
-            colorStops: [
-              { offset: 0, color: 'rgba(16, 185, 129, 0.3)' },
-              { offset: 1, color: 'rgba(16, 185, 129, 0.05)' }
-            ]
-          }
-        }
-      }
-    ]
-  }), [isDark, textColor, axisLineColor, splitLineColor, statsData])
 
   return (
     <AdminLayout
@@ -441,30 +376,6 @@ const Dashboard = () => {
           </Card>
         </div>
 
-        {/* 图表区域 - 第二行 */}
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-          <Card className="p-6">
-            <h3 className="text-lg font-semibold text-slate-900 dark:text-white mb-4">
-              订单统计
-            </h3>
-            <ReactECharts
-              option={orderStatsOption}
-              style={{ height: '300px', width: '100%' }}
-              opts={{ renderer: 'svg' }}
-            />
-          </Card>
-
-          <Card className="p-6">
-            <h3 className="text-lg font-semibold text-slate-900 dark:text-white mb-4">
-              收入趋势
-            </h3>
-            <ReactECharts
-              option={revenueTrendOption}
-              style={{ height: '300px', width: '100%' }}
-              opts={{ renderer: 'svg' }}
-            />
-          </Card>
-        </div>
 
         {/* 最近活动 */}
         <Card className="p-6">

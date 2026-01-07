@@ -1,25 +1,45 @@
-import { get, post, put, del } from '@/utils/request'
+import { get, post, put, del, patch } from '@/utils/request'
 import { getApiBaseURL } from '@/config/apiConfig'
 
-const API_BASE = `${getApiBaseURL()}/admin-api`
+const API_BASE = getApiBaseURL()
+const ADMIN_BASE = '/admin'
+
+// 根据对象名称获取路径
+// 注意：根据代码逻辑，如果Path未设置，会使用 strings.ToLower(obj.Name)
+// 所以 User 对象的路径是 "user"（单数）
+const getAdminObjectPath = (objectName: string): string => {
+  // 直接使用小写的对象名称（根据代码逻辑，User -> user）
+  return objectName.toLowerCase()
+}
 
 // ==================== Dashboard API ====================
 export interface DashboardStats {
-  totalUsers: number
-  totalOrders: number
-  totalPlaymates: number
-  activeUsers: number
-  totalRevenue: number
-  todayOrders: number
-  todayRevenue: number
-  pendingOrders: number
-  userGrowth: number
-  orderGrowth: number
-  revenueGrowth: number
-  visitTrend: number[]
-  userDistribution: Array<{ name: string; value: number }>
-  orderStats: Array<{ month: string; count: number; amount: number }>
-  recentActivities: Array<{
+  pv?: {
+    today: number
+    yesterday: number
+    change: number
+  }
+  uv?: {
+    today: number
+    yesterday: number
+    change: number
+  }
+  apiCalls?: {
+    today: number
+    yesterday: number
+    change: number
+  }
+  activeUsers?: {
+    today: number
+    yesterday: number
+    change: number
+  }
+  // 兼容旧数据格式
+  totalUsers?: number
+  userGrowth?: number
+  visitTrend?: number[]
+  userDistribution?: Array<{ name: string; value: number }>
+  recentActivities?: Array<{
     id: number
     type: string
     title: string
@@ -29,7 +49,7 @@ export interface DashboardStats {
 }
 
 export const getDashboardStats = async () => {
-  const res = await get<DashboardStats>(`${API_BASE}/dashboard/stats`)
+  const res = await get<DashboardStats>(`${ADMIN_BASE}/dashboard/metrics`)
   return res.data
 }
 
@@ -53,411 +73,84 @@ export interface UserListResponse {
   pageSize: number
 }
 
+// 使用server的admin系统，POST查询，PATCH更新，DELETE删除
 export const getUsers = async (params?: {
   page?: number
   pageSize?: number
   search?: string
   status?: string
+  role?: string
+  isStaff?: boolean
+  isSuperUser?: boolean
 }) => {
-  const res = await get<UserListResponse>(`${API_BASE}/users`, { params })
-  return res.data
+  // server的admin系统使用POST查询，参数在body中
+  const queryParams: any = {
+    pos: params?.page ? (params.page - 1) * (params.pageSize || 10) : 0,
+    limit: params?.pageSize || 10,
+  }
+  if (params?.search) {
+    queryParams.keyword = params.search
+  }
+  
+  // 构建filters数组
+  const filters: any[] = []
+  if (params?.status) {
+    filters.push({ name: 'enabled', op: '=', value: params.status === 'enabled' || params.status === 'active' })
+  }
+  if (params?.isStaff !== undefined) {
+    filters.push({ name: 'is_staff', op: '=', value: params.isStaff })
+  }
+  if (params?.isSuperUser !== undefined) {
+    filters.push({ name: 'role', op: '=', value: params.isSuperUser ? 'superadmin' : 'user' })
+  }
+  if (params?.role) {
+    if (params.role === 'superadmin') {
+      filters.push({ name: 'role', op: '=', value: 'superadmin' })
+    } else if (params.role === 'admin') {
+      filters.push({ name: 'is_staff', op: '=', value: true })
+    }
+  }
+  
+  if (filters.length > 0) {
+    queryParams.filters = filters
+  }
+  
+  // 获取User对象的实际路径（根据代码逻辑，User -> user）
+  const userPath = getAdminObjectPath('User')
+  const res = await post<any>(`${ADMIN_BASE}/${userPath}/`, queryParams)
+  // 转换server返回格式到前端期望格式
+  // server返回格式: {total: number, items: User[]}
+  const serverData = res.data as any
+  return {
+    list: serverData.items || [],
+    total: serverData.total || 0,
+    page: params?.page || 1,
+    pageSize: params?.pageSize || 10,
+  }
 }
 
 export const getUser = async (id: number) => {
-  const res = await get<User>(`${API_BASE}/users/${id}`)
-  return res.data
+  // server的admin系统使用POST查询单个，通过filters指定id
+  const userPath = getAdminObjectPath('User')
+  const res = await post<any>(`${ADMIN_BASE}/${userPath}/`, {
+    filters: [{ name: 'id', op: '=', value: id }],
+    limit: 1,
+  })
+  const serverData = res.data as any
+  return (serverData.items?.[0] || null) as User
 }
 
 export const updateUser = async (id: number, data: Partial<User>) => {
-  const res = await put(`${API_BASE}/users/${id}`, data)
+  // server的admin系统使用PATCH更新，id在query参数中
+  const userPath = getAdminObjectPath('User')
+  const res = await patch(`${ADMIN_BASE}/${userPath}/?id=${id}`, data)
   return res.data
 }
 
 export const deleteUser = async (id: number) => {
-  const res = await del(`${API_BASE}/users/${id}`)
-  return res.data
-}
-
-// ==================== Posts API ====================
-export interface Post {
-  id: number
-  userId?: number
-  title: string
-  content: string
-  summary?: string
-  coverImage?: string
-  coverImageURL?: string
-  images?: string | Array<{ id: string; url: string }>
-  author?: string
-  authorName?: string
-  authorEmail?: string
-  user?: {
-    id: number
-    displayName?: string
-    name?: string
-    email?: string
-    avatar?: string
-  }
-  tags?: Array<{ id: number; name: string }>
-  topics?: Array<{ id: number; title: string }>
-  views?: number
-  viewCount?: number
-  likes?: number
-  likeCount?: number
-  commentCount?: number
-  collectionCount?: number
-  shareCount?: number
-  status: 'published' | 'draft' | 'pending' | 'rejected' | 'deleted'
-  isTop?: boolean
-  isHot?: boolean
-  isRecommended?: boolean
-  createdAt: string
-  updatedAt?: string
-}
-
-export interface PostListResponse {
-  list: Post[]
-  total: number
-  page: number
-  pageSize: number
-}
-
-export const getPosts = async (params?: {
-  page?: number
-  pageSize?: number
-  search?: string
-  status?: string
-  userId?: number
-  tagId?: number
-  isTop?: boolean
-  isHot?: boolean
-  isRecommended?: boolean
-  startDate?: string
-  endDate?: string
-}) => {
-  const res = await get<PostListResponse>(`${API_BASE}/posts`, { params })
-  return res.data
-}
-
-export const getPost = async (id: number) => {
-  const res = await get<Post>(`${API_BASE}/posts/${id}`)
-  return res.data
-}
-
-export const createPost = async (data: {
-  title: string
-  content: string
-  summary?: string
-  coverImage?: string
-  images?: string[]
-  tagIds?: number[]
-  topicIds?: number[]
-  status?: 'published' | 'draft' | 'pending'
-  isTop?: boolean
-  isHot?: boolean
-  isRecommended?: boolean
-  userId?: number
-}) => {
-  const res = await post(`${API_BASE}/posts`, data)
-  return res.data
-}
-
-export const updatePost = async (id: number, data: {
-  title?: string
-  content?: string
-  summary?: string
-  coverImage?: string
-  images?: string[]
-  tagIds?: number[]
-  topicIds?: number[]
-  status?: 'published' | 'draft' | 'pending' | 'rejected' | 'deleted'
-  isTop?: boolean
-  isHot?: boolean
-  isRecommended?: boolean
-}) => {
-  const res = await put(`${API_BASE}/posts/${id}`, data)
-  return res.data
-}
-
-export const deletePost = async (id: number) => {
-  const res = await del(`${API_BASE}/posts/${id}`)
-  return res.data
-}
-
-export const approvePost = async (id: number) => {
-  const res = await post(`${API_BASE}/posts/${id}/approve`)
-  return res.data
-}
-
-export const rejectPost = async (id: number) => {
-  const res = await post(`${API_BASE}/posts/${id}/reject`)
-  return res.data
-}
-
-// ==================== Orders API ====================
-export interface Order {
-  id: number
-  orderNo: string
-  playmateId?: number
-  playmateName?: string
-  customerId?: number
-  customerName?: string
-  gameName: string
-  amount: number
-  status: string
-  createdAt: string
-}
-
-export interface OrderListResponse {
-  list: Order[]
-  total: number
-  page: number
-  pageSize: number
-}
-
-export const getOrders = async (params?: {
-  page?: number
-  pageSize?: number
-  search?: string
-  status?: string
-}) => {
-  const res = await get<OrderListResponse>(`${API_BASE}/orders`, { params })
-  return res.data
-}
-
-export const getOrder = async (id: number) => {
-  const res = await get<Order>(`${API_BASE}/orders/${id}`)
-  return res.data
-}
-
-export const updateOrderStatus = async (id: number, status: string) => {
-  const res = await put(`${API_BASE}/orders/${id}/status`, { status })
-  return res.data
-}
-
-export const confirmPayment = async (id: number) => {
-  const res = await post(`${API_BASE}/orders/${id}/confirm-payment`)
-  return res.data
-}
-
-// ==================== Playmates API ====================
-export interface PlaymateApplication {
-  userId: number
-  realName: string
-  phoneNumber: string
-  gameExperience: string
-  gameId: string
-  mainGames: string
-  skillLevel: string
-  profileDesc: string
-  status: string
-  rejectionReason?: string
-  reviewedAt?: string
-  createdAt: string
-}
-
-export interface Playmate {
-  id: number
-  name: string
-  email: string
-  displayName?: string
-  gameName?: string
-  skillLevel?: string
-  rating?: number
-  orderCount?: number
-  status: 'verified' | 'pending' | 'rejected'
-  createdAt: string
-  application?: PlaymateApplication
-}
-
-export interface PlaymateListResponse {
-  list: Playmate[]
-  total: number
-  page: number
-  pageSize: number
-  stats?: Array<{
-    userId: number
-    orderCount: number
-    rating: number
-  }>
-}
-
-export const getPlaymates = async (params?: {
-  page?: number
-  pageSize?: number
-  search?: string
-  status?: string
-}) => {
-  const res = await get<PlaymateListResponse>(`${API_BASE}/playmates`, { params })
-  return res.data
-}
-
-export const approvePlaymate = async (id: number) => {
-  const res = await post(`${API_BASE}/playmates/${id}/approve`)
-  return res.data
-}
-
-export const rejectPlaymate = async (id: number, reason?: string) => {
-  const res = await post(`${API_BASE}/playmates/${id}/reject`, { reason: reason || '' })
-  return res.data
-}
-
-export const getPlaymateDetail = async (id: number) => {
-  const res = await get<Playmate>(`${API_BASE}/playmates/${id}`)
-  return res.data
-}
-
-// ==================== VIP Friends API ====================
-export interface VIPFriend {
-  id: number
-  ownerUserId: number
-  ownerUserName: string
-  userId: number
-  userName: string
-  userEmail: string
-  avatar: string
-  gameLevel: string
-  sortOrder: number
-  createdAt: string
-}
-
-export const getVIPFriends = async (ownerUserId?: number) => {
-  const params = ownerUserId ? { ownerUserId } : {}
-  const res = await get<VIPFriend[]>(`${API_BASE}/vip-friends`, { params })
-  return res.data
-}
-
-export const addVIPFriend = async (data: { ownerUserId: number; userId: number; sortOrder?: number }) => {
-  const res = await post(`${API_BASE}/vip-friends`, data)
-  return res.data
-}
-
-export const deleteVIPFriend = async (id: number) => {
-  const res = await del(`${API_BASE}/vip-friends/${id}`)
-  return res.data
-}
-
-export const updateVIPFriend = async (id: number, data: { sortOrder: number }) => {
-  const res = await put(`${API_BASE}/vip-friends/${id}`, data)
-  return res.data
-}
-
-// ==================== Tags API ====================
-export interface Tag {
-  id: number
-  name: string
-  postCount: number
-  isHot: boolean
-  sortOrder: number
-}
-
-export const getTags = async (params?: { search?: string }) => {
-  const res = await get<Tag[]>(`${API_BASE}/tags`, { params })
-  return res.data
-}
-
-export const createTag = async (data: { name: string; isHot?: boolean; sortOrder?: number }) => {
-  const res = await post(`${API_BASE}/tags`, data)
-  return res.data
-}
-
-export const updateTag = async (id: number, data: Partial<Tag>) => {
-  const res = await put(`${API_BASE}/tags/${id}`, data)
-  return res.data
-}
-
-export const deleteTag = async (id: number) => {
-  const res = await del(`${API_BASE}/tags/${id}`)
-  return res.data
-}
-
-// ==================== Topics API ====================
-export interface Topic {
-  id: number
-  title: string
-  description: string
-  postCount: number
-  isHot: boolean
-  sortOrder: number
-}
-
-export const getTopics = async (params?: { search?: string }) => {
-  const res = await get<Topic[]>(`${API_BASE}/topics`, { params })
-  return res.data
-}
-
-export const createTopic = async (data: { title: string; description?: string; isHot?: boolean; sortOrder?: number }) => {
-  const res = await post(`${API_BASE}/topics`, data)
-  return res.data
-}
-
-export const updateTopic = async (id: number, data: Partial<Topic>) => {
-  const res = await put(`${API_BASE}/topics/${id}`, data)
-  return res.data
-}
-
-export const deleteTopic = async (id: number) => {
-  const res = await del(`${API_BASE}/topics/${id}`)
-  return res.data
-}
-
-// ==================== Rankings API ====================
-export interface RankingsResponse {
-  playmate?: Array<{
-    userId: number
-    name: string
-    rating: number
-    orderCount: number
-  }>
-  post?: Post[]
-  user?: User[]
-}
-
-export const getRankings = async (type: 'playmate' | 'post' | 'user', limit?: number) => {
-  const res = await get<RankingsResponse>(`${API_BASE}/rankings`, {
-    params: { type, limit }
-  })
-  return res.data
-}
-
-// ==================== Social API ====================
-export interface SocialRelation {
-  id: number
-  followerId: number
-  followerName: string
-  followerEmail?: string
-  followerAvatar?: string
-  followingId: number
-  followingName: string
-  followingEmail?: string
-  followingAvatar?: string
-  createdAt: string
-}
-
-export interface SocialListResponse {
-  list: SocialRelation[]
-  total: number
-  page: number
-  pageSize: number
-}
-
-export const getFollows = async (params?: {
-  page?: number
-  pageSize?: number
-  search?: string
-  userId?: string
-}) => {
-  const res = await get<SocialListResponse>(`${API_BASE}/social/follows`, { params })
-  return res.data
-}
-
-export const getFollowers = async (params?: {
-  page?: number
-  pageSize?: number
-  search?: string
-  userId?: string
-}) => {
-  const res = await get<SocialListResponse>(`${API_BASE}/social/followers`, { params })
+  // server的admin系统使用DELETE删除，id在query参数中
+  const userPath = getAdminObjectPath('User')
+  const res = await del(`${ADMIN_BASE}/${userPath}/?id=${id}`)
   return res.data
 }
 
@@ -485,22 +178,38 @@ export const getNotifications = async (params?: {
   filter?: 'all' | 'read' | 'unread'
   userId?: string
 }) => {
-  const res = await get<NotificationListResponse>(`${API_BASE}/notifications`, { params })
+  // 管理后台专用的notification接口
+  const queryParams: any = {}
+  if (params?.page) queryParams.page = params.page
+  if (params?.pageSize) queryParams.pageSize = params.pageSize
+  if (params?.filter === 'read') queryParams.read = true
+  if (params?.filter === 'unread') queryParams.read = false
+  const res = await get<NotificationListResponse>(`${ADMIN_BASE}/notification`, { params: queryParams })
+  // 转换server返回格式
+  if (Array.isArray(res.data)) {
+    return {
+      list: res.data,
+      total: res.data.length,
+      page: params?.page || 1,
+      pageSize: params?.pageSize || 10,
+    }
+  }
   return res.data
 }
 
 export const markAllNotificationsRead = async (userId?: string) => {
-  const res = await post(`${API_BASE}/notifications/read-all`, userId ? { userId } : {})
+  const res = await post(`${ADMIN_BASE}/notification/readAll`, userId ? { userId } : {})
   return res.data
 }
 
 export const deleteNotification = async (id: number) => {
-  const res = await del(`${API_BASE}/notifications/${id}`)
+  const res = await del(`${ADMIN_BASE}/notification/${id}`)
   return res.data
 }
 
 // ==================== Profile API ====================
-const AUTH_API_BASE = `${getApiBaseURL()}/auth`
+// 管理后台专用的认证接口
+const ADMIN_AUTH_BASE = `${ADMIN_BASE}/auth`
 
 export interface ProfileUpdateRequest {
   displayName?: string
@@ -517,60 +226,34 @@ export interface ChangePasswordRequest {
   newPassword: string
 }
 
-// 获取当前用户信息
+// 获取当前管理员信息
 export const getCurrentUser = async () => {
-  const res = await get(`${AUTH_API_BASE}/info`)
+  const res = await get(`${ADMIN_AUTH_BASE}/info`)
   return res.data
 }
 
-// 更新用户信息
+// 更新管理员信息
 export const updateProfile = async (data: ProfileUpdateRequest) => {
-  const res = await put(`${AUTH_API_BASE}/update`, data)
+  const res = await put(`${ADMIN_AUTH_BASE}/update`, data)
   return res.data
 }
 
-// 修改密码
+// 修改管理员密码
 export const changePassword = async (data: ChangePasswordRequest) => {
-  const res = await post(`${AUTH_API_BASE}/change-password`, data)
+  const res = await post(`${ADMIN_AUTH_BASE}/change-password`, data)
   return res.data
 }
 
-// 上传头像
+// 上传管理员头像
 export const uploadAvatar = async (file: File) => {
   const formData = new FormData()
   // 后端期望的字段名是 "avatar"，不是 "file"
   formData.append('avatar', file)
-  const res = await post(`${AUTH_API_BASE}/avatar/upload`, formData, {
-    headers: {
-      'Content-Type': 'multipart/form-data',
-    },
-  })
+    const res = await post(`${ADMIN_AUTH_BASE}/avatar/upload`, formData, {
+      headers: {} as any, // FormData会自动设置Content-Type
+    })
   // 后端返回格式是 {code: 200, msg: "...", data: {avatar: "..."}}
   return res.data
 }
 
-// 上传图片（用于文章等）
-export const uploadImage = async (file: File): Promise<string> => {
-  const formData = new FormData()
-  formData.append('file', file)
-  try {
-    const res = await post<{ url: string }>(`${API_BASE}/upload/image`, formData, {
-      headers: {
-        'Content-Type': 'multipart/form-data',
-      },
-    })
-    // 后端返回格式是 {code: 200, msg: "...", data: {url: "..."}}
-    if (res.data && typeof res.data === 'object' && 'url' in res.data) {
-      return res.data.url
-    }
-    // 如果data直接是字符串URL
-    if (typeof res.data === 'string') {
-      return res.data
-    }
-    throw new Error('上传失败：响应格式错误')
-  } catch (error: any) {
-    console.error('上传图片失败:', error)
-    throw new Error(error.msg || error.message || '上传失败')
-  }
-}
 

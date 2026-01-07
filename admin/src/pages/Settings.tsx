@@ -9,8 +9,8 @@ import { Switch } from '@/components/UI/Switch'
 
 const Settings = () => {
   const [settings, setSettings] = useState({
-    siteName: '管理后台',
-    siteDescription: '现代化的管理后台系统',
+    siteName: '灵语回响',
+    siteDescription: '智能语音交互平台管理后台',
     emailNotifications: true,
     pushNotifications: false,
     twoFactorAuth: false,

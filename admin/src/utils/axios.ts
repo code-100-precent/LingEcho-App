@@ -14,6 +14,7 @@ const axiosInstance: AxiosInstance = axios.create({
   headers: {
     'Content-Type': 'application/json',
   },
+  withCredentials: true, // 重要：允许发送和接收 cookies（session）
 })
 
 // 请求拦截器
