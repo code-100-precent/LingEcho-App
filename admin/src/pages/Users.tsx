@@ -1,13 +1,16 @@
 import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { motion } from 'framer-motion'
-import { Search, Plus, Edit2, Trash2, Filter, Eye } from 'lucide-react'
+import { Search, Edit2, Trash2, Filter, Eye, ChevronLeft, ChevronRight } from 'lucide-react'
 import AdminLayout from '@/components/Layout/AdminLayout'
 import Card from '@/components/UI/Card'
 import Button from '@/components/UI/Button'
 import Input from '@/components/UI/Input'
 import Modal from '@/components/UI/Modal'
 import ConfirmDialog from '@/components/UI/ConfirmDialog'
+import Badge from '@/components/UI/Badge'
+import Avatar from '@/components/UI/Avatar'
+import EmptyState from '@/components/UI/EmptyState'
 import { cn } from '@/utils/cn'
 import { getUsers, getUser, deleteUser, User as UserType } from '@/services/adminApi'
 import { showAlert } from '@/utils/notification'
@@ -16,6 +19,7 @@ const Users = () => {
   const navigate = useNavigate()
   const [searchQuery, setSearchQuery] = useState('')
   const [statusFilter, setStatusFilter] = useState('')
+  const [roleFilter, setRoleFilter] = useState('')
   const [showFilters, setShowFilters] = useState(false)
   const [users, setUsers] = useState<UserType[]>([])
   const [loading, setLoading] = useState(true)
@@ -27,7 +31,7 @@ const Users = () => {
 
   useEffect(() => {
     fetchUsers()
-  }, [page, searchQuery, statusFilter])
+  }, [page, searchQuery, statusFilter, roleFilter])
 
   const fetchUsers = async () => {
     try {
@@ -37,6 +41,7 @@ const Users = () => {
         pageSize,
         search: searchQuery || undefined,
         status: statusFilter || undefined,
+        role: roleFilter || undefined,
       })
       setUsers(response.list)
       setTotal(response.total)
@@ -117,16 +122,36 @@ const Users = () => {
               </Button>
             </div>
             {showFilters && (
-              <div className="pt-4 border-t border-slate-200 dark:border-slate-700">
-                <select
-                  value={statusFilter}
-                  onChange={(e) => setStatusFilter(e.target.value)}
-                  className="px-3 py-2 border border-slate-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-800 text-slate-900 dark:text-white"
-                >
-                  <option value="">全部状态</option>
-                  <option value="active">活跃</option>
-                  <option value="inactive">非活跃</option>
-                </select>
+              <div className="pt-4 border-t border-slate-200 dark:border-slate-700 grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">
+                    状态
+                  </label>
+                  <select
+                    value={statusFilter}
+                    onChange={(e) => setStatusFilter(e.target.value)}
+                    className="w-full px-3 py-2 border border-slate-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-800 text-slate-900 dark:text-white focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                  >
+                    <option value="">全部状态</option>
+                    <option value="active">活跃</option>
+                    <option value="inactive">非活跃</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">
+                    角色
+                  </label>
+                  <select
+                    value={roleFilter}
+                    onChange={(e) => setRoleFilter(e.target.value)}
+                    className="w-full px-3 py-2 border border-slate-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-800 text-slate-900 dark:text-white focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                  >
+                    <option value="">全部角色</option>
+                    <option value="superadmin">超级管理员</option>
+                    <option value="admin">管理员</option>
+                    <option value="user">普通用户</option>
+                  </select>
+                </div>
               </div>
             )}
           </div>
@@ -164,8 +189,11 @@ const Users = () => {
                   </tr>
                 ) : users.length === 0 ? (
                   <tr>
-                    <td colSpan={5} className="px-6 py-8 text-center text-slate-500">
-                      暂无数据
+                    <td colSpan={5} className="px-6 py-12">
+                      <EmptyState
+                        title="暂无用户"
+                        description="没有找到符合条件的用户"
+                      />
                     </td>
                   </tr>
                 ) : (
@@ -178,9 +206,11 @@ const Users = () => {
                   >
                     <td className="px-6 py-4 whitespace-nowrap">
                       <div className="flex items-center">
-                        <div className="w-10 h-10 rounded-full bg-gradient-to-br from-blue-400 to-indigo-500 flex items-center justify-center font-medium">
-                          {(user.displayName || user.email || 'U')[0].toUpperCase()}
-                        </div>
+                        <Avatar
+                          src={undefined}
+                          fallback={user.displayName || user.email || 'U'}
+                          size="md"
+                        />
                         <div className="ml-4">
                           <div className="text-sm font-medium text-slate-900 dark:text-white">
                             {user.displayName || user.email}
@@ -192,21 +222,20 @@ const Users = () => {
                       </div>
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap">
-                      <span className="px-2 py-1 text-xs font-medium rounded-full bg-blue-100 dark:bg-blue-900/20 text-blue-800 dark:text-blue-300">
+                      <Badge
+                        variant={user.isSuperUser ? 'error' : user.isStaff ? 'primary' : 'default'}
+                        size="sm"
+                      >
                         {getRoleName(user)}
-                      </span>
+                      </Badge>
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap">
-                      <span
-                        className={cn(
-                          'px-2 py-1 text-xs font-medium rounded-full',
-                          user.enabled
-                            ? 'bg-green-100 dark:bg-green-900/20 text-green-800 dark:text-green-300'
-                            : 'bg-red-100 dark:bg-red-900/20 text-red-800 dark:text-red-300'
-                        )}
+                      <Badge
+                        variant={user.enabled ? 'success' : 'error'}
+                        size="sm"
                       >
                         {user.enabled ? '活跃' : '非活跃'}
-                      </span>
+                      </Badge>
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm text-slate-500 dark:text-slate-400">
                       {new Date(user.createdAt).toLocaleDateString('zh-CN')}
@@ -246,6 +275,35 @@ const Users = () => {
               </tbody>
             </table>
           </div>
+          
+          {/* 分页 */}
+          {total > 0 && (
+            <div className="px-6 py-4 border-t border-slate-200 dark:border-slate-800 flex items-center justify-between">
+              <div className="text-sm text-slate-600 dark:text-slate-400">
+                共 {total} 条记录，第 {page} / {Math.ceil(total / pageSize)} 页
+              </div>
+              <div className="flex items-center gap-2">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  leftIcon={<ChevronLeft className="w-4 h-4" />}
+                  onClick={() => setPage(Math.max(1, page - 1))}
+                  disabled={page === 1}
+                >
+                  上一页
+                </Button>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  rightIcon={<ChevronRight className="w-4 h-4" />}
+                  onClick={() => setPage(Math.min(Math.ceil(total / pageSize), page + 1))}
+                  disabled={page >= Math.ceil(total / pageSize)}
+                >
+                  下一页
+                </Button>
+              </div>
+            </div>
+          )}
         </Card>
 
         {/* 用户详情模态框 */}

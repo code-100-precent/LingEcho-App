@@ -27,8 +27,8 @@ const Login = () => {
 
     setLoading(true)
     try {
-      // 调用登录API
-      const response = await post(`${getApiBaseURL()}/auth/login`, {
+      // 调用管理员登录API（专门用于管理后台，会验证用户是否是staff或admin）
+      const response = await post(`${getApiBaseURL()}/admin/auth/login`, {
         email,
         password,
         timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
@@ -122,9 +122,9 @@ const Login = () => {
               initial={{ opacity: 0, y: 10 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ delay: 0.3 }}
-              className="text-3xl font-bold bg-gradient-to-r from-blue-600 via-indigo-600 to-purple-600 bg-clip-text text-transparent mb-2"
+              className="text-3xl font-bold bg-gradient-to-r from-blue-600 via-indigo-600 to-purple-600 bg-clip-text mb-2"
             >
-              PlaymateHub
+              灵语回响
             </motion.h1>
             <motion.p
               initial={{ opacity: 0, y: 10 }}

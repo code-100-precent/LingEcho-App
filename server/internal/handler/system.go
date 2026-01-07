@@ -3,6 +3,7 @@ package handlers
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"os"
 	"strings"
@@ -388,4 +389,22 @@ func (h *Handlers) DashboardMetrics(c *gin.Context) {
 	}
 
 	response.Success(c, "获取仪表板指标成功", metrics)
+}
+
+// AdminDashboardMetrics 管理后台专用的仪表板指标接口（需要管理员权限）
+func (h *Handlers) AdminDashboardMetrics(c *gin.Context) {
+	user := models.CurrentUser(c)
+	if user == nil {
+		response.Fail(c, "未授权", errors.New("用户未登录"))
+		return
+	}
+
+	// 检查是否是管理员
+	if !user.IsStaff && !user.IsAdmin() {
+		response.Fail(c, "权限不足", errors.New("只有管理员可以访问管理后台"))
+		return
+	}
+
+	// 复用现有的仪表盘逻辑
+	h.DashboardMetrics(c)
 }

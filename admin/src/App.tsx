@@ -17,14 +17,6 @@ import Content from '@/pages/Content'
 import Settings from '@/pages/Settings'
 import Profile from '@/pages/Profile'
 import Notifications from '@/pages/Notifications'
-import Orders from '@/pages/Orders'
-import Playmates from '@/pages/Playmates'
-import Posts from '@/pages/Posts'
-import PostEdit from '@/pages/PostEdit'
-import Tags from '@/pages/Tags'
-import Topics from '@/pages/Topics'
-import Rankings from '@/pages/Rankings'
-import Social from '@/pages/Social'
 
 function App() {
   const { refreshUserInfo, isAuthenticated } = useAuthStore()
@@ -104,78 +96,6 @@ function App() {
               element={
                 <ProtectedRoute>
                   <Notifications />
-                </ProtectedRoute>
-              }
-            />
-            <Route
-              path="/orders"
-              element={
-                <ProtectedRoute>
-                  <Orders />
-                </ProtectedRoute>
-              }
-            />
-            <Route
-              path="/playmates"
-              element={
-                <ProtectedRoute>
-                  <Playmates />
-                </ProtectedRoute>
-              }
-            />
-            <Route
-              path="/posts"
-              element={
-                <ProtectedRoute>
-                  <Posts />
-                </ProtectedRoute>
-              }
-            />
-            <Route
-              path="/posts/new"
-              element={
-                <ProtectedRoute>
-                  <PostEdit />
-                </ProtectedRoute>
-              }
-            />
-            <Route
-              path="/posts/:id/edit"
-              element={
-                <ProtectedRoute>
-                  <PostEdit />
-                </ProtectedRoute>
-              }
-            />
-            <Route
-              path="/tags"
-              element={
-                <ProtectedRoute>
-                  <Tags />
-                </ProtectedRoute>
-              }
-            />
-            <Route
-              path="/topics"
-              element={
-                <ProtectedRoute>
-                  <Topics />
-                </ProtectedRoute>
-              }
-            />
-            <Route
-              path="/rankings"
-              element={
-                <ProtectedRoute>
-                  <Rankings />
-                </ProtectedRoute>
-              }
-            />
-            <Route
-              path="/social"
-              element={
-                <ProtectedRoute>
-                  <Social />
                 </ProtectedRoute>
               }
             />

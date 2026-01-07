@@ -1,11 +1,13 @@
 import { useState, useEffect } from 'react'
 import { motion } from 'framer-motion'
-import { Bell, CheckCheck, Trash2, Search } from 'lucide-react'
+import { Bell, CheckCheck, Trash2, Search, CheckCircle2, AlertCircle, Info, XCircle } from 'lucide-react'
 import AdminLayout from '@/components/Layout/AdminLayout'
 import Card from '@/components/UI/Card'
 import Button from '@/components/UI/Button'
 import Input from '@/components/UI/Input'
 import ConfirmDialog from '@/components/UI/ConfirmDialog'
+import Badge from '@/components/UI/Badge'
+import EmptyState from '@/components/UI/EmptyState'
 import { cn } from '@/utils/cn'
 import { getNotifications, markAllNotificationsRead, deleteNotification, Notification } from '@/services/adminApi'
 import { showAlert } from '@/utils/notification'
@@ -73,16 +75,29 @@ const Notifications = () => {
 
   const unreadCount = notifications?.filter(n => !n.read).length || 0
 
-  const getTypeColor = (type?: string) => {
+  const getTypeIcon = (type?: string) => {
     switch (type) {
       case 'success':
-        return 'bg-green-100 dark:bg-green-900/20 text-green-600 dark:text-green-400'
+        return <CheckCircle2 className="w-5 h-5" />
       case 'error':
-        return 'bg-red-100 dark:bg-red-900/20 text-red-600 dark:text-red-400'
+        return <XCircle className="w-5 h-5" />
       case 'warning':
-        return 'bg-yellow-100 dark:bg-yellow-900/20 text-yellow-600 dark:text-yellow-400'
+        return <AlertCircle className="w-5 h-5" />
       default:
-        return 'bg-blue-100 dark:bg-blue-900/20 text-blue-600 dark:text-blue-400'
+        return <Info className="w-5 h-5" />
+    }
+  }
+
+  const getTypeVariant = (type?: string): 'success' | 'error' | 'warning' | 'primary' => {
+    switch (type) {
+      case 'success':
+        return 'success'
+      case 'error':
+        return 'error'
+      case 'warning':
+        return 'warning'
+      default:
+        return 'primary'
     }
   }
 
@@ -147,56 +162,84 @@ const Notifications = () => {
             <div className="text-slate-500">加载中...</div>
           </Card>
         ) : notifications.length === 0 ? (
-          <Card className="p-12 text-center">
-            <Bell className="w-12 h-12 text-slate-400 mx-auto mb-4" />
-            <p className="text-slate-600 dark:text-slate-400">暂无消息</p>
+          <Card className="p-12">
+            <EmptyState
+              icon={Bell}
+              title="暂无消息"
+              description="您还没有收到任何通知"
+            />
           </Card>
         ) : (
           <div className="space-y-3">
-            {notifications.map((notification) => (
+            {notifications.map((notification, index) => (
               <motion.div
                 key={notification.id}
                 initial={{ opacity: 0, y: 20 }}
                 animate={{ opacity: 1, y: 0 }}
+                transition={{ delay: index * 0.05 }}
               >
-                <Card className={cn(
-                  "p-4 hover:shadow-md transition-shadow cursor-pointer",
-                  !notification.read && "border-l-4 border-l-blue-500"
-                )}>
+                <Card
+                  variant={!notification.read ? 'elevated' : 'default'}
+                  hover={true}
+                  className={cn(
+                    "transition-all duration-200",
+                    !notification.read && "border-l-4 border-l-blue-500 bg-blue-50/50 dark:bg-blue-950/20"
+                  )}
+                >
                   <div className="flex items-start gap-4">
-                    <div className={cn(
-                      "w-10 h-10 rounded-full flex items-center justify-center flex-shrink-0",
-                      getTypeColor(notification.type)
-                    )}>
-                      <Bell className="w-5 h-5" />
+                    <div className="flex-shrink-0">
+                      <Badge
+                        variant={getTypeVariant(notification.type)}
+                        size="md"
+                        shape="pill"
+                        icon={getTypeIcon(notification.type)}
+                        className="w-12 h-12 flex items-center justify-center"
+                      />
                     </div>
                     <div className="flex-1 min-w-0">
                       <div className="flex items-start justify-between gap-4">
                         <div className="flex-1">
-                          <div className="flex items-center gap-2 mb-1">
+                          <div className="flex items-center gap-2 mb-2">
                             <h4 className={cn(
-                              "font-semibold",
-                              !notification.read ? "text-slate-900 dark:text-white" : "text-slate-600 dark:text-slate-400"
+                              "text-base font-semibold",
+                              !notification.read 
+                                ? "text-slate-900 dark:text-white" 
+                                : "text-slate-600 dark:text-slate-400"
                             )}>
                               {notification.title}
                             </h4>
                             {!notification.read && (
-                              <span className="w-2 h-2 rounded-full bg-blue-500" />
+                              <Badge variant="primary" size="xs" shape="pill">
+                                未读
+                              </Badge>
                             )}
                           </div>
-                          <p className="text-sm text-slate-600 dark:text-slate-400 mb-2">
+                          <p className="text-sm text-slate-600 dark:text-slate-400 mb-3 leading-relaxed">
                             {notification.content}
                           </p>
-                          <p className="text-xs text-slate-500 dark:text-slate-500">
-                            {new Date(notification.createdAt).toLocaleString('zh-CN')}
-                          </p>
+                          <div className="flex items-center gap-3">
+                            <p className="text-xs text-slate-500 dark:text-slate-500">
+                              {new Date(notification.createdAt).toLocaleString('zh-CN', {
+                                year: 'numeric',
+                                month: 'long',
+                                day: 'numeric',
+                                hour: '2-digit',
+                                minute: '2-digit'
+                              })}
+                            </p>
+                            {notification.type && (
+                              <Badge variant="outline" size="xs">
+                                {notification.type}
+                              </Badge>
+                            )}
+                          </div>
                         </div>
-                        <div className="flex items-center gap-2">
+                        <div className="flex items-center gap-2 flex-shrink-0">
                           <Button
                             variant="ghost"
                             size="sm"
                             leftIcon={<Trash2 className="w-4 h-4" />}
-                            className="text-red-600 hover:text-red-700 dark:text-red-400"
+                            className="text-red-600 hover:text-red-700 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-950/20"
                             onClick={() => handleDelete(notification.id)}
                           >
                             删除
