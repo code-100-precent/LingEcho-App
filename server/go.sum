@@ -23,6 +23,10 @@ github.com/BurntSushi/toml v1.5.0/go.mod h1:ukJfTF/6rtPPRCnwkur4qwRxa8vTRFBF0uk2
 github.com/CloudyKit/fastprinter v0.0.0-20200109182630-33d98a066a53/go.mod h1:+3IMCy2vIlbG1XG/0ggNQv0SvxCAIpPM5b1nCz56Xno=
 github.com/CloudyKit/jet/v3 v3.0.0/go.mod h1:HKQPgSJmdK8hdoAbKUUWajkHyHo4RaU5rMdUywE7VMo=
 github.com/Joker/hpp v1.0.0/go.mod h1:8x5n+M1Hp5hC0g8okX3sR3vFQwynaX/UgSOM9MeBKzY=
+github.com/LingByte/lingstorage-sdk-go v0.0.0-20260112045613-e093320121ad h1:LFoW1kFfLdKZMolnGeTbBDegA3vu3fmtLKj9ChWG8Xo=
+github.com/LingByte/lingstorage-sdk-go v0.0.0-20260112045613-e093320121ad/go.mod h1:pPClLbXjwKXfOIcgZiklZj6DVBhI86uN7jnZqxAcwEo=
+github.com/LingByte/lingstorage-sdk-go v0.0.0-20260112052154-e5a3085361f9 h1:SytSlUoWxTvb8s/7E7BvGcAP7zPXOdjBx3wHoRTkQfQ=
+github.com/LingByte/lingstorage-sdk-go v0.0.0-20260112052154-e5a3085361f9/go.mod h1:pPClLbXjwKXfOIcgZiklZj6DVBhI86uN7jnZqxAcwEo=
 github.com/RoaringBitmap/roaring/v2 v2.4.5 h1:uGrrMreGjvAtTBobc0g5IrW1D5ldxDQYe2JW2gggRdg=
 github.com/RoaringBitmap/roaring/v2 v2.4.5/go.mod h1:FiJcsfkGje/nZBZgCu0ZxCPOKD/hVXDS2dXi7/eUFE0=
 github.com/Shopify/goreferrer v0.0.0-20181106222321-ec9c9a553398/go.mod h1:a1uqRtAwp2Xwc6WNPJEufxJ7fx3npB4UV/JOLmbu5I0=

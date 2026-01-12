@@ -16,13 +16,13 @@ import (
 	"sync"
 	"time"
 
+	"github.com/LingByte/lingstorage-sdk-go"
 	"github.com/code-100-precent/LingEcho/internal/models"
 	"github.com/code-100-precent/LingEcho/pkg/config"
 	"github.com/code-100-precent/LingEcho/pkg/constants"
 	"github.com/code-100-precent/LingEcho/pkg/graph"
 	v2 "github.com/code-100-precent/LingEcho/pkg/llm"
 	"github.com/code-100-precent/LingEcho/pkg/response"
-	stores "github.com/code-100-precent/LingEcho/pkg/storage"
 	"github.com/code-100-precent/LingEcho/pkg/synthesizer"
 	"github.com/code-100-precent/LingEcho/pkg/utils"
 	"github.com/code-100-precent/LingEcho/pkg/voiceclone"
@@ -554,36 +554,26 @@ func (h *Handlers) SynthesizeWithVoice(c *gin.Context) {
 		response.Fail(c, "语音合成失败", err.Error())
 		return
 	}
-
-	// 3) 获取音频文件信息（大小和时长）
-	store := stores.Default()
 	audioSize := int64(0)
 	audioDuration := float64(0)
-
-	// 从存储中读取文件获取大小（Read 方法返回文件大小）
-	reader, size, err := store.Read(req.StorageKey)
-	if err == nil && size > 0 {
-		reader.Close() // 关闭读取器，我们只需要大小
-		audioSize = size
-		// 计算音频时长
-		// MP3 文件：使用近似估算，128kbps 比特率
-		// 时长 = (文件大小 * 8) / (比特率 * 1000) 秒
-		if strings.HasSuffix(req.StorageKey, ".mp3") {
-			// MP3 128kbps 比特率估算
-			bitrate := 128000 // 128 kbps = 128000 bps
-			audioDuration = float64(audioSize) * 8.0 / float64(bitrate)
-		} else {
-			// WAV/PCM 文件：PCM数据大小 / (采样率 * 声道数 * 位深度/8)
-			// 讯飞默认：24000Hz, 1声道, 16bit
-			// WAV文件有44字节头部，需要减去
-			pcmDataSize := audioSize - 44
-			if pcmDataSize > 0 {
-				sampleRate := 24000
-				channels := 1
-				bitDepth := 16
-				bytesPerSecond := sampleRate * channels * (bitDepth / 8)
-				audioDuration = float64(pcmDataSize) / float64(bytesPerSecond)
-			}
+	// 计算音频时长
+	// MP3 文件：使用近似估算，128kbps 比特率
+	// 时长 = (文件大小 * 8) / (比特率 * 1000) 秒
+	if strings.HasSuffix(req.StorageKey, ".mp3") {
+		// MP3 128kbps 比特率估算
+		bitrate := 128000 // 128 kbps = 128000 bps
+		audioDuration = float64(audioSize) * 8.0 / float64(bitrate)
+	} else {
+		// WAV/PCM 文件：PCM数据大小 / (采样率 * 声道数 * 位深度/8)
+		// 讯飞默认：24000Hz, 1声道, 16bit
+		// WAV文件有44字节头部，需要减去
+		pcmDataSize := audioSize - 44
+		if pcmDataSize > 0 {
+			sampleRate := 24000
+			channels := 1
+			bitDepth := 16
+			bytesPerSecond := sampleRate * channels * (bitDepth / 8)
+			audioDuration = float64(pcmDataSize) / float64(bytesPerSecond)
 		}
 	}
 
@@ -1749,10 +1739,13 @@ func (h *Handlers) processAudioAsyncV2(ctx context.Context, credential *models.U
 						return
 					}
 
-					// 5) 保存音频到存储
-					store := stores.Default()
 					ttsKey := fmt.Sprintf("oneshot/v2_voiceclone_%d_%d.wav", userID, time.Now().Unix())
-					err = store.Write(ttsKey, bytes.NewReader(wavData))
+					reader, err := config.GlobalStore.UploadBytes(&lingstorage.UploadBytesRequest{
+						Bucket:   config.GlobalConfig.LingstorageBucket,
+						Data:     wavData,
+						Filename: ttsKey,
+						Key:      ttsKey,
+					})
 					if err != nil {
 						fmt.Printf("[V2] 保存音频失败: %v\n", err)
 						audioCacheMutex.Lock()
@@ -1766,7 +1759,7 @@ func (h *Handlers) processAudioAsyncV2(ctx context.Context, credential *models.U
 					}
 
 					// 获取音频URL
-					ttsAudioURL := store.PublicURL(ttsKey)
+					ttsAudioURL := reader.URL
 
 					// 更新音色使用统计
 					clone.UsageCount++
@@ -1949,10 +1942,13 @@ func (h *Handlers) processAudioAsyncV2(ctx context.Context, credential *models.U
 		return
 	}
 
-	// 保存到本地存储（使用WAV格式）
-	store := stores.Default()
 	ttsKey := fmt.Sprintf("oneshot/v2_tts_%d_%d.wav", userID, time.Now().Unix())
-	err = store.Write(ttsKey, bytes.NewReader(wavData))
+	reader, err := config.GlobalStore.UploadBytes(&lingstorage.UploadBytesRequest{
+		Bucket:   config.GlobalConfig.LingstorageBucket,
+		Data:     wavData,
+		Filename: ttsKey,
+		Key:      ttsKey,
+	})
 	if err != nil {
 		fmt.Printf("[V2] 保存音频失败: %v\n", err)
 		audioCacheMutex.Lock()
@@ -1966,7 +1962,7 @@ func (h *Handlers) processAudioAsyncV2(ctx context.Context, credential *models.U
 	}
 
 	// 获取音频URL
-	ttsAudioURL := store.PublicURL(ttsKey)
+	ttsAudioURL := reader.URL
 
 	// 将音频URL存储到缓存中
 	audioCacheMutex.Lock()
