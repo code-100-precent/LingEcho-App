@@ -13,13 +13,13 @@ import (
 	"sync"
 	"time"
 
+	"github.com/LingByte/lingstorage-sdk-go"
 	"github.com/code-100-precent/LingEcho/internal/models"
 	"github.com/code-100-precent/LingEcho/pkg/config"
 	"github.com/code-100-precent/LingEcho/pkg/constants"
 	"github.com/code-100-precent/LingEcho/pkg/logger"
 	"github.com/code-100-precent/LingEcho/pkg/notification"
 	"github.com/code-100-precent/LingEcho/pkg/response"
-	stores "github.com/code-100-precent/LingEcho/pkg/storage"
 	"github.com/code-100-precent/LingEcho/pkg/utils"
 	"github.com/gin-gonic/gin"
 	"go.uber.org/zap"
@@ -1037,25 +1037,31 @@ func (h *Handlers) UploadGroupAvatar(c *gin.Context) {
 	fileName := fmt.Sprintf("group_avatars/%d_%d%s", group.ID, time.Now().Unix(), fileExt)
 
 	// 使用本地存储
-	store := stores.Default()
+	//store := stores.Default()
 
 	// 如果组织已有头像，删除旧头像
-	if group.Avatar != "" {
-		oldKey := extractKeyFromURL(group.Avatar)
-		if oldKey != "" {
-			store.Delete(oldKey)
-		}
-	}
+	//if group.Avatar != "" {
+	//	oldKey := extractKeyFromURL(group.Avatar)
+	//	if oldKey != "" {
+	//		store.Delete(oldKey)
+	//	}
+	//}
 
 	// 上传新头像
-	err = store.Write(fileName, file)
-	if err != nil {
-		response.Fail(c, "上传头像失败", err.Error())
-		return
-	}
+	//err = store.Write(fileName, file)
+	//if err != nil {
+	//	response.Fail(c, "上传头像失败", err.Error())
+	//	return
+	//}
+	reader, err := config.GlobalStore.UploadFromReader(&lingstorage.UploadFromReaderRequest{
+		Reader:   file,
+		Bucket:   config.GlobalConfig.LingstorageBucket,
+		Filename: fileName,
+		Key:      fileName,
+	})
 
 	// 获取头像URL
-	avatarURL := store.PublicURL(fileName)
+	avatarURL := reader.URL
 
 	// 保存相对路径用于返回
 	avatarRelativePath := avatarURL
@@ -1075,7 +1081,7 @@ func (h *Handlers) UploadGroupAvatar(c *gin.Context) {
 
 	// 更新组织头像
 	if err := h.db.Model(&group).Update("avatar", avatarURL).Error; err != nil {
-		store.Delete(fileName)
+		//store.Delete(fileName)
 		response.Fail(c, "更新组织头像失败", err.Error())
 		return
 	}

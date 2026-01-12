@@ -10,6 +10,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/LingByte/lingstorage-sdk-go"
 	"github.com/code-100-precent/LingEcho"
 	"github.com/code-100-precent/LingEcho/internal/models"
 	"github.com/code-100-precent/LingEcho/pkg/cache"
@@ -20,7 +21,6 @@ import (
 	"github.com/code-100-precent/LingEcho/pkg/middleware"
 	"github.com/code-100-precent/LingEcho/pkg/notification"
 	"github.com/code-100-precent/LingEcho/pkg/response"
-	stores "github.com/code-100-precent/LingEcho/pkg/storage"
 	"github.com/code-100-precent/LingEcho/pkg/utils"
 	"github.com/gin-gonic/gin"
 	"github.com/pquerna/otp/totp"
@@ -1635,32 +1635,23 @@ func (h *Handlers) handleUploadAvatar(c *gin.Context) {
 	fileExt := getFileExtension(header.Filename)
 	fileName := fmt.Sprintf("avatars/%d_%d%s", user.ID, time.Now().Unix(), fileExt)
 
-	// 获取存储实例 - 优先使用本地存储，避免七牛云配置问题
-	store := stores.Default()
-
-	// 如果用户已有头像且不是默认头像，删除旧头像
-	if user.Avatar != "" && !isDefaultAvatar(user.Avatar) {
-		// 从URL中提取文件路径
-		oldKey := extractKeyFromURL(user.Avatar)
-		if oldKey != "" {
-			store.Delete(oldKey)
-		}
-	}
-
-	// 上传新头像
-	err = store.Write(fileName, file)
+	//// 如果用户已有头像且不是默认头像，删除旧头像
+	//if user.Avatar != "" && !isDefaultAvatar(user.Avatar) {
+	//	// 从URL中提取文件路径
+	//	oldKey := extractKeyFromURL(user.Avatar)
+	//	if oldKey != "" {
+	//		store.Delete(oldKey)
+	//	}
+	//}
+	reader, err := config.GlobalStore.UploadFromReader(&lingstorage.UploadFromReaderRequest{
+		Reader:   file,
+		Bucket:   config.GlobalConfig.LingstorageBucket,
+		Filename: fileName,
+		Key:      fileName,
+	})
 	if err != nil {
 		response.Fail(c, "Failed to upload avatar", err)
 		return
-	}
-
-	// 获取文件大小
-	fileInfo, fileSize, err := store.Read(fileName)
-	if err == nil && fileInfo != nil {
-		fileInfo.Close()
-	} else {
-		// 如果无法读取文件大小，使用header中的大小
-		fileSize = header.Size
 	}
 
 	// 记录存储使用量
@@ -1670,7 +1661,7 @@ func (h *Handlers) handleUploadAvatar(c *gin.Context) {
 		if err == nil && len(credentials) > 0 {
 			credentialID = credentials[0].ID
 		}
-		if fileSize > 0 {
+		if reader.Size > 0 {
 			models.RecordStorageUsage(
 				h.db,
 				user.ID,
@@ -1678,14 +1669,14 @@ func (h *Handlers) handleUploadAvatar(c *gin.Context) {
 				nil, // assistantID
 				nil, // groupID
 				fmt.Sprintf("avatar_%d_%d", user.ID, time.Now().Unix()),
-				fileSize,
+				reader.Size,
 				fmt.Sprintf("上传头像: %s", fileName),
 			)
 		}
 	}()
 
 	// 更新用户头像URL
-	avatarURL := store.PublicURL(fileName)
+	avatarURL := reader.URL
 
 	// 保存相对路径用于返回
 	avatarRelativePath := avatarURL
@@ -1709,7 +1700,7 @@ func (h *Handlers) handleUploadAvatar(c *gin.Context) {
 	})
 	if err != nil {
 		// 如果数据库更新失败，删除已上传的文件
-		store.Delete(fileName)
+		//store.Delete(fileName)
 		response.Fail(c, "Failed to update user avatar", err)
 		return
 	}

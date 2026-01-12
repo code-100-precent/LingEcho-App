@@ -20,7 +20,8 @@ import (
 	"strings"
 	"time"
 
-	stores "github.com/code-100-precent/LingEcho/pkg/storage"
+	"github.com/LingByte/lingstorage-sdk-go"
+	"github.com/code-100-precent/LingEcho/pkg/config"
 	"github.com/gorilla/websocket"
 )
 
@@ -723,14 +724,16 @@ func (s *XunfeiService) SynthesizeToStorage(ctx context.Context, req *Synthesize
 		}
 	}
 
-	// 保存到存储
-	store := stores.Default()
-	if err := store.Write(storageKey, bytes.NewReader(mp3Data)); err != nil {
-		return "", fmt.Errorf("failed to write to storage: %w", err)
-	}
+	// 测试上传
+	result, err := config.GlobalStore.UploadBytes(&lingstorage.UploadBytesRequest{
+		Data:     mp3Data,
+		Filename: storageKey,
+		Bucket:   config.GlobalConfig.LingstorageBucket,
+		Key:      storageKey,
+	})
 
 	// 获取URL
-	return store.PublicURL(storageKey), nil
+	return result.URL, nil
 }
 
 // convertPCMToWAV 将 PCM 音频数据转换为 WAV 格式（添加 WAV 文件头）
