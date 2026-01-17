@@ -137,6 +137,8 @@ export interface User {
   lastName?: string
   phone?: string
   gender?: string
+  city?: string
+  region?: string
   extra?: string
   locale?: string
   timezone: string
@@ -145,12 +147,16 @@ export interface User {
   createdAt: string
   updatedAt: string
   lastLogin: string
+  loginCount?: number
+  lastPasswordChange?: string
+  profileComplete?: number
   hasFilledDetails: boolean
   emailNotifications: boolean
   pushNotifications?: boolean
   systemNotifications?: boolean
   autoCleanUnreadEmails?: boolean
   twoFactorEnabled?: boolean
+  emailVerified?: boolean
 }
 
 // 用户注册
@@ -191,6 +197,16 @@ export const getUserInfo = async (): Promise<ApiResponse<User>> => {
 // 刷新token
 export const refreshToken = async (): Promise<ApiResponse<{ token: string }>> => {
   return post<{ token: string }>('/auth/refresh')
+}
+
+// 发送邮箱验证邮件
+export const sendEmailVerification = async (): Promise<ApiResponse<null>> => {
+  return post<null>('/auth/send-email-verification')
+}
+
+// 验证邮箱（通过URL中的token）
+export const verifyEmail = async (token: string): Promise<ApiResponse<User>> => {
+  return get<User>(`/auth/verify-email?token=${token}`)
 }
 
 // 登出 - 对应 GET /auth/logout

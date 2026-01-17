@@ -13,9 +13,10 @@ import Badge from '../components/UI/Badge'
 import Switch from '../components/UI/Switch'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '../components/UI/Tabs'
 import FadeIn from '../components/Animations/FadeIn'
+import LoadingAnimation from '../components/Animations/LoadingAnimation'
 import { showAlert } from '../utils/notification'
 import { getProfile, updateProfile, updatePreferences, changePassword, changePasswordByEmail, uploadAvatar, setupTwoFactor, enableTwoFactor, disableTwoFactor, getUserActivity, getUserDevices, deleteUserDevice, trustUserDevice, TwoFactorSetupResponse, ActivityLog, UserDevice } from '../api/profile'
-import { sendEmailCode } from '../api/auth'
+import { sendEmailCode, sendEmailVerification } from '../api/auth'
 import { motion, AnimatePresence } from 'framer-motion'
 import AudioController from '../components/UI/AudioController'
 import AuthModal from '../components/Auth/AuthModal'
@@ -48,6 +49,10 @@ const Profile = () => {
   // 设备管理相关状态
   const [devices, setDevices] = useState<UserDevice[]>([])
   const [isLoadingDevices, setIsLoadingDevices] = useState(false)
+  
+  // 邮箱验证相关状态
+  const [isSendingEmailVerification, setIsSendingEmailVerification] = useState(false)
+  
   const [formData, setFormData] = useState({
     email: user?.email || '',
     phone: user?.phone || '',
@@ -57,6 +62,8 @@ const Profile = () => {
     locale: user?.locale || 'zh-CN',
     timezone: user?.timezone || 'Asia/Shanghai',
     gender: user?.gender || '',
+    city: user?.city || '',
+    region: user?.region || '',
     extra: user?.extra || '',
     avatar: user?.avatar || '',
   })
@@ -103,6 +110,8 @@ const Profile = () => {
             locale: response.data.locale || 'zh-CN',
             timezone: response.data.timezone || 'Asia/Shanghai',
             gender: response.data.gender || '',
+            city: response.data.city || '',
+            region: response.data.region || '',
             extra: response.data.extra || '',
             avatar: response.data.avatar || '',
           })
@@ -384,6 +393,8 @@ const Profile = () => {
       locale: user?.locale || 'zh-CN',
       timezone: user?.timezone || 'Asia/Shanghai',
       gender: user?.gender || '',
+      city: user?.city || '',
+      region: user?.region || '',
       extra: user?.extra || '',
       avatar: user?.avatar || '',
     })
@@ -419,6 +430,33 @@ const Profile = () => {
       showAlert(error?.msg || error?.message || '发送验证码失败', 'error', '操作失败')
     } finally {
       setIsSendingCode(false)
+    }
+  }
+
+  // 发送邮箱验证邮件
+  const handleSendEmailVerification = async () => {
+    if (!user?.email) {
+      showAlert('邮箱地址不存在', 'error', '操作失败')
+      return
+    }
+
+    if (user.emailVerified) {
+      showAlert('邮箱已经验证过了', 'info', '提示')
+      return
+    }
+
+    setIsSendingEmailVerification(true)
+    try {
+      const response = await sendEmailVerification()
+      if (response.code === 200) {
+        showAlert('验证邮件已发送到您的邮箱，请查收并点击邮件中的链接完成验证', 'success', '发送成功')
+      } else {
+        throw new Error(response.msg || '发送验证邮件失败')
+      }
+    } catch (error: any) {
+      showAlert(error?.msg || error?.message || '发送验证邮件失败', 'error', '操作失败')
+    } finally {
+      setIsSendingEmailVerification(false)
     }
   }
 
@@ -528,7 +566,7 @@ const Profile = () => {
     return (
       <div className="min-h-screen flex items-center justify-center">
         <div className="text-center">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary mx-auto mb-4"></div>
+          <LoadingAnimation type="spinner" size="lg" className="mx-auto mb-4" />
           <p className="text-2xl font-bold text-neutral-900 dark:text-neutral-100 mb-4">
             {t('profile.loading')}
           </p>
@@ -555,16 +593,6 @@ const Profile = () => {
                 <div className="text-sm text-gray-500 dark:text-gray-400">
                   {t('profile.lastLogin')}：{user?.lastLogin ? new Date(user.lastLogin).toLocaleDateString('zh-CN') : t('profile.unknown')}
                 </div>
-              </div>
-              <div className="flex items-center space-x-2">
-                <Button
-                  variant="outline"
-                  size="sm"
-                  leftIcon={<Settings className="w-4 h-4" />}
-                  onClick={() => setIsEditing(!isEditing)}
-                >
-                  {isEditing ? t('profile.finishEdit') : t('profile.editProfile')}
-                </Button>
               </div>
             </div>
           </div>
@@ -651,10 +679,82 @@ const Profile = () => {
                       <span className="text-sm text-gray-600 dark:text-gray-400">{t('profile.accountStatus')}</span>
                       <Badge variant="success" className="text-xs">{t('profile.active')}</Badge>
                     </div>
+                    <div className="flex justify-between items-center">
+                      <span className="text-sm text-gray-600 dark:text-gray-400">邮箱状态</span>
+                      <div className="flex items-center space-x-2">
+                        <Badge variant={user?.emailVerified ? "success" : "warning"} className="text-xs">
+                          {user?.emailVerified ? '已验证' : '未验证'}
+                        </Badge>
+                        {!user?.emailVerified && (
+                          <button
+                            onClick={handleSendEmailVerification}
+                            disabled={isSendingEmailVerification}
+                            className="text-xs text-blue-600 hover:text-blue-800 dark:text-blue-400 dark:hover:text-blue-300 underline disabled:opacity-50"
+                          >
+                            {isSendingEmailVerification ? '发送中...' : '验证'}
+                          </button>
+                        )}
+                      </div>
+                    </div>
                     {user?.phone && (
                       <div className="flex justify-between items-center">
                         <span className="text-sm text-gray-600 dark:text-gray-400">{t('profile.phone')}</span>
                         <span className="text-sm text-gray-900 dark:text-white">{user.phone}</span>
+                      </div>
+                    )}
+                    {(user?.city || user?.region) && (
+                      <div className="flex justify-between items-center">
+                        <span className="text-sm text-gray-600 dark:text-gray-400">地区</span>
+                        <span className="text-sm text-gray-900 dark:text-white" title={[user?.city, user?.region].filter(Boolean).join(', ')}>
+                          {(() => {
+                            const location = [user?.city, user?.region].filter(Boolean).join(', ') || '未设置';
+                            return location.length > 8 ? location.substring(0, 8) + '...' : location;
+                          })()}
+                        </span>
+                      </div>
+                    )}
+                    <div className="flex justify-between items-center">
+                      <span className="text-sm text-gray-600 dark:text-gray-400">登录次数</span>
+                      <span className="text-sm text-gray-900 dark:text-white">{user?.loginCount || 0} 次</span>
+                    </div>
+                    {user?.lastPasswordChange && (
+                      <div className="flex justify-between items-center">
+                        <span className="text-sm text-gray-600 dark:text-gray-400">最后修改密码</span>
+                        <span className="text-sm text-gray-900 dark:text-white">
+                          {new Date(user.lastPasswordChange).toLocaleDateString('zh-CN')}
+                        </span>
+                      </div>
+                    )}
+                    <div className="flex justify-between items-center">
+                      <span className="text-sm text-gray-600 dark:text-gray-400">资料完整度</span>
+                      <div className="flex items-center space-x-2">
+                        <div className="w-16 bg-gray-200 dark:bg-gray-700 rounded-full h-2">
+                          <div 
+                            className="bg-blue-500 h-2 rounded-full transition-all duration-300" 
+                            style={{ width: `${user?.profileComplete || 0}%` }}
+                          ></div>
+                        </div>
+                        <span className="text-xs text-gray-600 dark:text-gray-400">{user?.profileComplete || 0}%</span>
+                      </div>
+                    </div>
+                    {(user?.profileComplete || 0) < 100 && (
+                      <div className="mt-2 p-2 bg-yellow-50 dark:bg-yellow-900/20 rounded-md border border-yellow-200 dark:border-yellow-800">
+                        <p className="text-xs text-yellow-700 dark:text-yellow-300">
+                          <span className="font-medium">待完善：</span>
+                          {(() => {
+                            const missing = [];
+                            if (!user?.displayName) missing.push('显示名称');
+                            if (!user?.firstName) missing.push('名字');
+                            if (!user?.lastName) missing.push('姓氏');
+                            if (!user?.avatar) missing.push('头像');
+                            if (!user?.phone) missing.push('手机号码');
+                            if (!user?.emailVerified) missing.push('邮箱验证');
+                            if (!user?.city) missing.push('城市');
+                            if (!user?.region) missing.push('地区');
+                            if (!user?.gender) missing.push('性别');
+                            return missing.slice(0, 3).join('、') + (missing.length > 3 ? '等' : '');
+                          })()}
+                        </p>
                       </div>
                     )}
                   </div>
@@ -793,6 +893,24 @@ const Profile = () => {
                               <option value="other">{t('profile.gender.other')}</option>
                             </select>
                           </div>
+                        </div>
+
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                          <Input
+                            label="城市"
+                            value={formData.city}
+                            onChange={(e) => setFormData(prev => ({ ...prev, city: e.target.value }))}
+                            disabled={!isEditing}
+                            placeholder="请输入所在城市"
+                          />
+                          
+                          <Input
+                            label="地区"
+                            value={formData.region}
+                            onChange={(e) => setFormData(prev => ({ ...prev, region: e.target.value }))}
+                            disabled={!isEditing}
+                            placeholder="请输入所在地区"
+                          />
                         </div>
 
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -1231,7 +1349,7 @@ const Profile = () => {
                           
                           {isLoadingDevices ? (
                             <div className="flex items-center justify-center py-8">
-                              <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
+                              <LoadingAnimation type="spinner" size="md" />
                               <span className="ml-2 text-gray-600 dark:text-gray-400">加载中...</span>
                             </div>
                           ) : devices.length === 0 ? (
@@ -1240,7 +1358,7 @@ const Profile = () => {
                               <p className="text-gray-500 dark:text-gray-400">暂无设备记录</p>
                             </div>
                           ) : (
-                            <div className="space-y-3">
+                            <div className="space-y-3 max-h-96 overflow-y-auto">
                               {devices.map((device) => (
                                 <motion.div
                                   key={device.id}
@@ -1325,7 +1443,7 @@ const Profile = () => {
                       
                       {isLoadingActivities ? (
                         <div className="flex items-center justify-center py-8">
-                          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
+                          <LoadingAnimation type="spinner" size="md" />
                           <span className="ml-2 text-gray-600 dark:text-gray-400">加载中...</span>
                         </div>
                       ) : activities.length === 0 ? (
@@ -1334,7 +1452,7 @@ const Profile = () => {
                           <p className="text-gray-500 dark:text-gray-400">暂无活动记录</p>
                         </div>
                       ) : (
-                        <div className="space-y-4">
+                        <div className="space-y-4 max-h-96 overflow-y-auto">
                           {activities.map((activity) => (
                             <motion.div
                               key={activity.id}

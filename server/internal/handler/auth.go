@@ -1032,6 +1032,12 @@ func (h *Handlers) handleUserUpdate(c *gin.Context) {
 	if req.Avatar != "" {
 		vals["avatar"] = req.Avatar
 	}
+	if req.City != "" {
+		vals["city"] = req.City
+	}
+	if req.Region != "" {
+		vals["region"] = req.Region
+	}
 
 	err := models.UpdateUser(h.db, user, vals)
 	if err != nil {
@@ -1057,10 +1063,6 @@ func (h *Handlers) handleUserUpdateBasicInfo(c *gin.Context) {
 		return
 	}
 	user := models.CurrentUser(c)
-	if user.HasBasicInfo() {
-		response.Fail(c, "user is already a basic info", nil)
-		return
-	}
 	vals := make(map[string]interface{})
 
 	if req.WifiName != "" {
@@ -1084,7 +1086,6 @@ func (h *Handlers) handleUserUpdateBasicInfo(c *gin.Context) {
 }
 
 func (h *Handlers) handleUserUpdatePreferences(c *gin.Context) {
-	// 使用指针以检测字段是否存在，避免未提供字段被误设为 false
 	var preferences struct {
 		EmailNotifications    *bool `json:"emailNotifications"`
 		PushNotifications     *bool `json:"pushNotifications"`
@@ -1655,23 +1656,10 @@ func (h *Handlers) handleUploadAvatar(c *gin.Context) {
 	}
 
 	// 获取文件大小
-	fileInfo, fileSize, err := store.Read(fileName)
+	fileInfo, _, err := store.Read(fileName)
 	if err == nil && fileInfo != nil {
 		fileInfo.Close()
-	} else {
-		// 如果无法读取文件大小，使用header中的大小
-		fileSize = header.Size
 	}
-
-	// 记录存储使用量
-	go func() {
-		var credentialID uint
-		credentials, err := models.GetUserCredentials(h.db, user.ID)
-		if err == nil && len(credentials) > 0 {
-			credentialID = credentials[0].ID
-		}
-	}()
-
 	// 更新用户头像URL
 	avatarURL := store.PublicURL(fileName)
 

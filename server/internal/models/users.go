@@ -97,6 +97,8 @@ type UpdateUserRequest struct {
 	Locale      string `form:"locale" json:"locale"`
 	Timezone    string `form:"timezone" json:"timezone"`
 	Gender      string `form:"gender" json:"gender"`
+	City        string `form:"city" json:"city"`
+	Region      string `form:"region" json:"region"`
 	Extra       string `form:"extra" json:"extra"`
 	Avatar      string `form:"avatar" json:"avatar"`
 }
@@ -846,6 +848,9 @@ func CalculateProfileComplete(user *User) int {
 	if user.City != "" {
 		complete++
 	}
+	if user.Region != "" {
+		complete++
+	}
 
 	// 偏好设置 (10%)
 	total += 1
@@ -859,6 +864,48 @@ func CalculateProfileComplete(user *User) int {
 	}
 
 	return percentage
+}
+
+// GetProfileCompleteMissingFields 获取缺失的资料字段
+func GetProfileCompleteMissingFields(user *User) []string {
+	var missing []string
+
+	// 基本信息检查
+	if user.DisplayName == "" {
+		missing = append(missing, "显示名称")
+	}
+	if user.FirstName == "" {
+		missing = append(missing, "名字")
+	}
+	if user.LastName == "" {
+		missing = append(missing, "姓氏")
+	}
+	if user.Avatar == "" {
+		missing = append(missing, "头像")
+	}
+
+	// 联系方式检查
+	if user.Phone == "" {
+		missing = append(missing, "手机号码")
+	}
+	if !user.EmailVerified {
+		missing = append(missing, "邮箱验证")
+	}
+
+	// 地址信息检查
+	if user.City == "" {
+		missing = append(missing, "城市")
+	}
+	if user.Region == "" {
+		missing = append(missing, "地区")
+	}
+
+	// 其他信息检查
+	if user.Gender == "" {
+		missing = append(missing, "性别")
+	}
+
+	return missing
 }
 
 // UpdateProfileComplete 更新资料完整度
