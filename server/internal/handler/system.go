@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"net/http"
-	"os"
 	"strings"
 	"time"
 
@@ -13,7 +12,6 @@ import (
 	"github.com/code-100-precent/LingEcho/pkg/config"
 	"github.com/code-100-precent/LingEcho/pkg/constants"
 	"github.com/code-100-precent/LingEcho/pkg/response"
-	stores "github.com/code-100-precent/LingEcho/pkg/storage"
 	"github.com/code-100-precent/LingEcho/pkg/utils"
 	"github.com/gin-gonic/gin"
 )
@@ -268,36 +266,8 @@ func (h *Handlers) SystemStatus(c *gin.Context) {
 
 	// 检查存储服务
 	storageStatus := false
-	store := stores.Default()
-	if store != nil {
-		// 尝试使用 Exists 方法检查存储服务是否可用
-		testKey := "__health_check__"
-		_, err := store.Exists(testKey)
-		if err == nil {
-			storageStatus = true
-		} else {
-			// 如果 Exists 失败，对于本地存储，检查目录是否可写
-			uploadDir := utils.GetEnv("UPLOAD_DIR")
-			if uploadDir == "" {
-				uploadDir = stores.UploadDir
-			}
-			// 检查目录是否存在或可创建
-			if info, err := os.Stat(uploadDir); err == nil && info.IsDir() {
-				// 尝试创建一个临时文件来测试写入权限
-				testFile := uploadDir + "/.health_check"
-				if f, err := os.Create(testFile); err == nil {
-					f.Close()
-					os.Remove(testFile)
-					storageStatus = true
-				}
-			} else if err != nil {
-				// 目录不存在，尝试创建
-				if err := os.MkdirAll(uploadDir, 0755); err == nil {
-					storageStatus = true
-				}
-			}
-		}
-	}
+	err = config.GlobalStore.Ping()
+	storageStatus = err == nil
 	status["storage"] = storageStatus
 
 	response.Success(c, "系统状态检查完成", status)

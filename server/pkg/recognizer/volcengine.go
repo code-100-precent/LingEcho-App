@@ -19,21 +19,12 @@ import (
 	"github.com/sirupsen/logrus"
 )
 
-type MessageType byte
-type MessageTypeSpecificFlags byte
-type SerializationType byte
-type CompressionType byte
-
 const (
 	SuccessCode = 1000
 
 	ServerFullResponse  = MessageType(0b1001)
 	ServerAck           = MessageType(0b1011)
 	ServerErrorResponse = MessageType(0b1111)
-
-	JSON = SerializationType(0b0001)
-
-	GZIP = CompressionType(0b0001)
 )
 
 var DefaultFullClientWsHeader = []byte{0x11, 0x10, 0x11, 0x00}
@@ -64,14 +55,14 @@ func gzipDecompress(input []byte) ([]byte, error) {
 }
 
 type VolcEngineResponse struct {
-	Reqid    string   `json:"reqid"`
-	Code     int      `json:"code"`
-	Message  string   `json:"message"`
-	Sequence int      `json:"sequence"`
-	Results  []Result `json:"result,omitempty"`
+	Reqid    string             `json:"reqid"`
+	Code     int                `json:"code"`
+	Message  string             `json:"message"`
+	Sequence int                `json:"sequence"`
+	Results  []VolcengineResult `json:"result,omitempty"`
 }
 
-type Result struct {
+type VolcengineResult struct {
 	Text       string      `json:"text"`
 	Confidence int         `json:"confidence"`
 	Language   string      `json:"language,omitempty"`
@@ -491,12 +482,12 @@ func (volc *Volcengine) parseResponse(msg []byte) (VolcEngineResponse, error) {
 	if payloadSize == 0 {
 		return VolcEngineResponse{}, errors.New("volcengine asr: payload size is 0")
 	}
-	if messageCompression == byte(GZIP) {
+	if messageCompression == byte(CompressionGZIP) {
 		payloadMsg, _ = gzipDecompress(payloadMsg)
 	}
 
 	var asrResponse = VolcEngineResponse{}
-	if serializationMethod == byte(JSON) {
+	if serializationMethod == byte(SerializationJSON) {
 		err = json.Unmarshal(payloadMsg, &asrResponse)
 		if err != nil {
 			logrus.Error("volcengine asr: fail to unmarshal response, ", err.Error())
