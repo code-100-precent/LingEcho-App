@@ -5,6 +5,7 @@ import (
 	"os"
 	"time"
 
+	"github.com/LingByte/lingstorage-sdk-go"
 	"github.com/code-100-precent/LingEcho/pkg/cache"
 	"github.com/code-100-precent/LingEcho/pkg/logger"
 	"github.com/code-100-precent/LingEcho/pkg/notification"
@@ -103,17 +104,23 @@ type Config struct {
 	SSLKeyFile  string `env:"SSL_KEY_FILE"`
 
 	// Neo4j 图数据库配置
-	Neo4jEnabled  bool   `env:"NEO4J_ENABLED"`  // 是否启用 Neo4j
-	Neo4jURI      string `env:"NEO4J_URI"`      // Neo4j 连接 URI（默认: bolt://localhost:7687）
-	Neo4jUsername string `env:"NEO4J_USERNAME"` // Neo4j 用户名（默认: neo4j）
-	Neo4jPassword string `env:"NEO4J_PASSWORD"` // Neo4j 密码
-	Neo4jDatabase string `env:"NEO4J_DATABASE"` // Neo4j 数据库名称（默认: neo4j）
+	Neo4jEnabled         bool   `env:"NEO4J_ENABLED"`  // 是否启用 Neo4j
+	Neo4jURI             string `env:"NEO4J_URI"`      // Neo4j 连接 URI（默认: bolt://localhost:7687）
+	Neo4jUsername        string `env:"NEO4J_USERNAME"` // Neo4j 用户名（默认: neo4j）
+	Neo4jPassword        string `env:"NEO4J_PASSWORD"` // Neo4j 密码
+	Neo4jDatabase        string `env:"NEO4J_DATABASE"` // Neo4j 数据库名称（默认: neo4j）
+	LingstorageBaseUrl   string `env:"LINGSTORAGE_BASE_URL"`
+	LingstorageApiKey    string `env:"LINGSTORAGE_API_KEY"`
+	LingstorageApiSecret string `env:"LINGSTORAGE_API_SECRET"`
+	LingstorageBucket    string `env:"LINGSTORAGE_BUCKET"`
 }
 
 var GlobalConfig *Config
 
+var GlobalStore *lingstorage.Client
+
 func Load() error {
-	// 1. 根据环境加载 .env 文件（如果不存在也不报错，使用默认值）
+	// 1. 根据环境加载 .env 文件（如果不存在也不报错，使用默认值）s
 	env := os.Getenv("APP_ENV")
 	err := utils.LoadEnv(env)
 	if err != nil {
@@ -216,12 +223,22 @@ func Load() error {
 		SSLCertFile: getStringOrDefault("SSL_CERT_FILE", ""),
 		SSLKeyFile:  getStringOrDefault("SSL_KEY_FILE", ""),
 		// Neo4j 图数据库配置（默认禁用）
-		Neo4jEnabled:  getBoolOrDefault("NEO4J_ENABLED", false),
-		Neo4jURI:      getStringOrDefault("NEO4J_URI", "bolt://localhost:7687"),
-		Neo4jUsername: getStringOrDefault("NEO4J_USERNAME", "neo4j"),
-		Neo4jPassword: getStringOrDefault("NEO4J_PASSWORD", ""),
-		Neo4jDatabase: getStringOrDefault("NEO4J_DATABASE", "neo4j"),
+		Neo4jEnabled:         getBoolOrDefault("NEO4J_ENABLED", false),
+		Neo4jURI:             getStringOrDefault("NEO4J_URI", "bolt://localhost:7687"),
+		Neo4jUsername:        getStringOrDefault("NEO4J_USERNAME", "neo4j"),
+		Neo4jPassword:        getStringOrDefault("NEO4J_PASSWORD", ""),
+		Neo4jDatabase:        getStringOrDefault("NEO4J_DATABASE", "neo4j"),
+		LingstorageBaseUrl:   getStringOrDefault("LINGSTORAGE_BASE_URL", "https://api.lingstorage.com"),
+		LingstorageApiKey:    getStringOrDefault("LINGSTORAGE_API_KEY", ""),
+		LingstorageApiSecret: getStringOrDefault("LINGSTORAGE_API_SECRET", ""),
+		LingstorageBucket:    getStringOrDefault("LINGSTORAGE_BUCKET", "default"),
 	}
+	GlobalStore = lingstorage.NewClient(&lingstorage.Config{
+		BaseURL:   GlobalConfig.LingstorageBaseUrl,
+		APIKey:    GlobalConfig.LingstorageApiKey,
+		APISecret: GlobalConfig.LingstorageApiSecret,
+	})
+
 	return nil
 }
 
