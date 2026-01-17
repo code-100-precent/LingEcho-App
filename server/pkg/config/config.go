@@ -27,6 +27,7 @@ type Config struct {
 	Mode             string `env:"MODE"`
 	DocsPrefix       string `env:"DOCS_PREFIX"`
 	APIPrefix        string `env:"API_PREFIX"`
+	AuthHeader       string `env:"AUTH_HEADER"`
 	AdminPrefix      string `env:"ADMIN_PREFIX"`
 	AuthPrefix       string `env:"AUTH_PREFIX"`
 	SessionSecret    string `env:"SESSION_SECRET"`
@@ -133,6 +134,7 @@ func Load() error {
 		Addr:             getStringOrDefault("ADDR", ":7072"),
 		Mode:             getStringOrDefault("MODE", "development"),
 		DocsPrefix:       getStringOrDefault("DOCS_PREFIX", "/api/docs"),
+		AuthHeader:       getStringOrDefault("AUTH_HEADER", "Authorization"),
 		APIPrefix:        getStringOrDefault("API_PREFIX", "/api"),
 		AdminPrefix:      getStringOrDefault("ADMIN_PREFIX", "/admin"),
 		AuthPrefix:       getStringOrDefault("AUTH_PREFIX", "/auth"),

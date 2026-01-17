@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"github.com/code-100-precent/LingEcho"
+	"github.com/code-100-precent/LingEcho/pkg/config"
 	"github.com/code-100-precent/LingEcho/pkg/constants"
 	"github.com/code-100-precent/LingEcho/pkg/logger"
 	"github.com/code-100-precent/LingEcho/pkg/metrics"
@@ -22,19 +23,6 @@ import (
 	"github.com/gin-gonic/gin"
 	"go.uber.org/zap"
 	"gorm.io/gorm"
-)
-
-const (
-	// SigUserLogin : user *User, c *gin.Context
-	SigUserLogin = "user.login"
-	// SigUserLogout : user *User, c *gin.Context
-	SigUserLogout = "user.logout"
-	// SigUserCreate : user *User, c *gin.Context
-	SigUserCreate = "user.create"
-	// SigUserVerifyEmail : user *User, hash, clientIp, userAgent string
-	SigUserVerifyEmail = "user.verifyemail"
-	// SigUserResetPassword : user *User, hash, clientIp, userAgent string
-	SigUserResetPassword = "user.resetpassword"
 )
 
 type SendEmailVerifyEmail struct {
@@ -113,6 +101,51 @@ type UpdateUserRequest struct {
 	Avatar      string `form:"avatar" json:"avatar"`
 }
 
+type User struct {
+	BaseModel
+	Email                 string     `json:"email" gorm:"size:128;uniqueIndex"`
+	Password              string     `json:"-" gorm:"size:128"`
+	Phone                 string     `json:"phone,omitempty" gorm:"size:64;index"`
+	FirstName             string     `json:"firstName,omitempty" gorm:"size:128"`
+	LastName              string     `json:"lastName,omitempty" gorm:"size:128"`
+	DisplayName           string     `json:"displayName,omitempty" gorm:"size:128"`
+	IsStaff               bool       `json:"isStaff,omitempty"`
+	Enabled               bool       `json:"-"`
+	Activated             bool       `json:"-"`
+	LastLogin             *time.Time `json:"lastLogin,omitempty"`
+	LastLoginIP           string     `json:"-" gorm:"size:128"`
+	Source                string     `json:"-" gorm:"size:64;index"`
+	Locale                string     `json:"locale,omitempty" gorm:"size:20"`
+	Timezone              string     `json:"timezone,omitempty" gorm:"size:200"`
+	AuthToken             string     `json:"token,omitempty" gorm:"-"`
+	Avatar                string     `json:"avatar,omitempty"`
+	Gender                string     `json:"gender,omitempty"`
+	City                  string     `json:"city,omitempty"`
+	Region                string     `json:"region,omitempty"`
+	EmailNotifications    bool       `json:"emailNotifications"`                           // 邮件通知
+	PushNotifications     bool       `json:"pushNotifications" gorm:"default:true"`        // 推送通知
+	SystemNotifications   bool       `json:"systemNotifications" gorm:"default:true"`      // 系统通知
+	AutoCleanUnreadEmails bool       `json:"autoCleanUnreadEmails" gorm:"default:false"`   // 自动清理七天未读邮件
+	EmailVerified         bool       `json:"emailVerified" gorm:"default:false"`           // 邮箱已验证
+	PhoneVerified         bool       `json:"phoneVerified" gorm:"default:false"`           // 手机已验证
+	TwoFactorEnabled      bool       `json:"twoFactorEnabled" gorm:"default:false"`        // 双因素认证
+	TwoFactorSecret       string     `json:"-" gorm:"size:128"`                            // 双因素认证密钥
+	EmailVerifyToken      string     `json:"-" gorm:"size:128"`                            // 邮箱验证令牌
+	PhoneVerifyToken      string     `json:"-" gorm:"size:128"`                            // 手机验证令牌
+	PasswordResetToken    string     `json:"-" gorm:"size:128"`                            // 密码重置令牌
+	PasswordResetExpires  *time.Time `json:"-"`                                            // 密码重置过期时间
+	EmailVerifyExpires    *time.Time `json:"-"`                                            // 邮箱验证过期时间
+	LoginCount            int        `json:"loginCount" gorm:"default:0"`                  // 登录次数
+	LastPasswordChange    *time.Time `json:"lastPasswordChange,omitempty"`                 // 最后密码修改时间
+	ProfileComplete       int        `json:"profileComplete" gorm:"default:0"`             // 资料完整度百分比
+	Role                  string     `json:"role,omitempty" gorm:"size:50;default:'user'"` // 用户角色
+	Permissions           string     `json:"permissions,omitempty" gorm:"type:text"`       // 用户权限JSON
+}
+
+func (u *User) TableName() string {
+	return constants.USER_TABLE_NAME
+}
+
 // Login Handle-User-Login
 func Login(c *gin.Context, user *User) {
 	db := c.MustGet(constants.DbField).(*gorm.DB)
@@ -142,7 +175,7 @@ func Login(c *gin.Context, user *User) {
 	session := sessions.Default(c)
 	session.Set(constants.UserField, user.ID)
 	session.Save()
-	utils.Sig().Emit(SigUserLogin, user, db)
+	utils.Sig().Emit(constants.SigUserLogin, user, db)
 }
 
 func Logout(c *gin.Context, user *User) {
@@ -150,7 +183,7 @@ func Logout(c *gin.Context, user *User) {
 	session := sessions.Default(c)
 	session.Delete(constants.UserField)
 	session.Save()
-	utils.Sig().Emit(SigUserLogout, user, c)
+	utils.Sig().Emit(constants.SigUserLogout, user, c)
 }
 
 func AuthRequired(c *gin.Context) {
@@ -158,27 +191,9 @@ func AuthRequired(c *gin.Context) {
 		c.Next()
 		return
 	}
-
-	token := c.GetHeader("Authorization")
+	token := c.GetHeader(config.GlobalConfig.AuthHeader)
 	if token == "" {
 		token = c.Query("token")
-	}
-
-	// Test mode: Allow test token
-	if token == "Bearer test-token-123" || token == "test-token-123" {
-		// Create a test user
-		testUser := &User{
-			Email:       "test@example.com",
-			DisplayName: "Test User",
-			IsStaff:     true,
-			Role:        RoleSuperAdmin,
-			Permissions: `["*"]`,
-			Enabled:     true,
-			Activated:   true,
-		}
-		c.Set(constants.UserField, testUser)
-		c.Next()
-		return
 	}
 
 	if token == "" {
@@ -187,7 +202,7 @@ func AuthRequired(c *gin.Context) {
 	}
 	db := c.MustGet(constants.DbField).(*gorm.DB)
 	// split bearer
-	token = strings.TrimPrefix(token, "Bearer ")
+	token = strings.TrimPrefix(token, constants.AUTHORIZATION_PREFIX)
 	user, err := DecodeHashToken(db, token, false)
 	if err != nil {
 		LingEcho.AbortWithJSONError(c, http.StatusUnauthorized, err)
@@ -302,7 +317,7 @@ func GetUserByUID(db *gorm.DB, userID uint) (*User, error) {
 	// Record database query metrics (if monitoring system is available)
 	if monitor := getMonitorFromContext(db); monitor != nil {
 		monitor.RecordSQLQuery(context.Background(), "SELECT * FROM users WHERE id = ? AND enabled = ?",
-			[]interface{}{userID, true}, "users", "SELECT", duration, 1, result.Error)
+			[]interface{}{userID, true}, constants.USER_TABLE_NAME, "SELECT", duration, 1, result.Error)
 	}
 
 	if result.Error != nil {
@@ -314,13 +329,13 @@ func GetUserByUID(db *gorm.DB, userID uint) (*User, error) {
 func GetUserByEmail(db *gorm.DB, email string) (user *User, err error) {
 	var val User
 	start := time.Now()
-	result := db.Table("users").Where("email", strings.ToLower(email)).Take(&val)
+	result := db.Table(constants.USER_TABLE_NAME).Where("email", strings.ToLower(email)).Take(&val)
 	duration := time.Since(start)
 
 	// Record database query metrics (if monitoring system is available)
 	if monitor := getMonitorFromContext(db); monitor != nil {
 		monitor.RecordSQLQuery(context.Background(), "SELECT * FROM users WHERE email = ?",
-			[]interface{}{email}, "users", "SELECT", duration, 1, result.Error)
+			[]interface{}{email}, constants.USER_TABLE_NAME, "SELECT", duration, 1, result.Error)
 	}
 
 	if result.Error != nil {
@@ -346,8 +361,8 @@ func AuthApiRequired(c *gin.Context) {
 		return
 	}
 
-	apiKey := c.GetHeader("X-API-KEY")
-	apiSecret := c.GetHeader("X-API-SECRET")
+	apiKey := c.GetHeader(constants.CREDENTIAL_API_KEY)
+	apiSecret := c.GetHeader(constants.CREDENTIAL_API_SECRET)
 	if apiKey != "" && apiSecret != "" {
 		user, err := GetUserByAPIKey(c, apiKey, apiSecret)
 		if err != nil {
@@ -372,7 +387,7 @@ func AuthApiRequired(c *gin.Context) {
 		return
 	}
 
-	token := c.GetHeader("Authorization")
+	token := c.GetHeader(config.GlobalConfig.AuthHeader)
 	if token == "" {
 		token = c.Query("token")
 	}
@@ -447,24 +462,19 @@ func CreateUser(db *gorm.DB, email, password string) (*User, error) {
 	start := time.Now()
 	result := db.Create(&user)
 	duration := time.Since(start)
-
-	// 记录数据库查询指标（如果监控系统可用）
 	if monitor := getMonitorFromContext(db); monitor != nil {
 		monitor.RecordSQLQuery(context.Background(), "INSERT INTO users (email, password, enabled, activated) VALUES (?, ?, ?, ?)",
-			[]interface{}{email, user.Password, true, false}, "users", "INSERT", duration, 1, result.Error)
+			[]interface{}{email, user.Password, true, false}, constants.USER_TABLE_NAME, "INSERT", duration, 1, result.Error)
 	}
-
 	return &user, result.Error
 }
 func UpdateUserFields(db *gorm.DB, user *User, vals map[string]any) error {
 	start := time.Now()
 	result := db.Model(user).Updates(vals)
 	duration := time.Since(start)
-
-	// Record database query metrics (if monitoring system is available)
 	if monitor := getMonitorFromContext(db); monitor != nil {
 		monitor.RecordSQLQuery(context.Background(), "UPDATE users SET ... WHERE id = ?",
-			[]interface{}{user.ID}, "users", "UPDATE", duration, 1, result.Error)
+			[]interface{}{user.ID}, constants.USER_TABLE_NAME, "UPDATE", duration, 1, result.Error)
 	}
 
 	return result.Error
@@ -482,18 +492,15 @@ func SetLastLogin(db *gorm.DB, user *User, lastIp string) error {
 	start := time.Now()
 	result := db.Model(user).Updates(vals)
 	duration := time.Since(start)
-
-	// Record database query metrics (if monitoring system is available)
 	if monitor := getMonitorFromContext(db); monitor != nil {
 		monitor.RecordSQLQuery(context.Background(), "UPDATE users SET LastLoginIP = ?, LastLogin = ? WHERE id = ?",
-			[]interface{}{lastIp, &now, user.ID}, "users", "UPDATE", duration, 1, result.Error)
+			[]interface{}{lastIp, &now, user.ID}, constants.USER_TABLE_NAME, "UPDATE", duration, 1, result.Error)
 	}
 
 	return result.Error
 }
 
 func EncodeHashToken(user *User, timestamp int64, useLastlogin bool) (hash string) {
-	//
 	// ts-uid-token
 	logintimestamp := "0"
 	if useLastlogin && user.LastLogin != nil {
@@ -899,7 +906,7 @@ const (
 	PermissionSystemConfig = "system.config" // 系统配置
 )
 
-// getPermissions 解析用户权限 JSON 字符串，返回权限列表
+// getPermissions 解析用户权限 JSON 字符串
 func (u *User) getPermissions() []string {
 	if u.Permissions == "" {
 		return []string{}
@@ -947,7 +954,6 @@ func (u *User) HasPermission(permission string) bool {
 	// 基于角色的默认权限
 	switch u.Role {
 	case RoleAdmin:
-		// 管理员默认拥有 admin 和 user 相关权限
 		switch permission {
 		case PermissionAdminRead, PermissionAdminWrite,
 			PermissionUserRead, PermissionUserWrite,
@@ -955,7 +961,6 @@ func (u *User) HasPermission(permission string) bool {
 			return true
 		}
 	case RoleUser:
-		// 普通用户默认拥有 user 相关权限
 		switch permission {
 		case PermissionUserRead, PermissionUserWrite:
 			return true

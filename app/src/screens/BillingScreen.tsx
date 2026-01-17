@@ -297,8 +297,8 @@ const BillingScreen: React.FC = () => {
                         <Feather name="hard-drive" size={18} color="#ef4444" />
                       </View>
                       <View style={styles.secondaryStatInfo}>
-                        <Text style={styles.secondaryStatValue}>{formatFileSize(statistics.storageSize)}</Text>
-                        <Text style={styles.secondaryStatLabel}>存储大小</Text>
+                        <Text style={styles.secondaryStatValue}>{formatNumber(statistics.apiCalls)}</Text>
+                        <Text style={styles.secondaryStatLabel}>API调用</Text>
                       </View>
                     </View>
                   </Card>
@@ -364,9 +364,9 @@ const BillingScreen: React.FC = () => {
                                 时长: {formatDuration(record.callDuration || record.audioDuration)}
                               </Text>
                             )}
-                            {(record.audioSize > 0 || record.storageSize > 0) && (
+                            {record.audioSize > 0 && (
                               <Text style={styles.recordText}>
-                                大小: {formatFileSize(record.audioSize || record.storageSize)}
+                                大小: {formatFileSize(record.audioSize)}
                               </Text>
                             )}
                           </View>

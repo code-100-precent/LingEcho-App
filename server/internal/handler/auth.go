@@ -833,14 +833,14 @@ func (h *Handlers) handleUserSignup(c *gin.Context) {
 		logger.Warn("update user fields fail id:", zap.Uint("userId", user.ID), zap.Any("vals", vals), zap.Error(err))
 	}
 
-	utils.Sig().Emit(models.SigUserCreate, user, c, db)
+	utils.Sig().Emit(constants.SigUserCreate, user, c, db)
 
 	r := gin.H{
 		"email":      user.Email,
 		"activation": user.Activated,
 	}
 	if !user.Activated && utils.GetBoolValue(db, constants.KEY_USER_ACTIVATED) {
-		sendHashMail(db, user, models.SigUserVerifyEmail, constants.KEY_VERIFY_EMAIL_EXPIRED, "180d", c.ClientIP(), c.Request.UserAgent())
+		sendHashMail(db, user, constants.SigUserVerifyEmail, constants.KEY_VERIFY_EMAIL_EXPIRED, "180d", c.ClientIP(), c.Request.UserAgent())
 		r["expired"] = "180d"
 	} else {
 		models.Login(c, user) //Login now
@@ -986,8 +986,8 @@ func (h *Handlers) handleUserSignupByEmail(c *gin.Context) {
 	if err != nil {
 		logger.Warn("update user fields fail id:", zap.Uint("userId", user.ID), zap.Any("vals", vals), zap.Error(err))
 	}
-	utils.Sig().Emit(models.SigUserCreate, user, db)
-	sendHashMail(db, user, models.SigUserVerifyEmail, constants.KEY_VERIFY_EMAIL_EXPIRED, "180d", c.ClientIP(), c.Request.UserAgent())
+	utils.Sig().Emit(constants.SigUserCreate, user, db)
+	sendHashMail(db, user, constants.SigUserVerifyEmail, constants.KEY_VERIFY_EMAIL_EXPIRED, "180d", c.ClientIP(), c.Request.UserAgent())
 	response.Success(c, "signup success", user)
 }
 
@@ -1344,7 +1344,7 @@ func (h *Handlers) handleResetPassword(c *gin.Context) {
 	}
 
 	// 发送密码重置邮件
-	utils.Sig().Emit(models.SigUserResetPassword, user, token, c.ClientIP(), c.Request.UserAgent())
+	utils.Sig().Emit(constants.SigUserResetPassword, user, token, c.ClientIP(), c.Request.UserAgent())
 
 	response.Success(c, "If the email exists, a reset link has been sent", nil)
 }
@@ -1413,7 +1413,7 @@ func (h *Handlers) handleSendEmailVerification(c *gin.Context) {
 	}
 
 	// 发送邮箱验证邮件
-	utils.Sig().Emit(models.SigUserVerifyEmail, user, token, c.ClientIP(), c.Request.UserAgent())
+	utils.Sig().Emit(constants.SigUserVerifyEmail, user, token, c.ClientIP(), c.Request.UserAgent())
 
 	response.Success(c, "Verification email sent", nil)
 }
@@ -1669,18 +1669,6 @@ func (h *Handlers) handleUploadAvatar(c *gin.Context) {
 		credentials, err := models.GetUserCredentials(h.db, user.ID)
 		if err == nil && len(credentials) > 0 {
 			credentialID = credentials[0].ID
-		}
-		if fileSize > 0 {
-			models.RecordStorageUsage(
-				h.db,
-				user.ID,
-				credentialID,
-				nil, // assistantID
-				nil, // groupID
-				fmt.Sprintf("avatar_%d_%d", user.ID, time.Now().Unix()),
-				fileSize,
-				fmt.Sprintf("上传头像: %s", fileName),
-			)
 		}
 	}()
 

@@ -1,8 +1,12 @@
 package models
 
 import (
+	"database/sql/driver"
+	"encoding/json"
 	"errors"
+	"fmt"
 
+	"github.com/code-100-precent/LingEcho/pkg/constants"
 	"github.com/code-100-precent/LingEcho/pkg/utils"
 	"gorm.io/gorm"
 	"gorm.io/gorm/clause"
@@ -18,6 +22,107 @@ type UserCredentialRequest struct {
 	// JSON格式配置
 	AsrConfig ProviderConfig `json:"asrConfig"` // ASR配置,格式: {"provider": "qiniu", "apiKey": "...", "baseUrl": "..."} 或 {"provider": "qcloud", "appId": "...", "secretId": "...", "secretKey": "..."}
 	TtsConfig ProviderConfig `json:"ttsConfig"` // TTS配置
+}
+
+// ProviderConfig 提供商的灵活配置,支持任意键值对
+type ProviderConfig map[string]interface{}
+
+// Value 实现 driver.Valuer 接口
+func (pc ProviderConfig) Value() (driver.Value, error) {
+	if pc == nil || len(pc) == 0 {
+		return nil, nil
+	}
+	return json.Marshal(pc)
+}
+
+// Scan 实现 sql.Scanner 接口
+func (pc *ProviderConfig) Scan(value interface{}) error {
+	if value == nil {
+		*pc = make(ProviderConfig)
+		return nil
+	}
+	bytes, ok := value.([]byte)
+	if !ok {
+		return fmt.Errorf("failed to convert value to []byte")
+	}
+	if len(bytes) == 0 {
+		*pc = make(ProviderConfig)
+		return nil
+	}
+	return json.Unmarshal(bytes, pc)
+}
+
+type UserCredential struct {
+	BaseModel
+	UserID      uint           `gorm:"index;" json:"userId"`                                      // 关联到用户
+	Name        string         `json:"name"`                                                      // 应用名称 or 用途备注
+	APIKey      string         `gorm:"uniqueIndex:idx_api_key,length:100;not null" json:"apiKey"` // 用于认证
+	APISecret   string         `gorm:"not null" json:"apiSecret"`                                 // 用于签名校验
+	LLMProvider string         `json:"llmProvider"`
+	LLMApiKey   string         `json:"llmApiKey"`
+	LLMApiURL   string         `json:"llmApiUrl"`
+	AsrConfig   ProviderConfig `json:"asrConfig" gorm:"type:json"`
+	TtsConfig   ProviderConfig `json:"ttsConfig" gorm:"type:json"`
+}
+
+func (uc *UserCredential) TableName() string {
+	return constants.USER_CREDENTIAL_TABLE_NAME
+}
+
+// GetASRProvider 从AsrConfig获取provider
+func (uc *UserCredential) GetASRProvider() string {
+	if uc.AsrConfig != nil {
+		if provider, ok := uc.AsrConfig["provider"].(string); ok {
+			return provider
+		}
+	}
+	return ""
+}
+
+// GetASRConfig 获取ASR配置值
+func (uc *UserCredential) GetASRConfig(key string) interface{} {
+	if uc.AsrConfig != nil {
+		return uc.AsrConfig[key]
+	}
+	return nil
+}
+
+// GetASRConfigString 获取ASR配置字符串值
+func (uc *UserCredential) GetASRConfigString(key string) string {
+	if uc.AsrConfig != nil {
+		if val, ok := uc.AsrConfig[key].(string); ok {
+			return val
+		}
+	}
+	return ""
+}
+
+// GetTTSProvider 从TtsConfig获取provider
+func (uc *UserCredential) GetTTSProvider() string {
+	if uc.TtsConfig != nil {
+		if provider, ok := uc.TtsConfig["provider"].(string); ok {
+			return provider
+		}
+	}
+	return ""
+}
+
+// GetTTSConfig 获取TTS配置值
+func (uc *UserCredential) GetTTSConfig(key string) interface{} {
+	if uc.TtsConfig != nil {
+		return uc.TtsConfig[key]
+	}
+	return nil
+}
+
+// GetTTSConfigString 获取TTS配置字符串值
+func (uc *UserCredential) GetTTSConfigString(key string) string {
+	if uc.TtsConfig != nil {
+		if val, ok := uc.TtsConfig[key].(string); ok {
+			return val
+		}
+	}
+	return ""
 }
 
 // BuildASRConfig 从请求中构建ASR配置

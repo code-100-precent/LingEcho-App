@@ -265,7 +265,6 @@ const UserQuotaModal: React.FC<UserQuotaModalProps> = ({ isOpen, onClose, quota,
   if (!isOpen) return null;
 
   const quotaTypes = [
-    'storage',
     'llm_tokens',
     'llm_calls',
     'api_calls',

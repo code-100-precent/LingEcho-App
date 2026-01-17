@@ -23,7 +23,6 @@ export interface UsageRecord {
   callCount: number;
   audioDuration: number;
   audioSize: number;
-  storageSize: number;
   apiCallCount: number;
   metadata?: string;
   description?: string;
@@ -47,7 +46,6 @@ export interface UsageStatistics {
   asrCount: number;
   ttsDuration: number;
   ttsCount: number;
-  storageSize: number;
   apiCalls: number;
 }
 
@@ -62,7 +60,6 @@ export interface DailyUsageData {
   asrDuration: number;
   ttsCount: number;
   ttsDuration: number;
-  storageSize: number;
   apiCalls: number;
 }
 
@@ -89,7 +86,6 @@ export interface Bill {
   totalASRCount: number;
   totalTTSDuration: number;
   totalTTSCount: number;
-  totalStorageSize: number;
   totalAPICalls: number;
   exportFormat?: string;
   exportPath?: string;

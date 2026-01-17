@@ -44,17 +44,15 @@ type IPGeolocationResponse struct {
 }
 
 const (
-	// IP地址查询API（国内）
+	// PCONLINE_IP_URL IP地址查询API（国内）
 	PCONLINE_IP_URL = "http://whois.pconline.com.cn/ipJson.jsp"
-
-	// IP地址查询API（国际）
+	// IP_API_URL IP地址查询API（国际）
 	IP_API_URL = "http://ip-api.com/json/"
-
-	// 未知地址
+	// UNKNOWN 未知地址
 	UNKNOWN = "Unknown"
-
-	// 内网IP标识
-	INTERNAL_IP   = "内网IP"
+	// INTERNAL_IP 内网IP标识
+	INTERNAL_IP = "内网IP"
+	// LOCAL_NETWORK 本地网络
 	LOCAL_NETWORK = "Local Network"
 )
 
@@ -84,22 +82,15 @@ func IsInternalIP(ip string) bool {
 	if parsedIP == nil {
 		return false
 	}
-
-	// 检查是否为回环地址
 	if parsedIP.IsLoopback() {
 		return true
 	}
-
-	// 检查是否为私有地址
 	if parsedIP.IsPrivate() {
 		return true
 	}
-
-	// 检查是否为本地地址
 	if parsedIP.IsLinkLocalUnicast() || parsedIP.IsLinkLocalMulticast() {
 		return true
 	}
-
 	return false
 }
 

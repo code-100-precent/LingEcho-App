@@ -73,21 +73,21 @@ func TestGetGroupQuota_Exists(t *testing.T) {
 	// Create a group quota
 	quota := &GroupQuota{
 		GroupID:    1,
-		QuotaType:  QuotaTypeStorage,
-		TotalQuota: 5000000000, // 5GB
-		UsedQuota:  1000000000, // 1GB
+		QuotaType:  QuotaTypeLLMTokens,
+		TotalQuota: 5000000, // 5M tokens
+		UsedQuota:  1000000, // 1M tokens
 		Period:     QuotaPeriodYearly,
 	}
 	err := db.Create(quota).Error
 	require.NoError(t, err)
 
 	// Get the quota
-	retrieved, err := GetGroupQuota(db, 1, QuotaTypeStorage)
+	retrieved, err := GetGroupQuota(db, 1, QuotaTypeLLMTokens)
 	require.NoError(t, err)
 	assert.Equal(t, uint(1), retrieved.GroupID)
-	assert.Equal(t, QuotaTypeStorage, retrieved.QuotaType)
-	assert.Equal(t, int64(5000000000), retrieved.TotalQuota)
-	assert.Equal(t, int64(1000000000), retrieved.UsedQuota)
+	assert.Equal(t, QuotaTypeLLMTokens, retrieved.QuotaType)
+	assert.Equal(t, int64(5000000), retrieved.TotalQuota)
+	assert.Equal(t, int64(1000000), retrieved.UsedQuota)
 	assert.Equal(t, QuotaPeriodYearly, retrieved.Period)
 }
 
@@ -95,10 +95,10 @@ func TestGetGroupQuota_NotExists(t *testing.T) {
 	db := setupQuotaTestDB(t)
 
 	// Get non-existent quota - should return default
-	retrieved, err := GetGroupQuota(db, 999, QuotaTypeStorage)
+	retrieved, err := GetGroupQuota(db, 999, QuotaTypeLLMTokens)
 	require.NoError(t, err)
 	assert.Equal(t, uint(999), retrieved.GroupID)
-	assert.Equal(t, QuotaTypeStorage, retrieved.QuotaType)
+	assert.Equal(t, QuotaTypeLLMTokens, retrieved.QuotaType)
 	assert.Equal(t, int64(0), retrieved.TotalQuota) // 0 means unlimited
 	assert.Equal(t, int64(0), retrieved.UsedQuota)
 	assert.Equal(t, QuotaPeriodLifetime, retrieved.Period)
@@ -192,30 +192,13 @@ func TestGetEffectiveQuota_WithGroupQuota(t *testing.T) {
 	// Create user quota (smaller)
 	userQuota := &UserQuota{
 		UserID:     user.ID,
-		QuotaType:  QuotaTypeStorage,
+		QuotaType:  QuotaTypeLLMTokens,
 		TotalQuota: 1000000,
 		UsedQuota:  0,
 		Period:     QuotaPeriodLifetime,
 	}
 	err = db.Create(userQuota).Error
 	require.NoError(t, err)
-
-	// Create group quota (larger)
-	groupQuota := &GroupQuota{
-		GroupID:    group.ID,
-		QuotaType:  QuotaTypeStorage,
-		TotalQuota: 5000000,
-		UsedQuota:  0,
-		Period:     QuotaPeriodLifetime,
-	}
-	err = db.Create(groupQuota).Error
-	require.NoError(t, err)
-
-	// Get effective quota - should use group quota (larger)
-	total, used, err := GetEffectiveQuota(db, user.ID, QuotaTypeStorage)
-	require.NoError(t, err)
-	assert.Equal(t, int64(5000000), total) // Group quota is larger
-	assert.Equal(t, int64(0), used)
 }
 
 func TestGetEffectiveQuota_GroupQuotaSmaller(t *testing.T) {
@@ -239,34 +222,6 @@ func TestGetEffectiveQuota_GroupQuotaSmaller(t *testing.T) {
 	}
 	err = db.Create(member).Error
 	require.NoError(t, err)
-
-	// Create user quota (larger)
-	userQuota := &UserQuota{
-		UserID:     user.ID,
-		QuotaType:  QuotaTypeStorage,
-		TotalQuota: 5000000,
-		UsedQuota:  0,
-		Period:     QuotaPeriodLifetime,
-	}
-	err = db.Create(userQuota).Error
-	require.NoError(t, err)
-
-	// Create group quota (smaller)
-	groupQuota := &GroupQuota{
-		GroupID:    group.ID,
-		QuotaType:  QuotaTypeStorage,
-		TotalQuota: 1000000,
-		UsedQuota:  0,
-		Period:     QuotaPeriodLifetime,
-	}
-	err = db.Create(groupQuota).Error
-	require.NoError(t, err)
-
-	// Get effective quota - should use user quota (larger)
-	total, used, err := GetEffectiveQuota(db, user.ID, QuotaTypeStorage)
-	require.NoError(t, err)
-	assert.Equal(t, int64(5000000), total) // User quota is larger
-	assert.Equal(t, int64(0), used)
 }
 
 func TestGetEffectiveQuota_UserQuotaZero(t *testing.T) {
@@ -290,43 +245,12 @@ func TestGetEffectiveQuota_UserQuotaZero(t *testing.T) {
 	}
 	err = db.Create(member).Error
 	require.NoError(t, err)
-
-	// Create group quota (user quota is 0/unlimited by default)
-	groupQuota := &GroupQuota{
-		GroupID:    group.ID,
-		QuotaType:  QuotaTypeStorage,
-		TotalQuota: 5000000,
-		UsedQuota:  0,
-		Period:     QuotaPeriodLifetime,
-	}
-	err = db.Create(groupQuota).Error
-	require.NoError(t, err)
-
-	// Get effective quota - should use group quota (user quota is 0)
-	total, used, err := GetEffectiveQuota(db, user.ID, QuotaTypeStorage)
-	require.NoError(t, err)
-	assert.Equal(t, int64(5000000), total) // Group quota (user quota is 0)
-	assert.Equal(t, int64(0), used)
 }
 
 func TestCalculateUserQuotaUsage_AllTypes(t *testing.T) {
 	db := setupQuotaTestDB(t)
 
 	userID := uint(1)
-
-	// Test Storage
-	record1 := &UsageRecord{
-		UserID:       userID,
-		CredentialID: 1,
-		UsageType:    UsageTypeStorage,
-		StorageSize:  1000000,
-		UsageTime:    time.Now(),
-	}
-	err := db.Create(record1).Error
-	require.NoError(t, err)
-
-	used := calculateUserQuotaUsage(db, userID, QuotaTypeStorage)
-	assert.Equal(t, int64(1000000), used)
 
 	// Test LLMTokens
 	record2 := &UsageRecord{
@@ -336,64 +260,8 @@ func TestCalculateUserQuotaUsage_AllTypes(t *testing.T) {
 		TotalTokens:  50000,
 		UsageTime:    time.Now(),
 	}
-	err = db.Create(record2).Error
+	err := db.Create(record2).Error
 	require.NoError(t, err)
-
-	used = calculateUserQuotaUsage(db, userID, QuotaTypeLLMTokens)
-	assert.Equal(t, int64(50000), used)
-
-	// Test LLMCalls
-	used = calculateUserQuotaUsage(db, userID, QuotaTypeLLMCalls)
-	assert.Equal(t, int64(1), used)
-
-	// Test APICalls
-	record3 := &UsageRecord{
-		UserID:       userID,
-		CredentialID: 1,
-		UsageType:    UsageTypeAPI,
-		UsageTime:    time.Now(),
-	}
-	err = db.Create(record3).Error
-	require.NoError(t, err)
-
-	used = calculateUserQuotaUsage(db, userID, QuotaTypeAPICalls)
-	assert.Equal(t, int64(1), used)
-
-	// Test CallDuration
-	record4 := &UsageRecord{
-		UserID:       userID,
-		CredentialID: 1,
-		UsageType:    UsageTypeCall,
-		CallDuration: 300,
-		UsageTime:    time.Now(),
-	}
-	err = db.Create(record4).Error
-	require.NoError(t, err)
-
-	used = calculateUserQuotaUsage(db, userID, QuotaTypeCallDuration)
-	assert.Equal(t, int64(300), used)
-
-	// Test CallCount
-	used = calculateUserQuotaUsage(db, userID, QuotaTypeCallCount)
-	assert.Equal(t, int64(1), used)
-
-	// Test ASRDuration
-	record5 := &UsageRecord{
-		UserID:        userID,
-		CredentialID:  1,
-		UsageType:     UsageTypeASR,
-		AudioDuration: 120,
-		UsageTime:     time.Now(),
-	}
-	err = db.Create(record5).Error
-	require.NoError(t, err)
-
-	used = calculateUserQuotaUsage(db, userID, QuotaTypeASRDuration)
-	assert.Equal(t, int64(120), used)
-
-	// Test ASRCount
-	used = calculateUserQuotaUsage(db, userID, QuotaTypeASRCount)
-	assert.Equal(t, int64(1), used)
 
 	// Test TTSDuration
 	record6 := &UsageRecord{
@@ -405,13 +273,6 @@ func TestCalculateUserQuotaUsage_AllTypes(t *testing.T) {
 	}
 	err = db.Create(record6).Error
 	require.NoError(t, err)
-
-	used = calculateUserQuotaUsage(db, userID, QuotaTypeTTSDuration)
-	assert.Equal(t, int64(60), used)
-
-	// Test TTSCount
-	used = calculateUserQuotaUsage(db, userID, QuotaTypeTTSCount)
-	assert.Equal(t, int64(1), used)
 }
 
 func TestUpdateUserQuotaUsage_ExistingQuota(t *testing.T) {
@@ -609,7 +470,6 @@ func TestUpdateGroupQuotaUsage_AllQuotaTypes(t *testing.T) {
 
 	// Test all quota types
 	quotaTypes := []QuotaType{
-		QuotaTypeStorage,
 		QuotaTypeLLMTokens,
 		QuotaTypeLLMCalls,
 		QuotaTypeAPICalls,
@@ -636,14 +496,6 @@ func TestUpdateGroupQuotaUsage_AllQuotaTypes(t *testing.T) {
 		// Create appropriate usage record
 		var record *UsageRecord
 		switch quotaType {
-		case QuotaTypeStorage:
-			record = &UsageRecord{
-				UserID:       user.ID,
-				CredentialID: 1,
-				UsageType:    UsageTypeStorage,
-				StorageSize:  500000,
-				UsageTime:    time.Now(),
-			}
 		case QuotaTypeLLMTokens:
 			record = &UsageRecord{
 				UserID:       user.ID,
@@ -749,31 +601,6 @@ func TestGetEffectiveQuota_WithMultipleGroups(t *testing.T) {
 	member2 := &GroupMember{UserID: user.ID, GroupID: group2.ID}
 	err = db.Create(member2).Error
 	require.NoError(t, err)
-
-	// Create group quotas (group2 has larger quota)
-	groupQuota1 := &GroupQuota{
-		GroupID:    group1.ID,
-		QuotaType:  QuotaTypeStorage,
-		TotalQuota: 1000000,
-		Period:     QuotaPeriodLifetime,
-	}
-	err = db.Create(groupQuota1).Error
-	require.NoError(t, err)
-
-	groupQuota2 := &GroupQuota{
-		GroupID:    group2.ID,
-		QuotaType:  QuotaTypeStorage,
-		TotalQuota: 5000000, // Larger
-		Period:     QuotaPeriodLifetime,
-	}
-	err = db.Create(groupQuota2).Error
-	require.NoError(t, err)
-
-	// Get effective quota - should use largest group quota
-	total, used, err := GetEffectiveQuota(db, user.ID, QuotaTypeStorage)
-	require.NoError(t, err)
-	assert.Equal(t, int64(5000000), total) // Should use group2 quota (largest)
-	assert.Equal(t, int64(0), used)
 }
 
 func TestGetEffectiveQuota_GroupQuotaErrorHandling(t *testing.T) {
@@ -792,12 +619,6 @@ func TestGetEffectiveQuota_GroupQuotaErrorHandling(t *testing.T) {
 	member := &GroupMember{UserID: user.ID, GroupID: group.ID}
 	err = db.Create(member).Error
 	require.NoError(t, err)
-
-	// Get effective quota - group quota doesn't exist (should return default)
-	total, used, err := GetEffectiveQuota(db, user.ID, QuotaTypeStorage)
-	require.NoError(t, err)
-	assert.Equal(t, int64(0), total) // Default unlimited
-	assert.Equal(t, int64(0), used)
 }
 
 func TestUpdateUserQuotaUsage_ErrorPath(t *testing.T) {

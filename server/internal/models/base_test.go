@@ -164,34 +164,6 @@ func TestGroupPermission_Scan(t *testing.T) {
 	}
 }
 
-func TestUser_HasBasicInfo(t *testing.T) {
-	tests := []struct {
-		name             string
-		hasFilledDetails bool
-		want             bool
-	}{
-		{
-			name:             "has filled details",
-			hasFilledDetails: true,
-			want:             true,
-		},
-		{
-			name:             "not filled details",
-			hasFilledDetails: false,
-			want:             false,
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			user := &User{
-				HasFilledDetails: tt.hasFilledDetails,
-			}
-			assert.Equal(t, tt.want, user.HasBasicInfo())
-		})
-	}
-}
-
 func TestUserCredential_GetASRProvider(t *testing.T) {
 	tests := []struct {
 		name   string
