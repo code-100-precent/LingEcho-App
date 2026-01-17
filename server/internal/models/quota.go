@@ -10,7 +10,6 @@ import (
 type QuotaType string
 
 const (
-	QuotaTypeStorage      QuotaType = "storage"       // 存储空间（字节）
 	QuotaTypeLLMTokens    QuotaType = "llm_tokens"    // LLM Token 使用量
 	QuotaTypeLLMCalls     QuotaType = "llm_calls"     // LLM 调用次数
 	QuotaTypeAPICalls     QuotaType = "api_calls"     // API 调用次数
@@ -145,14 +144,6 @@ func GetEffectiveQuota(db *gorm.DB, userID uint, quotaType QuotaType) (totalQuot
 func calculateUserQuotaUsage(db *gorm.DB, userID uint, quotaType QuotaType) int64 {
 	var used int64
 	switch quotaType {
-	case QuotaTypeStorage:
-		var result struct{ Total int64 }
-		db.Model(&UsageRecord{}).
-			Where("user_id = ? AND usage_type = ?", userID, UsageTypeStorage).
-			Select("COALESCE(SUM(storage_size), 0) as total").
-			Scan(&result)
-		used = result.Total
-
 	case QuotaTypeLLMTokens:
 		var result struct{ Total int64 }
 		db.Model(&UsageRecord{}).
@@ -266,14 +257,6 @@ func UpdateGroupQuotaUsage(db *gorm.DB, groupID uint, quotaType QuotaType) error
 	// 根据配额类型从 UsageRecord 表直接统计所有成员的使用量
 	var used int64
 	switch quotaType {
-	case QuotaTypeStorage:
-		var result struct{ Total int64 }
-		db.Model(&UsageRecord{}).
-			Where("user_id IN ? AND usage_type = ?", userIDs, UsageTypeStorage).
-			Select("COALESCE(SUM(storage_size), 0) as total").
-			Scan(&result)
-		used = result.Total
-
 	case QuotaTypeLLMTokens:
 		var result struct{ Total int64 }
 		db.Model(&UsageRecord{}).

@@ -3,6 +3,7 @@ package task
 import (
 	"time"
 
+	"github.com/code-100-precent/LingEcho/pkg/constants"
 	"github.com/code-100-precent/LingEcho/pkg/logger"
 	"github.com/code-100-precent/LingEcho/pkg/notification"
 	"github.com/robfig/cron/v3"
@@ -44,7 +45,7 @@ func CleanUnreadEmails(db *gorm.DB) error {
 
 	// Get all users who have enabled auto-cleanup
 	var userIDs []uint
-	err := db.Table("users").
+	err := db.Table(constants.USER_TABLE_NAME).
 		Where("auto_clean_unread_emails = ? AND enabled = ?", true, true).
 		Pluck("id", &userIDs).Error
 

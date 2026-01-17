@@ -85,22 +85,6 @@ func (h *UploadHandler) UploadAudio(c *gin.Context) {
 						credentialID = credentials[0].ID
 					}
 				}
-
-				go func() {
-					if err := models.RecordStorageUsage(
-						gormDB,
-						user.ID,
-						credentialID,
-						nil, // assistantID
-						nil, // groupID
-						fmt.Sprintf("upload_%d_%d", user.ID, time.Now().Unix()),
-						fileSize,
-						fmt.Sprintf("上传音频文件: %s", fileName),
-					); err != nil {
-						// Recording failure does not affect the upload process, only logs
-						fmt.Printf("Failed to record storage usage: %v\n", err)
-					}
-				}()
 			}
 		}
 	}

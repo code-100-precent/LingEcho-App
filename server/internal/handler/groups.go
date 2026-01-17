@@ -1482,7 +1482,6 @@ func (h *Handlers) GetGroupStatistics(c *gin.Context) {
 		"totalASRCount":     int64(0),
 		"totalTTSDuration":  int64(0),
 		"totalTTSCount":     int64(0),
-		"totalStorageSize":  int64(0),
 		"totalAPICalls":     int64(0),
 	}
 
@@ -1556,20 +1555,6 @@ func (h *Handlers) GetGroupStatistics(c *gin.Context) {
 				Scan(&ttsStats)
 			billStats["totalTTSCount"] = ttsStats.Count
 			billStats["totalTTSDuration"] = ttsStats.Duration
-		}()
-
-		// 存储统计
-		go func() {
-			defer billStatsWg.Done()
-			var storageStats struct {
-				Size int64
-			}
-			h.db.Model(&models.UsageRecord{}).
-				Where("assistant_id IN (?) AND usage_type = ? AND usage_time >= ? AND usage_time <= ?",
-					assistantIDsInt64, models.UsageTypeStorage, startTime, endTime).
-				Select("COALESCE(SUM(storage_size), 0) as size").
-				Scan(&storageStats)
-			billStats["totalStorageSize"] = storageStats.Size
 		}()
 
 		// API统计

@@ -13,7 +13,7 @@ import (
 
 func InitUserListeners() {
 	// Handle after user registration success
-	utils.Sig().Connect(models.SigUserCreate, func(sender any, params ...any) {
+	utils.Sig().Connect(constants.SigUserCreate, func(sender any, params ...any) {
 		if len(params) < 2 {
 			return
 		}
@@ -37,7 +37,7 @@ func InitUserListeners() {
 	})
 
 	// Handle after user login
-	utils.Sig().Connect(models.SigUserLogin, func(sender any, params ...any) {
+	utils.Sig().Connect(constants.SigUserLogin, func(sender any, params ...any) {
 		user, ok := sender.(*models.User)
 		if !ok {
 			return
@@ -57,7 +57,7 @@ func InitUserListeners() {
 	})
 
 	// Handle after user logout
-	utils.Sig().Connect(models.SigUserLogout, func(sender any, params ...any) {
+	utils.Sig().Connect(constants.SigUserLogout, func(sender any, params ...any) {
 		if len(params) < 1 {
 			return
 		}
@@ -73,7 +73,7 @@ func InitUserListeners() {
 	})
 
 	// User email verification
-	utils.Sig().Connect(models.SigUserVerifyEmail, func(sender any, params ...any) {
+	utils.Sig().Connect(constants.SigUserVerifyEmail, func(sender any, params ...any) {
 		if len(params) < 3 {
 			return
 		}
@@ -101,7 +101,7 @@ func InitUserListeners() {
 	})
 
 	// User password reset
-	utils.Sig().Connect(models.SigUserResetPassword, func(sender any, params ...any) {
+	utils.Sig().Connect(constants.SigUserResetPassword, func(sender any, params ...any) {
 		if len(params) < 3 {
 			return
 		}

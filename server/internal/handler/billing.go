@@ -745,7 +745,7 @@ func (h *Handlers) exportRecordsToCSV(records []models.UsageRecord, filePath str
 		"ID", "用户ID", "凭证ID", "助手ID", "会话ID", "使用类型",
 		"模型", "Prompt Tokens", "Completion Tokens", "Total Tokens",
 		"通话时长(秒)", "通话次数", "音频时长(秒)", "音频大小(字节)",
-		"存储大小(字节)", "API调用次数", "使用时间", "创建时间",
+		"API调用次数", "使用时间", "创建时间",
 	}
 	if err := writer.Write(headers); err != nil {
 		return "", fmt.Errorf("failed to write headers: %w", err)
@@ -768,7 +768,6 @@ func (h *Handlers) exportRecordsToCSV(records []models.UsageRecord, filePath str
 			fmt.Sprintf("%d", record.CallCount),
 			fmt.Sprintf("%d", record.AudioDuration),
 			fmt.Sprintf("%d", record.AudioSize),
-			fmt.Sprintf("%d", record.StorageSize),
 			fmt.Sprintf("%d", record.APICallCount),
 			record.UsageTime.Format("2006-01-02 15:04:05"),
 			record.CreatedAt.Format("2006-01-02 15:04:05"),
@@ -812,7 +811,6 @@ func (h *Handlers) exportBillToCSV(bill *models.Bill, records []models.UsageReco
 		{"ASR调用次数", fmt.Sprintf("%d", bill.TotalASRCount)},
 		{"TTS总时长(秒)", fmt.Sprintf("%d", bill.TotalTTSDuration)},
 		{"TTS调用次数", fmt.Sprintf("%d", bill.TotalTTSCount)},
-		{"总存储大小(字节)", fmt.Sprintf("%d", bill.TotalStorageSize)},
 		{"总API调用次数", fmt.Sprintf("%d", bill.TotalAPICalls)},
 		{""},
 		{"详细记录"},

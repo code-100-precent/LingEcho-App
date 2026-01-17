@@ -405,7 +405,6 @@ const Billing = () => {
       call: t('billing.usageType.call'),
       asr: t('billing.usageType.asr'),
       tts: t('billing.usageType.tts'),
-      storage: t('billing.usageType.storage'),
       api: t('billing.usageType.api')
     }
     return labels[type] || type
@@ -582,7 +581,6 @@ const Billing = () => {
                       <SelectItem value="llm">{t('billing.usageType.llm')}</SelectItem>
                       <SelectItem value="asr">{t('billing.usageType.asr')}</SelectItem>
                       <SelectItem value="tts">{t('billing.usageType.tts')}</SelectItem>
-                      <SelectItem value="storage">{t('billing.usageType.storage')}</SelectItem>
                       <SelectItem value="api">{t('billing.usageType.api')}</SelectItem>
                     </SelectContent>
                   </Select>
@@ -706,21 +704,6 @@ const Billing = () => {
                 <Card>
                   <CardHeader>
                     <CardTitle className="flex items-center gap-2">
-                      <HardDrive className="w-5 h-5 text-red-500" />
-                      {t('billing.stats.storage')}
-                    </CardTitle>
-                  </CardHeader>
-                  <CardContent>
-                    <div className="flex justify-between">
-                      <span className="text-muted-foreground">{t('billing.stats.storageSize')}</span>
-                      <span className="font-semibold">{formatFileSize(statistics.storageSize)}</span>
-                    </div>
-                  </CardContent>
-                </Card>
-                
-                <Card>
-                  <CardHeader>
-                    <CardTitle className="flex items-center gap-2">
                       <Globe className="w-5 h-5 text-cyan-500" />
                       {t('billing.stats.api')}
                     </CardTitle>
@@ -819,8 +802,8 @@ const Billing = () => {
                                 : '-'}
                             </td>
                             <td className="px-4 py-3 text-sm">
-                              {record.audioSize > 0 || record.storageSize > 0
-                                ? formatFileSize(record.audioSize || record.storageSize)
+                              {record.audioSize > 0
+                                ? formatFileSize(record.audioSize)
                                 : '-'}
                             </td>
                           </tr>
@@ -1151,10 +1134,6 @@ const Billing = () => {
                   <div className="flex justify-between">
                     <span className="text-muted-foreground">{t('billing.stats.callCount')} ({t('billing.usageType.tts')})</span>
                     <span className="font-semibold">{formatNumber(selectedBill.totalTTSCount)}</span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span className="text-muted-foreground">{t('billing.stats.storageSize')}</span>
-                    <span className="font-semibold">{formatFileSize(selectedBill.totalStorageSize)}</span>
                   </div>
                   <div className="flex justify-between">
                     <span className="text-muted-foreground">{t('billing.stats.apiCalls')}</span>

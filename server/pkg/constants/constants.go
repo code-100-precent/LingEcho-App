@@ -1,5 +1,10 @@
 package constants
 
+const (
+	USER_TABLE_NAME            = "users"
+	USER_CREDENTIAL_TABLE_NAME = "user_credentials"
+)
+
 // Default Value: 1024
 const ENV_CONFIG_CACHE_SIZE = "CONFIG_CACHE_SIZE"
 
@@ -60,9 +65,12 @@ const KEY_VOICE_CLONE_VOLCENGINE_CONFIG = "VOICE_CLONE_VOLCENGINE_CONFIG"
 // OTA and device configuration keys
 const KEY_SERVER_WEBSOCKET = "server.websocket"
 const KEY_SERVER_MQTT_GATEWAY = "server.mqtt_gateway"
-const KEY_SERVER_OTA = "server.ota"
 const KEY_SERVER_MQTT_SIGNATURE_KEY = "server.mqtt_signature_key"
 const KEY_SERVER_FRONTED_URL = "server.fronted_url"
 
 const ENV_STATIC_PREFIX = "STATIC_PREFIX"
 const ENV_STATIC_ROOT = "STATIC_ROOT"
+
+const AUTHORIZATION_PREFIX = "Bearer "
+const CREDENTIAL_API_KEY = "X-API-KEY"
+const CREDENTIAL_API_SECRET = "X-API-SECRET"

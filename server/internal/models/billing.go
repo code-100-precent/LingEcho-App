@@ -52,12 +52,11 @@ func convertOrderBy(orderBy string) string {
 type UsageType string
 
 const (
-	UsageTypeLLM     UsageType = "llm"     // LLM调用
-	UsageTypeCall    UsageType = "call"    // 通话
-	UsageTypeASR     UsageType = "asr"     // 语音识别
-	UsageTypeTTS     UsageType = "tts"     // 语音合成
-	UsageTypeStorage UsageType = "storage" // 存储
-	UsageTypeAPI     UsageType = "api"     // API调用
+	UsageTypeLLM  UsageType = "llm"  // LLM调用
+	UsageTypeCall UsageType = "call" // 通话
+	UsageTypeASR  UsageType = "asr"  // 语音识别
+	UsageTypeTTS  UsageType = "tts"  // 语音合成
+	UsageTypeAPI  UsageType = "api"  // API调用
 )
 
 // UsageRecord 使用量记录
@@ -86,9 +85,6 @@ type UsageRecord struct {
 	// ASR/TTS相关
 	AudioDuration int   `json:"audioDuration" gorm:"default:0"` // 音频时长（秒）
 	AudioSize     int64 `json:"audioSize" gorm:"default:0"`     // 音频大小（字节）
-
-	// 存储相关
-	StorageSize int64 `json:"storageSize" gorm:"default:0"` // 存储大小（字节）
 
 	// API调用相关
 	APICallCount int `json:"apiCallCount" gorm:"default:0"` // API调用次数
@@ -148,8 +144,7 @@ type Bill struct {
 	TotalTTSDuration int64 `json:"totalTTSDuration" gorm:"default:0"` // TTS总时长（秒）
 	TotalTTSCount    int64 `json:"totalTTSCount" gorm:"default:0"`    // TTS调用次数
 
-	TotalStorageSize int64 `json:"totalStorageSize" gorm:"default:0"` // 总存储大小（字节）
-	TotalAPICalls    int64 `json:"totalAPICalls" gorm:"default:0"`    // 总API调用次数
+	TotalAPICalls int64 `json:"totalAPICalls" gorm:"default:0"` // 总API调用次数
 
 	// 导出信息
 	ExportFormat string     `json:"exportFormat,omitempty" gorm:"size:50"` // 导出格式：csv, excel
@@ -191,9 +186,6 @@ type UsageStatistics struct {
 	// TTS统计
 	TTSDuration int64 `json:"ttsDuration"` // TTS总时长（秒）
 	TTSCount    int64 `json:"ttsCount"`    // TTS调用次数
-
-	// 存储统计
-	StorageSize int64 `json:"storageSize"` // 存储大小（字节）
 
 	// API统计
 	APICalls int64 `json:"apiCalls"` // API调用次数
@@ -345,15 +337,6 @@ func GetUsageStatistics(db *gorm.DB, userID uint, startTime, endTime time.Time, 
 	stats.TTSCount = ttsStats.Count
 	stats.TTSDuration = ttsStats.Duration
 
-	// 存储统计
-	var storageStats struct {
-		Size int64
-	}
-	createBaseQuery().Where("usage_type = ?", UsageTypeStorage).
-		Select("SUM(storage_size) as size").
-		Scan(&storageStats)
-	stats.StorageSize = storageStats.Size
-
 	// API统计
 	var apiStats struct {
 		Count int64
@@ -377,7 +360,6 @@ type DailyUsageData struct {
 	ASRDuration  int64  `json:"asrDuration"`  // ASR时长（秒）
 	TTSCount     int64  `json:"ttsCount"`     // TTS调用次数
 	TTSDuration  int64  `json:"ttsDuration"`  // TTS时长（秒）
-	StorageSize  int64  `json:"storageSize"`  // 存储大小（字节）
 	APICalls     int64  `json:"apiCalls"`     // API调用次数
 }
 
@@ -415,7 +397,6 @@ func GetDailyUsageData(db *gorm.DB, userID uint, startTime, endTime time.Time, c
 		ASRDuration  int64
 		TTSCount     int64
 		TTSDuration  int64
-		StorageSize  int64
 		APICalls     int64
 	}
 
@@ -430,9 +411,8 @@ func GetDailyUsageData(db *gorm.DB, userID uint, startTime, endTime time.Time, c
 			SUM(CASE WHEN usage_type = ? THEN audio_duration ELSE 0 END) as asr_duration,
 			SUM(CASE WHEN usage_type = ? THEN 1 ELSE 0 END) as tts_count,
 			SUM(CASE WHEN usage_type = ? THEN audio_duration ELSE 0 END) as tts_duration,
-			SUM(CASE WHEN usage_type = ? THEN storage_size ELSE 0 END) as storage_size,
 			SUM(CASE WHEN usage_type = ? THEN api_call_count ELSE 0 END) as api_calls
-		`, UsageTypeLLM, UsageTypeLLM, UsageTypeCall, UsageTypeCall, UsageTypeASR, UsageTypeASR, UsageTypeTTS, UsageTypeTTS, UsageTypeStorage, UsageTypeAPI).
+		`, UsageTypeLLM, UsageTypeLLM, UsageTypeCall, UsageTypeCall, UsageTypeASR, UsageTypeASR, UsageTypeTTS, UsageTypeTTS, UsageTypeAPI).
 		Group("DATE(usage_time)").
 		Order("DATE(usage_time) ASC").
 		Scan(&dailyStats).Error
@@ -453,7 +433,6 @@ func GetDailyUsageData(db *gorm.DB, userID uint, startTime, endTime time.Time, c
 			ASRDuration:  stat.ASRDuration,
 			TTSCount:     stat.TTSCount,
 			TTSDuration:  stat.TTSDuration,
-			StorageSize:  stat.StorageSize,
 			APICalls:     stat.APICalls,
 		})
 	}
@@ -614,22 +593,6 @@ func RecordTTSUsage(db *gorm.DB, userID, credentialID uint, assistantID *uint, g
 	return CreateUsageRecord(db, record)
 }
 
-// RecordStorageUsage 记录存储使用量
-func RecordStorageUsage(db *gorm.DB, userID, credentialID uint, assistantID *uint, groupID *uint, sessionID string, storageSize int64, description string) error {
-	record := &UsageRecord{
-		UserID:       userID,
-		GroupID:      groupID,
-		CredentialID: credentialID,
-		AssistantID:  assistantID,
-		SessionID:    sessionID,
-		UsageType:    UsageTypeStorage,
-		StorageSize:  storageSize,
-		Description:  description,
-		UsageTime:    time.Now(),
-	}
-	return CreateUsageRecord(db, record)
-}
-
 // RecordAPIUsage 记录API使用量
 func RecordAPIUsage(db *gorm.DB, userID, credentialID uint, assistantID *uint, groupID *uint, sessionID string, apiCallCount int, description string) error {
 	record := &UsageRecord{
@@ -674,7 +637,6 @@ func GenerateBill(db *gorm.DB, userID uint, credentialID *uint, groupID *uint, s
 		TotalASRCount:         stats.ASRCount,
 		TotalTTSDuration:      stats.TTSDuration,
 		TotalTTSCount:         stats.TTSCount,
-		TotalStorageSize:      stats.StorageSize,
 		TotalAPICalls:         stats.APICalls,
 	}
 

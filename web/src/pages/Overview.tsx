@@ -248,7 +248,6 @@ const Overview: React.FC = () => {
                     { label: '通话时长', value: billStats.totalCallDuration || 0 },
                     { label: 'ASR次数', value: billStats.totalASRCount || 0 },
                     { label: 'TTS次数', value: billStats.totalTTSCount || 0 },
-                    { label: '存储大小', value: billStats.totalStorageSize || 0 },
                     { label: 'API调用', value: billStats.totalAPICalls || 0 },
                   ]
                 } else {
