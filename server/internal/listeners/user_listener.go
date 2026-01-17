@@ -74,7 +74,7 @@ func InitUserListeners() {
 
 	// User email verification
 	utils.Sig().Connect(constants.SigUserVerifyEmail, func(sender any, params ...any) {
-		if len(params) < 3 {
+		if len(params) < 5 {
 			return
 		}
 		user, ok := params[0].(*models.User)
@@ -90,6 +90,10 @@ func InitUserListeners() {
 			return
 		}
 		userAgent, ok := params[3].(string)
+		if !ok {
+			return
+		}
+		db, ok := params[4].(*gorm.DB)
 		if !ok {
 			return
 		}
@@ -97,12 +101,12 @@ func InitUserListeners() {
 		logger.Info("Sending email verification", zap.Uint("userId", user.ID), zap.String("email", user.Email))
 
 		// Send email verification
-		go sendEmailVerification(user, hash, clientIp, userAgent)
+		go sendEmailVerification(user, hash, clientIp, userAgent, db)
 	})
 
 	// User password reset
 	utils.Sig().Connect(constants.SigUserResetPassword, func(sender any, params ...any) {
-		if len(params) < 3 {
+		if len(params) < 5 {
 			return
 		}
 		user, ok := params[0].(*models.User)
@@ -121,11 +125,15 @@ func InitUserListeners() {
 		if !ok {
 			return
 		}
+		db, ok := params[4].(*gorm.DB)
+		if !ok {
+			return
+		}
 
 		logger.Info("Sending password reset email", zap.Uint("userId", user.ID), zap.String("email", user.Email))
 
 		// Send password reset email
-		go sendPasswordResetEmail(user, hash, clientIp, userAgent)
+		go sendPasswordResetEmail(user, hash, clientIp, userAgent, db)
 	})
 
 	logger.Info("user module listener is already")
@@ -155,36 +163,52 @@ func sendWelcomeEmail(user *models.User, db *gorm.DB) {
 }
 
 // sendEmailVerification sends email verification
-func sendEmailVerification(user *models.User, hash, clientIp, userAgent string) {
+func sendEmailVerification(user *models.User, hash, clientIp, userAgent string, db *gorm.DB) {
 	if config.GlobalConfig.Mail.Host == "" {
 		logger.Warn("Mail configuration not set, skipping sending email verification")
 		return
 	}
 
+	// 获取站点 URL
+	siteURL := utils.GetValue(db, constants.KEY_SITE_URL)
+	if siteURL == "" {
+		siteURL = "http://localhost:3000" // 默认值
+	}
+
+	// 构建验证 URL
+	verifyUrl := siteURL + "/verify-email?token=" + hash
+
 	mailer := notification.NewMailNotification(config.GlobalConfig.Mail)
-	verifyUrl := "https://yourapp.com/verify?token=" + hash
 	err := mailer.SendVerificationEmail(user.Email, user.DisplayName, verifyUrl)
 	if err != nil {
 		logger.Error("Failed to send email verification", zap.Error(err), zap.String("email", user.Email))
 	} else {
-		logger.Info("Email verification sent successfully", zap.String("email", user.Email))
+		logger.Info("Email verification sent successfully", zap.String("email", user.Email), zap.String("verifyUrl", verifyUrl))
 	}
 }
 
 // sendPasswordResetEmail sends password reset email
-func sendPasswordResetEmail(user *models.User, hash, clientIp, userAgent string) {
+func sendPasswordResetEmail(user *models.User, hash, clientIp, userAgent string, db *gorm.DB) {
 	if config.GlobalConfig.Mail.Host == "" {
 		logger.Warn("Mail configuration not set, skipping sending password reset email")
 		return
 	}
 
+	// 获取站点 URL
+	siteURL := utils.GetValue(db, constants.KEY_SITE_URL)
+	if siteURL == "" {
+		siteURL = "http://localhost:3000" // 默认值
+	}
+
+	// 构建重置密码 URL
+	resetUrl := siteURL + "/reset-password?token=" + hash
+
 	mailer := notification.NewMailNotification(config.GlobalConfig.Mail)
-	resetUrl := "https://yourapp.com/reset-password?token=" + hash
 	err := mailer.SendPasswordResetEmail(user.Email, user.DisplayName, resetUrl)
 	if err != nil {
 		logger.Error("Failed to send password reset email", zap.Error(err), zap.String("email", user.Email))
 	} else {
-		logger.Info("Password reset email sent successfully", zap.String("email", user.Email))
+		logger.Info("Password reset email sent successfully", zap.String("email", user.Email), zap.String("resetUrl", resetUrl))
 	}
 }
 
