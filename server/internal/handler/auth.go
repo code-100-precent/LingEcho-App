@@ -1654,12 +1654,6 @@ func (h *Handlers) handleUploadAvatar(c *gin.Context) {
 		response.Fail(c, "Failed to upload avatar", err)
 		return
 	}
-
-	// 获取文件大小
-	fileInfo, _, err := store.Read(fileName)
-	if err == nil && fileInfo != nil {
-		fileInfo.Close()
-	}
 	// 更新用户头像URL
 	avatarURL := reader.URL
 

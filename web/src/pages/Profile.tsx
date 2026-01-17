@@ -632,7 +632,7 @@ const Profile = () => {
                       {/* 加载状态 */}
                       {isLoading && (
                         <div className="absolute inset-0 bg-black bg-opacity-50 rounded-lg flex items-center justify-center">
-                          <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-white"></div>
+                          <LoadingAnimation type="spinner" size="sm" color="#ffffff" />
                         </div>
                       )}
                     </div>
