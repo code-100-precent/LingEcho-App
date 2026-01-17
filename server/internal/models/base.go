@@ -23,11 +23,6 @@ type BaseModel struct {
 	UpdateBy  string    `json:"updateBy,omitempty" gorm:"size:128;index;comment:更新人"`
 }
 
-// TableName 返回表名
-func (BaseModel) TableName() string {
-	return ""
-}
-
 // BeforeCreate GORM hook: 创建前自动设置创建时间
 func (m *BaseModel) BeforeCreate(tx *gorm.DB) error {
 	now := time.Now()
