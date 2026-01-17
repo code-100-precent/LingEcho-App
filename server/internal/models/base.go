@@ -14,27 +14,16 @@ const (
 )
 
 type BaseModel struct {
-	ID       uint `gorm:"primaryKey"`
-	CreateAt time.Time
-	UpdateAt time.Time
-	CreateBy string
-	UpdateBy string
-	Version  int16
-	isDel    int8 `gorm:"index"`
-}
-
-type UserBasicInfoUpdate struct {
-	FatherCallName string `json:"fatherCallName"`
-	MotherCallName string `json:"motherCallName"`
-	WifiName       string `json:"wifiName"`
-	WifiPassword   string `json:"wifiPassword"`
+	ID        uint       `json:"id" gorm:"primaryKey"`
+	CreatedAt time.Time  `json:"createdAt" gorm:"autoCreateTime"`
+	UpdatedAt time.Time  `json:"-" gorm:"autoUpdateTime"`
+	DeletedAt *time.Time `json:"-" gorm:"index"`
+	CreateBy  string
+	UpdateBy  string
 }
 
 type User struct {
-	ID                    uint       `json:"id" gorm:"primaryKey"`
-	CreatedAt             time.Time  `json:"createdAt" gorm:"autoCreateTime"`
-	UpdatedAt             time.Time  `json:"-" gorm:"autoUpdateTime"`
-	DeletedAt             *time.Time `json:"-" gorm:"index"`
+	BaseModel
 	Email                 string     `json:"email" gorm:"size:128;uniqueIndex"`
 	Password              string     `json:"-" gorm:"size:128"`
 	Phone                 string     `json:"phone,omitempty" gorm:"size:64;index"`
@@ -54,7 +43,6 @@ type User struct {
 	Gender                string     `json:"gender,omitempty"`
 	City                  string     `json:"city,omitempty"`
 	Region                string     `json:"region,omitempty"`
-	Country               string     `json:"country,omitempty"`
 	HasFilledDetails      bool       `json:"hasFilledDetails"`
 	EmailNotifications    bool       `json:"emailNotifications"`                         // 邮件通知
 	PushNotifications     bool       `json:"pushNotifications" gorm:"default:true"`      // 推送通知
@@ -114,25 +102,16 @@ func (pc *ProviderConfig) Scan(value interface{}) error {
 }
 
 type UserCredential struct {
-	ID        uint   `gorm:"primaryKey" json:"id"`
-	UserID    uint   `gorm:"index;" json:"userId"`                                      // 关联到用户
-	Name      string `json:"name"`                                                      // 应用名称 or 用途备注
-	APIKey    string `gorm:"uniqueIndex:idx_api_key,length:100;not null" json:"apiKey"` // 用于认证
-	APISecret string `gorm:"not null" json:"apiSecret"`                                 // 用于签名校验
-
-	// LLM配置 (保持简单,因为OpenAI规范基本通用)
-	LLMProvider string `json:"llmProvider"`
-	LLMApiKey   string `json:"llmApiKey"`
-	LLMApiURL   string `json:"llmApiUrl"`
-
-	// ASR配置 - 使用JSON字段存储灵活的配置
-	AsrConfig ProviderConfig `json:"asrConfig" gorm:"type:json"`
-
-	// TTS配置 - 使用JSON字段存储灵活的配置
-	TtsConfig ProviderConfig `json:"ttsConfig" gorm:"type:json"`
-
-	CreatedAt time.Time `gorm:"autoCreateTime" json:"created_at"`
-	UpdatedAt time.Time `gorm:"autoUpdateTime" json:"updated_at"`
+	BaseModel
+	UserID      uint           `gorm:"index;" json:"userId"`                                      // 关联到用户
+	Name        string         `json:"name"`                                                      // 应用名称 or 用途备注
+	APIKey      string         `gorm:"uniqueIndex:idx_api_key,length:100;not null" json:"apiKey"` // 用于认证
+	APISecret   string         `gorm:"not null" json:"apiSecret"`                                 // 用于签名校验
+	LLMProvider string         `json:"llmProvider"`
+	LLMApiKey   string         `json:"llmApiKey"`
+	LLMApiURL   string         `json:"llmApiUrl"`
+	AsrConfig   ProviderConfig `json:"asrConfig" gorm:"type:json"`
+	TtsConfig   ProviderConfig `json:"ttsConfig" gorm:"type:json"`
 }
 
 // GetASRProvider 从AsrConfig获取provider
