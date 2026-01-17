@@ -1345,7 +1345,7 @@ func (h *Handlers) handleResetPassword(c *gin.Context) {
 	}
 
 	// 发送密码重置邮件
-	utils.Sig().Emit(constants.SigUserResetPassword, user, token, c.ClientIP(), c.Request.UserAgent())
+	utils.Sig().Emit(constants.SigUserResetPassword, user, token, c.ClientIP(), c.Request.UserAgent(), h.db)
 
 	response.Success(c, "If the email exists, a reset link has been sent", nil)
 }
@@ -1414,7 +1414,7 @@ func (h *Handlers) handleSendEmailVerification(c *gin.Context) {
 	}
 
 	// 发送邮箱验证邮件
-	utils.Sig().Emit(constants.SigUserVerifyEmail, user, token, c.ClientIP(), c.Request.UserAgent())
+	utils.Sig().Emit(constants.SigUserVerifyEmail, user, token, c.ClientIP(), c.Request.UserAgent(), h.db)
 
 	response.Success(c, "Verification email sent", nil)
 }
@@ -1729,19 +1729,9 @@ func sendHashMail(db *gorm.DB, user *models.User, signame, expireKey, defaultExp
 	}
 	n := time.Now().Add(d)
 	hash := models.EncodeHashToken(user, n.Unix(), true)
-	// Send Mail
-	mailer := notification.NewMailNotification(config.GlobalConfig.Mail)
 
-	err = mailer.SendWelcomeEmail(
-		user.Email,
-		user.DisplayName,
-		"https://yourapp.com/verify?token=abc123", // 验证链接
-	)
-	if err != nil {
-		logger.Warn("send mail failed", zap.Error(err))
-		return
-	}
-	utils.Sig().Emit(signame, user, hash, clientIp, useragent)
+	// 发送信号，让监听器处理邮件发送
+	utils.Sig().Emit(signame, user, hash, clientIp, useragent, db)
 }
 
 // handleSendEmailCode Send Email Code

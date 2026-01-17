@@ -11,9 +11,9 @@ const (
 	SigUserLogout = "user.logout"
 	//SigUserCreate: user *User, c *gin.Context
 	SigUserCreate = "user.create"
-	//SigUserVerifyEmail: user *User, hash, clientIp, userAgent string
+	//SigUserVerifyEmail: user *User, hash, clientIp, userAgent string, db *gorm.DB
 	SigUserVerifyEmail = "user.verifyemail"
-	//SigUserResetPassword: user *User, hash, clientIp, userAgent string
+	//SigUserResetPassword: user *User, hash, clientIp, userAgent string, db *gorm.DB
 	SigUserResetPassword = "user.resetpassword"
 	//SigUserChangeEmail: user *User, hash, clientIp, userAgent, newEmail string
 	SigUserChangeEmail = "user.changeemail"
