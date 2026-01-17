@@ -13,6 +13,8 @@ export interface UpdateProfileForm {
   locale?: string;
   timezone?: string;
   gender?: string;
+  city?: string;
+  region?: string;
   extra?: string;
   avatar?: string;
 }

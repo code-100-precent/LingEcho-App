@@ -55,6 +55,7 @@ interface MenuItem {
 interface InfoItem {
   label: string;
   value: string;
+  extra?: string;
 }
 
 type ProfileScreenNavigationProp = NativeStackNavigationProp<RootStackParamList, 'Main'>;
@@ -100,6 +101,8 @@ const ProfileScreen: React.FC = () => {
     locale: user?.locale || 'zh-CN',
     timezone: user?.timezone || 'Asia/Shanghai',
     gender: user?.gender || '',
+    city: user?.city || '',
+    region: user?.region || '',
     extra: user?.extra || '',
   });
   const [passwordData, setPasswordData] = useState({
@@ -120,6 +123,8 @@ const ProfileScreen: React.FC = () => {
         locale: user.locale || 'zh-CN',
         timezone: user.timezone || 'Asia/Shanghai',
         gender: user.gender || '',
+        city: user.city || '',
+        region: user.region || '',
         extra: user.extra || '',
       });
       // 更新乐观状态
@@ -336,7 +341,37 @@ const ProfileScreen: React.FC = () => {
 
   const infoItems: InfoItem[] = [
     { label: '用户ID', value: `#${user?.id || 'N/A'}` },
+    { label: '注册时间', value: user?.createdAt ? new Date(user.createdAt).toLocaleDateString('zh-CN') : '未知' },
     { label: '账户状态', value: '正常' },
+    { label: '登录次数', value: `${user?.loginCount || 0} 次` },
+    ...(user?.city || user?.region ? [{ 
+      label: '地区', 
+      value: (() => {
+        const location = [user?.city, user?.region].filter(Boolean).join(', ') || '未设置';
+        return location.length > 8 ? location.substring(0, 8) + '...' : location;
+      })()
+    }] : []),
+    ...(user?.lastPasswordChange ? [{ 
+      label: '最后修改密码', 
+      value: new Date(user.lastPasswordChange).toLocaleDateString('zh-CN') 
+    }] : []),
+    { 
+      label: '资料完整度', 
+      value: `${user?.profileComplete || 0}%`,
+      extra: (user?.profileComplete || 0) < 100 ? (() => {
+        const missing = [];
+        if (!user?.displayName) missing.push('显示名称');
+        if (!user?.firstName) missing.push('名字');
+        if (!user?.lastName) missing.push('姓氏');
+        if (!user?.avatar) missing.push('头像');
+        if (!user?.phone) missing.push('手机号码');
+        if (!user?.emailVerified) missing.push('邮箱验证');
+        if (!user?.city) missing.push('城市');
+        if (!user?.region) missing.push('地区');
+        if (!user?.gender) missing.push('性别');
+        return `待完善：${missing.slice(0, 3).join('、')}${missing.length > 3 ? '等' : ''}`;
+      })() : undefined
+    },
   ];
 
   const menuItems: MenuItem[] = [
@@ -390,6 +425,8 @@ const ProfileScreen: React.FC = () => {
                   locale: user?.locale || 'zh-CN',
                   timezone: user?.timezone || 'Asia/Shanghai',
                   gender: user?.gender || '',
+                  city: user?.city || '',
+                  region: user?.region || '',
                   extra: user?.extra || '',
                 });
               }}
@@ -464,6 +501,28 @@ const ProfileScreen: React.FC = () => {
                   value={formData.lastName}
                   onChangeText={(text) => setFormData({ ...formData, lastName: text })}
                   placeholder="请输入姓"
+                  style={styles.input}
+                />
+              </View>
+            </View>
+            <View style={styles.infoItem}>
+              <Text style={styles.infoLabel}>城市</Text>
+              <View style={styles.inputContainer}>
+                <Input
+                  value={formData.city}
+                  onChangeText={(text) => setFormData({ ...formData, city: text })}
+                  placeholder="请输入所在城市"
+                  style={styles.input}
+                />
+              </View>
+            </View>
+            <View style={styles.infoItem}>
+              <Text style={styles.infoLabel}>地区</Text>
+              <View style={styles.inputContainer}>
+                <Input
+                  value={formData.region}
+                  onChangeText={(text) => setFormData({ ...formData, region: text })}
+                  placeholder="请输入所在地区"
                   style={styles.input}
                 />
               </View>

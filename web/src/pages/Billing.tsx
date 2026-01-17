@@ -76,7 +76,6 @@ const Billing = () => {
   const [credentialFilter, setCredentialFilter] = useState<string>('all')
   const [usageTypeFilter, setUsageTypeFilter] = useState<string>('all')
   const [billStatusFilter, setBillStatusFilter] = useState<string>('all')
-  const [searchTerm, setSearchTerm] = useState('')
   const [billingScope, setBillingScope] = useState<'personal' | 'organization'>('personal')
   const [selectedGroupId, setSelectedGroupId] = useState<number | null>(null)
   
@@ -734,15 +733,6 @@ const Billing = () => {
         {/* 使用记录 */}
         <TabsContent value="records" className="space-y-6">
           <div className="flex items-center justify-between">
-            <div className="flex items-center gap-4">
-              <Input
-                placeholder={t('billing.filter.search')}
-                value={searchTerm}
-                onChange={(e) => setSearchTerm(e.target.value)}
-                className="w-64"
-                leftIcon={<Search className="w-4 h-4" />}
-              />
-            </div>
             <div className="flex items-center gap-2">
               <Select value={exportFormat} onValueChange={(value: any) => setExportFormat(value)}>
                 <SelectTrigger className="w-32">

@@ -50,6 +50,8 @@ const Profile = () => {
     locale: user?.locale || 'zh-CN',
     timezone: user?.timezone || 'Asia/Shanghai',
     gender: user?.gender || '',
+    city: user?.city || '',
+    region: user?.region || '',
     extra: user?.extra || '',
     avatar: user?.avatar || '',
   })
@@ -90,6 +92,8 @@ const Profile = () => {
             locale: response.data.locale || 'zh-CN',
             timezone: response.data.timezone || 'Asia/Shanghai',
             gender: response.data.gender || '',
+            city: response.data.city || '',
+            region: response.data.region || '',
             extra: response.data.extra || '',
             avatar: response.data.avatar || '',
           })
@@ -307,6 +311,8 @@ const Profile = () => {
       locale: user?.locale || 'zh-CN',
       timezone: user?.timezone || 'Asia/Shanghai',
       gender: user?.gender || '',
+      city: user?.city || '',
+      region: user?.region || '',
       extra: user?.extra || '',
       avatar: user?.avatar || '',
     })
@@ -511,6 +517,61 @@ const Profile = () => {
                         <span className="text-sm text-gray-900 dark:text-white">{user.phone}</span>
                       </div>
                     )}
+                    {(user?.city || user?.region) && (
+                      <div className="flex justify-between items-center">
+                        <span className="text-sm text-gray-600 dark:text-gray-400">地区</span>
+                        <span className="text-sm text-gray-900 dark:text-white" title={[user?.city, user?.region].filter(Boolean).join(', ')}>
+                          {(() => {
+                            const location = [user?.city, user?.region].filter(Boolean).join(', ') || '未设置';
+                            return location.length > 8 ? location.substring(0, 8) + '...' : location;
+                          })()}
+                        </span>
+                      </div>
+                    )}
+                    <div className="flex justify-between items-center">
+                      <span className="text-sm text-gray-600 dark:text-gray-400">登录次数</span>
+                      <span className="text-sm text-gray-900 dark:text-white">{user?.loginCount || 0} 次</span>
+                    </div>
+                    {user?.lastPasswordChange && (
+                      <div className="flex justify-between items-center">
+                        <span className="text-sm text-gray-600 dark:text-gray-400">最后修改密码</span>
+                        <span className="text-sm text-gray-900 dark:text-white">
+                          {new Date(user.lastPasswordChange).toLocaleDateString('zh-CN')}
+                        </span>
+                      </div>
+                    )}
+                    <div className="flex justify-between items-center">
+                      <span className="text-sm text-gray-600 dark:text-gray-400">资料完整度</span>
+                      <div className="flex items-center space-x-2">
+                        <div className="w-16 bg-gray-200 dark:bg-gray-700 rounded-full h-2">
+                          <div 
+                            className="bg-blue-500 h-2 rounded-full transition-all duration-300" 
+                            style={{ width: `${user?.profileComplete || 0}%` }}
+                          ></div>
+                        </div>
+                        <span className="text-xs text-gray-600 dark:text-gray-400">{user?.profileComplete || 0}%</span>
+                      </div>
+                    </div>
+                    {(user?.profileComplete || 0) < 100 && (
+                      <div className="mt-2 p-2 bg-yellow-50 dark:bg-yellow-900/20 rounded-md border border-yellow-200 dark:border-yellow-800">
+                        <p className="text-xs text-yellow-700 dark:text-yellow-300">
+                          <span className="font-medium">待完善：</span>
+                          {(() => {
+                            const missing = [];
+                            if (!user?.displayName) missing.push('显示名称');
+                            if (!user?.firstName) missing.push('名字');
+                            if (!user?.lastName) missing.push('姓氏');
+                            if (!user?.avatar) missing.push('头像');
+                            if (!user?.phone) missing.push('手机号码');
+                            if (!user?.emailVerified) missing.push('邮箱验证');
+                            if (!user?.city) missing.push('城市');
+                            if (!user?.region) missing.push('地区');
+                            if (!user?.gender) missing.push('性别');
+                            return missing.slice(0, 3).join('、') + (missing.length > 3 ? '等' : '');
+                          })()}
+                        </p>
+                      </div>
+                    )}
                   </div>
                 </div>
               </Card>
@@ -647,6 +708,24 @@ const Profile = () => {
                               <option value="other">其他</option>
                             </select>
                           </div>
+                        </div>
+
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                          <Input
+                            label="城市"
+                            value={formData.city}
+                            onChange={(e) => setFormData(prev => ({ ...prev, city: e.target.value }))}
+                            disabled={!isEditing}
+                            placeholder="请输入所在城市"
+                          />
+                          
+                          <Input
+                            label="地区"
+                            value={formData.region}
+                            onChange={(e) => setFormData(prev => ({ ...prev, region: e.target.value }))}
+                            disabled={!isEditing}
+                            placeholder="请输入所在地区"
+                          />
                         </div>
 
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">

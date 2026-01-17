@@ -97,6 +97,8 @@ export interface User {
   lastName: string
   phone?: string
   gender?: string
+  city?: string
+  region?: string
   extra?: string
   locale?: string
   timezone: string
@@ -105,6 +107,9 @@ export interface User {
   createdAt: string
   updatedAt: string
   lastLogin: string
+  loginCount?: number
+  lastPasswordChange?: string
+  profileComplete?: number
   hasFilledDetails: boolean
   emailNotifications: boolean
   pushNotifications?: boolean
