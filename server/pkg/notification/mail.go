@@ -168,96 +168,76 @@ func (m *MailNotification) SendVerificationCode(to, code string) error {
 
 // SendVerificationEmail 发送邮箱验证邮件
 func (m *MailNotification) SendVerificationEmail(to, username, verifyURL string) error {
-	// 使用简单的HTML模板
-	htmlBody := fmt.Sprintf(`
-<!DOCTYPE html>
-<html>
-<head>
-    <meta charset="UTF-8">
-    <title>邮箱验证</title>
-    <style>
-        body { font-family: Arial, sans-serif; line-height: 1.6; color: #333; }
-        .container { max-width: 600px; margin: 0 auto; padding: 20px; }
-        .header { background: #f8f9fa; padding: 20px; text-align: center; border-radius: 8px 8px 0 0; }
-        .content { background: #fff; padding: 30px; border: 1px solid #e9ecef; }
-        .button { display: inline-block; background: #007bff; color: white; padding: 12px 24px; text-decoration: none; border-radius: 4px; margin: 20px 0; }
-        .footer { background: #f8f9fa; padding: 20px; text-align: center; border-radius: 0 0 8px 8px; font-size: 14px; color: #666; }
-    </style>
-</head>
-<body>
-    <div class="container">
-        <div class="header">
-            <h1>邮箱验证</h1>
-        </div>
-        <div class="content">
-            <p>亲爱的 %s，</p>
-            <p>感谢您注册我们的服务！请点击下面的按钮验证您的邮箱地址：</p>
-            <p style="text-align: center;">
-                <a href="%s" class="button">验证邮箱</a>
-            </p>
-            <p>如果按钮无法点击，请复制以下链接到浏览器中打开：</p>
-            <p style="word-break: break-all; background: #f8f9fa; padding: 10px; border-radius: 4px;">%s</p>
-            <p>此链接将在24小时后过期。</p>
-        </div>
-        <div class="footer">
-            <p>如果您没有注册此服务，请忽略此邮件。</p>
-        </div>
-    </div>
-</body>
-</html>`, username, verifyURL, verifyURL)
+	// 使用嵌入的模板
+	tmpl, err := template.New("email_verification").Parse(LingEcho.EmailVerificationHTML)
+	if err != nil {
+		return fmt.Errorf("failed to parse email verification template: %w", err)
+	}
 
-	return m.SendHTML(to, "请验证您的邮箱地址", htmlBody)
+	data := struct {
+		Username  string
+		VerifyURL string
+	}{
+		Username:  username,
+		VerifyURL: verifyURL,
+	}
+
+	var body bytes.Buffer
+	if err := tmpl.Execute(&body, data); err != nil {
+		return fmt.Errorf("failed to render email verification body: %w", err)
+	}
+
+	return m.SendHTML(to, "请验证您的邮箱地址", body.String())
 }
 
 // SendPasswordResetEmail 发送密码重置邮件
 func (m *MailNotification) SendPasswordResetEmail(to, username, resetURL string) error {
-	// 使用简单的HTML模板
-	htmlBody := fmt.Sprintf(`
-<!DOCTYPE html>
-<html>
-<head>
-    <meta charset="UTF-8">
-    <title>密码重置</title>
-    <style>
-        body { font-family: Arial, sans-serif; line-height: 1.6; color: #333; }
-        .container { max-width: 600px; margin: 0 auto; padding: 20px; }
-        .header { background: #f8f9fa; padding: 20px; text-align: center; border-radius: 8px 8px 0 0; }
-        .content { background: #fff; padding: 30px; border: 1px solid #e9ecef; }
-        .button { display: inline-block; background: #dc3545; color: white; padding: 12px 24px; text-decoration: none; border-radius: 4px; margin: 20px 0; }
-        .footer { background: #f8f9fa; padding: 20px; text-align: center; border-radius: 0 0 8px 8px; font-size: 14px; color: #666; }
-        .warning { background: #fff3cd; border: 1px solid #ffeaa7; padding: 15px; border-radius: 4px; margin: 20px 0; }
-    </style>
-</head>
-<body>
-    <div class="container">
-        <div class="header">
-            <h1>密码重置</h1>
-        </div>
-        <div class="content">
-            <p>亲爱的 %s，</p>
-            <p>我们收到了您的密码重置请求。请点击下面的按钮重置您的密码：</p>
-            <p style="text-align: center;">
-                <a href="%s" class="button">重置密码</a>
-            </p>
-            <p>如果按钮无法点击，请复制以下链接到浏览器中打开：</p>
-            <p style="word-break: break-all; background: #f8f9fa; padding: 10px; border-radius: 4px;">%s</p>
-            <div class="warning">
-                <strong>安全提醒：</strong>
-                <ul>
-                    <li>此链接将在24小时后过期</li>
-                    <li>如果您没有请求重置密码，请忽略此邮件</li>
-                    <li>为了您的账户安全，请不要将重置链接分享给他人</li>
-                </ul>
-            </div>
-        </div>
-        <div class="footer">
-            <p>如果您没有请求密码重置，请忽略此邮件。</p>
-        </div>
-    </div>
-</body>
-</html>`, username, resetURL, resetURL)
+	// 使用嵌入的模板
+	tmpl, err := template.New("password_reset").Parse(LingEcho.PasswordResetHTML)
+	if err != nil {
+		return fmt.Errorf("failed to parse password reset template: %w", err)
+	}
 
-	return m.SendHTML(to, "密码重置请求", htmlBody)
+	data := struct {
+		Username string
+		ResetURL string
+	}{
+		Username: username,
+		ResetURL: resetURL,
+	}
+
+	var body bytes.Buffer
+	if err := tmpl.Execute(&body, data); err != nil {
+		return fmt.Errorf("failed to render password reset body: %w", err)
+	}
+
+	return m.SendHTML(to, "密码重置请求", body.String())
+}
+
+// SendDeviceVerificationCode 发送设备验证码邮件
+func (m *MailNotification) SendDeviceVerificationCode(to, username, code, deviceID string) error {
+	// 使用嵌入的模板
+	tmpl, err := template.New("device_verification").Parse(LingEcho.DeviceVerificationHTML)
+	if err != nil {
+		return fmt.Errorf("failed to parse device verification template: %w", err)
+	}
+
+	data := struct {
+		Username string
+		Code     string
+		DeviceID string
+	}{
+		Username: username,
+		Code:     code,
+		DeviceID: deviceID,
+	}
+
+	var body bytes.Buffer
+	if err := tmpl.Execute(&body, data); err != nil {
+		return fmt.Errorf("failed to render device verification body: %w", err)
+	}
+
+	return m.SendHTML(to, "设备验证码", body.String())
 }
 
 // SendGroupInvitationEmail 发送组织邀请邮件

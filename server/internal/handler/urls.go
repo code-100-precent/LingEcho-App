@@ -117,8 +117,8 @@ func (h *Handlers) Register(engine *gin.Engine) {
 	// Register Global Singleton DB
 	r.Use(middleware.InjectDB(h.db))
 
-	// Register Operation Log Middleware for authenticated routes
-	r.Use(middleware.OperationLogMiddleware())
+	// Apply global middlewares (rate limiting, timeout, circuit breaker, operation log)
+	middleware.ApplyGlobalMiddlewares(r)
 
 	// Register routes regardless of whether search is enabled, check in handler methods
 	// If handler is nil, try to initialize
@@ -198,6 +198,7 @@ func (h *Handlers) Register(engine *gin.Engine) {
 	h.registerVoiceTrainingRoutes(r)
 	h.registerJSTemplateRoutes(r)
 	h.registerBillingRoutes(r)
+	h.registerMiddlewareRoutes(r)
 	h.registerWorkflowRoutes(r)
 	// Register public workflow routes (no auth required)
 	h.RegisterPublicWorkflowRoutes(r)
@@ -254,6 +255,11 @@ func (h *Handlers) registerAuthRoutes(r *gin.RouterGroup) {
 		auth.GET("/devices", models.AuthRequired, h.handleGetUserDevices)
 		auth.DELETE("/devices", models.AuthRequired, h.handleDeleteUserDevice)
 		auth.POST("/devices/trust", models.AuthRequired, h.handleTrustUserDevice)
+		auth.POST("/devices/untrust", models.AuthRequired, h.handleUntrustUserDevice)
+
+		// device verification (no auth required for login flow)
+		auth.POST("/devices/verify", h.handleVerifyDeviceForLogin)
+		auth.POST("/devices/send-verification", h.handleSendDeviceVerificationCode)
 
 		// email verification
 		auth.GET("/verify-email", h.handleVerifyEmail)
@@ -307,6 +313,9 @@ func (h *Handlers) registerNotificationRoutes(r *gin.RouterGroup) {
 
 		// Batch delete notifications
 		notificationGroup.POST("/batch-delete", models.AuthRequired, h.handleBatchDeleteNotifications)
+
+		// Get all notification IDs (for select all functionality)
+		notificationGroup.GET("/all-ids", models.AuthRequired, h.handleGetAllNotificationIds)
 	}
 }
 

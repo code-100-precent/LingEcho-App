@@ -107,6 +107,8 @@ export interface LoginResponseData {
   lastName?: string
   timezone?: string
   requiresTwoFactor?: boolean
+  requiresDeviceVerification?: boolean
+  deviceId?: string
   message?: string
   suspiciousLogin?: boolean
   [key: string]: any
@@ -187,6 +189,16 @@ export const loginWithPassword = async (data: PasswordLoginForm): Promise<ApiRes
 // 邮箱验证码登录
 export const loginWithEmailCode = async (data: EmailCodeLoginForm): Promise<ApiResponse<LoginResponseData>> => {
   return post<LoginResponseData>('/auth/login/email', data)
+}
+
+// 发送设备验证码
+export const sendDeviceVerificationCode = async (data: { email: string; deviceId: string }): Promise<ApiResponse<null>> => {
+  return post('/auth/devices/send-verification', data)
+}
+
+// 验证设备
+export const verifyDevice = async (data: { email: string; deviceId: string; verifyCode: string }): Promise<ApiResponse<null>> => {
+  return post('/auth/devices/verify', data)
 }
 
 // 获取用户信息

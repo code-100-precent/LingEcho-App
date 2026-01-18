@@ -27,7 +27,7 @@ func NewLoginSecurityManager(logger *zap.Logger) *LoginSecurityManager {
 		maxFailedAttempts:    7,
 		lockDuration:         30 * time.Minute,
 		maxPasswordLogins:    25,
-		ipRateLimitPerMinute: 10, // 每个IP每分钟最多10次登录尝试
+		ipRateLimitPerMinute: 7, // 每个IP每分钟最多7次登录尝试
 		logger:               logger,
 	}
 }

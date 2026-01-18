@@ -1,485 +1,363 @@
 package middleware
 
 import (
-	"net"
+	"fmt"
 	"net/http"
 	"strconv"
-	"strings"
 	"sync"
 	"time"
 
+	"github.com/code-100-precent/LingEcho/internal/models"
+	"github.com/code-100-precent/LingEcho/pkg/logger"
 	"github.com/gin-gonic/gin"
-	"github.com/prometheus/client_golang/prometheus"
-	"github.com/prometheus/client_golang/prometheus/promauto"
-	"github.com/ulule/limiter/v3"
-	_ "github.com/ulule/limiter/v3/drivers/middleware/gin"
-	"github.com/ulule/limiter/v3/drivers/store/memory"
+	"go.uber.org/zap"
 )
 
-// RateLimiterConfig 企业级限流配置
-//
-// 示例：
-// Rate: "100-M"、Identifier: "ip"/"user"/"header"、HeaderName: "X-Client-ID"
-// PerRouteRates: {"/api/v1/heavy": "10-S", "/api/v1/normal": "100-S"}
-// WhitelistCIDRs/BlacklistCIDRs: ["10.0.0.0/8", "127.0.0.1/32"]
-// WhitelistUsers/BlacklistUsers: ["admin", "ops-*"] 支持前缀匹配
-// SkipPaths: ["/health", "/metrics", "/static/"] 前缀匹配
-// AddHeaders: 是否写标准限流响应头；DenyStatus/DenyMessage: 自定义拒绝响应
-//
-// Store 采用内存，可通过 SetRateLimiterStore 注入外部存储（如 Redis）。
+// RateLimiterConfig 限流配置
 type RateLimiterConfig struct {
-	Rate           string            `json:"rate"`            // e.g. "100-M", "1000-H"
-	PerRouteRates  map[string]string `json:"per_route_rates"` // 路由覆盖速率
-	Identifier     string            `json:"identifier"`      // ip|user|header|ip+route
-	HeaderName     string            `json:"header_name"`     // 当 identifier=header 时使用
-	WhitelistCIDRs []string          `json:"whitelist_cidrs"`
-	BlacklistCIDRs []string          `json:"blacklist_cidrs"`
-	WhitelistUsers []string          `json:"whitelist_users"`
-	BlacklistUsers []string          `json:"blacklist_users"`
-	SkipPaths      []string          `json:"skip_paths"`
-	AddHeaders     bool              `json:"add_headers"`
-	DenyStatus     int               `json:"deny_status"` // 默认 429
-	DenyMessage    string            `json:"deny_message"`
+	// 全局限流配置
+	GlobalRPS    int           // 全局每秒请求数
+	GlobalBurst  int           // 全局突发请求数
+	GlobalWindow time.Duration // 全局时间窗口
+
+	// 用户限流配置
+	UserRPS    int           // 用户每秒请求数
+	UserBurst  int           // 用户突发请求数
+	UserWindow time.Duration // 用户时间窗口
+
+	// IP限流配置
+	IPRPS    int           // IP每秒请求数
+	IPBurst  int           // IP突发请求数
+	IPWindow time.Duration // IP时间窗口
+
+	// 接口级别限流配置
+	EndpointLimits map[string]EndpointLimit // 特定接口的限流配置
 }
 
-// StoreFactory 用于按需创建 store（例如基于 Redis 客户端）
-type StoreFactory interface {
-	Create() limiter.Store
+// EndpointLimit 接口级别限流配置
+type EndpointLimit struct {
+	RPS    int           // 每秒请求数
+	Burst  int           // 突发请求数
+	Window time.Duration // 时间窗口
 }
 
-// PrebuiltStoreFactory 直接复用已有的 limiter.Store（例如外部创建的 Redis store）
-type PrebuiltStoreFactory struct{ Store limiter.Store }
-
-func (p *PrebuiltStoreFactory) Create() limiter.Store { return p.Store }
-
-// MetricsObserver 指标上报接口
-// 可接 Prometheus、StatsD 等
-type MetricsObserver interface {
-	OnAllow(route string, key string)
-	OnDeny(route string, key string)
+// TokenBucket 令牌桶实现
+type TokenBucket struct {
+	capacity     int           // 桶容量
+	tokens       int           // 当前令牌数
+	refillRate   int           // 每秒补充令牌数
+	lastRefill   time.Time     // 上次补充时间
+	mu           sync.Mutex    // 互斥锁
+	window       time.Duration // 时间窗口
+	requestCount int           // 窗口内请求计数
+	windowStart  time.Time     // 窗口开始时间
 }
 
-// PrometheusObserver 基于 Prometheus 的实现
-type PrometheusObserver struct {
-	allow *prometheus.CounterVec
-	deny  *prometheus.CounterVec
-}
-
-// NewPrometheusObserver 创建 Prometheus 观察者
-func NewPrometheusObserver() *PrometheusObserver {
-	return &PrometheusObserver{
-		allow: promauto.NewCounterVec(prometheus.CounterOpts{
-			Name: "rate_limit_allow_total",
-			Help: "Allowed requests by rate limiter",
-		}, []string{"route"}),
-		deny: promauto.NewCounterVec(prometheus.CounterOpts{
-			Name: "rate_limit_deny_total",
-			Help: "Denied requests by rate limiter",
-		}, []string{"route"}),
+// NewTokenBucket 创建新的令牌桶
+func NewTokenBucket(capacity, refillRate int, window time.Duration) *TokenBucket {
+	return &TokenBucket{
+		capacity:    capacity,
+		tokens:      capacity,
+		refillRate:  refillRate,
+		lastRefill:  time.Now(),
+		window:      window,
+		windowStart: time.Now(),
 	}
 }
 
-func (p *PrometheusObserver) OnAllow(route, key string) { p.allow.WithLabelValues(route).Inc() }
-func (p *PrometheusObserver) OnDeny(route, key string)  { p.deny.WithLabelValues(route).Inc() }
+// Allow 检查是否允许请求
+func (tb *TokenBucket) Allow() bool {
+	tb.mu.Lock()
+	defer tb.mu.Unlock()
 
-// RateLimiter 面向实例的限流器，支持按路由缓存多个 limiter
+	now := time.Now()
+
+	// 检查时间窗口是否需要重置
+	if now.Sub(tb.windowStart) >= tb.window {
+		tb.requestCount = 0
+		tb.windowStart = now
+	}
+
+	// 补充令牌
+	elapsed := now.Sub(tb.lastRefill)
+	tokensToAdd := int(elapsed.Seconds()) * tb.refillRate
+	if tokensToAdd > 0 {
+		tb.tokens = min(tb.capacity, tb.tokens+tokensToAdd)
+		tb.lastRefill = now
+	}
+
+	// 检查是否有可用令牌
+	if tb.tokens > 0 {
+		tb.tokens--
+		tb.requestCount++
+		return true
+	}
+
+	return false
+}
+
+// GetStats 获取令牌桶统计信息
+func (tb *TokenBucket) GetStats() (tokens, requestCount int) {
+	tb.mu.Lock()
+	defer tb.mu.Unlock()
+	return tb.tokens, tb.requestCount
+}
+
+// RateLimiter 限流器
 type RateLimiter struct {
-	cfg            *RateLimiterConfig
-	store          limiter.Store
-	storeFactory   StoreFactory
-	observer       MetricsObserver
-	limitersByRate map[string]*limiter.Limiter // rate字符串 -> limiter
-	mu             sync.RWMutex
-	whiteCIDRs     []*net.IPNet
-	blackCIDRs     []*net.IPNet
+	config          RateLimiterConfig
+	globalBucket    *TokenBucket
+	userBuckets     sync.Map // map[uint]*TokenBucket
+	ipBuckets       sync.Map // map[string]*TokenBucket
+	endpointBuckets sync.Map // map[string]*TokenBucket
+	mu              sync.RWMutex
 }
 
-// NewRateLimiter 构造函数（推荐使用），避免全局依赖
-func NewRateLimiter(cfg RateLimiterConfig, store limiter.Store) *RateLimiter {
-	if store == nil {
-		store = memory.NewStore()
+// NewRateLimiter 创建新的限流器
+func NewRateLimiter(config RateLimiterConfig) *RateLimiter {
+	rl := &RateLimiter{
+		config: config,
 	}
-	l := &RateLimiter{
-		cfg:            &cfg,
-		store:          store,
-		limitersByRate: make(map[string]*limiter.Limiter),
+
+	// 创建全局令牌桶
+	if config.GlobalRPS > 0 {
+		rl.globalBucket = NewTokenBucket(config.GlobalBurst, config.GlobalRPS, config.GlobalWindow)
 	}
-	l.compileCIDRs()
-	return l
+
+	return rl
 }
 
-// WithStoreFactory 配置存储工厂
-func (l *RateLimiter) WithStoreFactory(factory StoreFactory) *RateLimiter {
-	l.mu.Lock()
-	defer l.mu.Unlock()
-	l.storeFactory = factory
-	if factory != nil {
-		l.store = factory.Create()
-		l.limitersByRate = make(map[string]*limiter.Limiter) // 重建缓存
+// DefaultRateLimiterConfig 默认限流配置
+func DefaultRateLimiterConfig() RateLimiterConfig {
+	return RateLimiterConfig{
+		// 全局限流：每秒1000个请求，突发2000个
+		GlobalRPS:    1000,
+		GlobalBurst:  2000,
+		GlobalWindow: time.Minute,
+
+		// 用户限流：每秒100个请求，突发200个
+		UserRPS:    100,
+		UserBurst:  200,
+		UserWindow: time.Minute,
+
+		// IP限流：每秒50个请求，突发100个
+		IPRPS:    50,
+		IPBurst:  100,
+		IPWindow: time.Minute,
+
+		// 特定接口限流
+		EndpointLimits: map[string]EndpointLimit{
+			// 登录接口：每分钟5次
+			"/api/auth/login/password": {
+				RPS:    1,
+				Burst:  5,
+				Window: time.Minute,
+			},
+			"/api/auth/login/email": {
+				RPS:    1,
+				Burst:  5,
+				Window: time.Minute,
+			},
+			// 注册接口：每小时3次
+			"/api/auth/register": {
+				RPS:    1,
+				Burst:  3,
+				Window: time.Hour,
+			},
+			// 发送验证码：每分钟3次
+			"/api/auth/send/email": {
+				RPS:    1,
+				Burst:  3,
+				Window: time.Minute,
+			},
+			// 文件上传：每分钟10次
+			"/api/upload": {
+				RPS:    5,
+				Burst:  10,
+				Window: time.Minute,
+			},
+		},
 	}
-	return l
 }
 
-// WithObserver 配置指标观察者
-func (l *RateLimiter) WithObserver(observer MetricsObserver) *RateLimiter {
-	l.mu.Lock()
-	defer l.mu.Unlock()
-	l.observer = observer
-	return l
+// getUserBucket 获取用户令牌桶
+func (rl *RateLimiter) getUserBucket(userID uint) *TokenBucket {
+	if bucket, ok := rl.userBuckets.Load(userID); ok {
+		return bucket.(*TokenBucket)
+	}
+
+	bucket := NewTokenBucket(rl.config.UserBurst, rl.config.UserRPS, rl.config.UserWindow)
+	rl.userBuckets.Store(userID, bucket)
+	return bucket
 }
 
-// Middleware 返回 Gin 中间件
-func (l *RateLimiter) Middleware() gin.HandlerFunc {
+// getIPBucket 获取IP令牌桶
+func (rl *RateLimiter) getIPBucket(ip string) *TokenBucket {
+	if bucket, ok := rl.ipBuckets.Load(ip); ok {
+		return bucket.(*TokenBucket)
+	}
+
+	bucket := NewTokenBucket(rl.config.IPBurst, rl.config.IPRPS, rl.config.IPWindow)
+	rl.ipBuckets.Store(ip, bucket)
+	return bucket
+}
+
+// getEndpointBucket 获取接口令牌桶
+func (rl *RateLimiter) getEndpointBucket(endpoint string, userID uint) *TokenBucket {
+	key := fmt.Sprintf("%s:%d", endpoint, userID)
+	if bucket, ok := rl.endpointBuckets.Load(key); ok {
+		return bucket.(*TokenBucket)
+	}
+
+	// 检查是否有特定接口的限流配置
+	if limit, exists := rl.config.EndpointLimits[endpoint]; exists {
+		bucket := NewTokenBucket(limit.Burst, limit.RPS, limit.Window)
+		rl.endpointBuckets.Store(key, bucket)
+		return bucket
+	}
+
+	return nil
+}
+
+// Allow 检查是否允许请求
+func (rl *RateLimiter) Allow(userID uint, ip, endpoint string) (bool, string) {
+	// 1. 检查全局限流
+	if rl.globalBucket != nil && !rl.globalBucket.Allow() {
+		return false, "global_rate_limit_exceeded"
+	}
+
+	// 2. 检查IP限流
+	if rl.config.IPRPS > 0 {
+		ipBucket := rl.getIPBucket(ip)
+		if !ipBucket.Allow() {
+			return false, "ip_rate_limit_exceeded"
+		}
+	}
+
+	// 3. 检查用户限流
+	if userID > 0 && rl.config.UserRPS > 0 {
+		userBucket := rl.getUserBucket(userID)
+		if !userBucket.Allow() {
+			return false, "user_rate_limit_exceeded"
+		}
+	}
+
+	// 4. 检查接口级别限流
+	if userID > 0 {
+		endpointBucket := rl.getEndpointBucket(endpoint, userID)
+		if endpointBucket != nil && !endpointBucket.Allow() {
+			return false, "endpoint_rate_limit_exceeded"
+		}
+	}
+
+	return true, ""
+}
+
+// GetStats 获取限流统计信息
+func (rl *RateLimiter) GetStats() map[string]interface{} {
+	stats := make(map[string]interface{})
+
+	if rl.globalBucket != nil {
+		tokens, requests := rl.globalBucket.GetStats()
+		stats["global"] = map[string]int{
+			"tokens":   tokens,
+			"requests": requests,
+		}
+	}
+
+	// 统计用户桶数量
+	userCount := 0
+	rl.userBuckets.Range(func(key, value interface{}) bool {
+		userCount++
+		return true
+	})
+	stats["user_buckets"] = userCount
+
+	// 统计IP桶数量
+	ipCount := 0
+	rl.ipBuckets.Range(func(key, value interface{}) bool {
+		ipCount++
+		return true
+	})
+	stats["ip_buckets"] = ipCount
+
+	return stats
+}
+
+// 全局限流器实例
+var globalRateLimiter *RateLimiter
+var rateLimiterOnce sync.Once
+
+// GetRateLimiter 获取全局限流器实例
+func GetRateLimiter() *RateLimiter {
+	rateLimiterOnce.Do(func() {
+		globalRateLimiter = NewRateLimiter(DefaultRateLimiterConfig())
+	})
+	return globalRateLimiter
+}
+
+// RateLimitMiddleware 限流中间件
+func RateLimitMiddleware() gin.HandlerFunc {
+	limiter := GetRateLimiter()
+
 	return func(c *gin.Context) {
-		cfg := l.getConfig()
+		ip := c.ClientIP()
+		endpoint := c.Request.URL.Path
 
-		if pathSkipped(*cfg, c.FullPath(), c.Request.URL.Path) {
-			c.Next()
-			return
-		}
+		var userID uint = 0
 
-		clientIP := clientIPFromRequest(c)
-		if ipListed(clientIP, l.whiteCIDRs) {
-			c.Next()
-			return
-		}
-		if ipListed(clientIP, l.blackCIDRs) {
-			l.reportDeny(c, "blacklist")
-			denyTooMany(c, *cfg, 0, 0, time.Time{})
-			return
-		}
-		userID := currentUserID(c)
-		if userListed(userID, cfg.WhitelistUsers) {
-			c.Next()
-			return
-		}
-		if userListed(userID, cfg.BlacklistUsers) {
-			l.reportDeny(c, "user_blacklist")
-			denyTooMany(c, *cfg, 0, 0, time.Time{})
-			return
+		// 尝试获取用户ID
+		if user := models.CurrentUser(c); user != nil {
+			userID = user.ID
 		}
 
-		key := buildLimitKey(*cfg, c, clientIP, userID)
-		rateStr := l.pickRateForRoute(cfg, c)
-		lim := l.getLimiter(rateStr)
+		// 检查限流
+		allowed, reason := limiter.Allow(userID, ip, endpoint)
+		if !allowed {
+			logger.Warn("Rate limit exceeded",
+				zap.Uint("userID", userID),
+				zap.String("ip", ip),
+				zap.String("endpoint", endpoint),
+				zap.String("reason", reason))
 
-		context, err := lim.Get(c, key)
-		if err != nil {
-			c.Next()
-			return
-		}
-		if cfg.AddHeaders {
-			setStandardHeaders(c, context)
-		}
-		if context.Reached {
-			retry := time.Until(time.Unix(context.Reset, 0))
-			setRetryAfter(c, retry)
-			l.reportDeny(c, key)
-			denyTooMany(c, *cfg, int(context.Limit), int(context.Remaining), time.Unix(context.Reset, 0))
+			// 设置限流响应头
+			c.Header("X-RateLimit-Limit", strconv.Itoa(limiter.config.UserRPS))
+			c.Header("X-RateLimit-Remaining", "0")
+			c.Header("X-RateLimit-Reset", strconv.FormatInt(time.Now().Add(time.Minute).Unix(), 10))
+
+			// 返回限流错误
+			c.JSON(http.StatusTooManyRequests, map[string]interface{}{
+				"error":   "rate_limit_exceeded",
+				"message": getRateLimitMessage(reason),
+				"reason":  reason,
+			})
+			c.Abort()
 			return
 		}
 
-		l.reportAllow(c, key)
 		c.Next()
 	}
 }
 
-func (l *RateLimiter) reportAllow(c *gin.Context, key string) {
-	l.mu.RLock()
-	obs := l.observer
-	l.mu.RUnlock()
-	if obs != nil {
-		r := c.FullPath()
-		if r == "" {
-			r = c.Request.URL.Path
-		}
-		obs.OnAllow(r, key)
+// getRateLimitMessage 获取限流错误消息
+func getRateLimitMessage(reason string) string {
+	messages := map[string]string{
+		"global_rate_limit_exceeded":   "系统繁忙，请稍后再试",
+		"ip_rate_limit_exceeded":       "您的IP请求过于频繁，请稍后再试",
+		"user_rate_limit_exceeded":     "您的请求过于频繁，请稍后再试",
+		"endpoint_rate_limit_exceeded": "该接口请求过于频繁，请稍后再试",
 	}
+
+	if msg, exists := messages[reason]; exists {
+		return msg
+	}
+	return "请求过于频繁，请稍后再试"
 }
 
-func (l *RateLimiter) reportDeny(c *gin.Context, key string) {
-	l.mu.RLock()
-	obs := l.observer
-	l.mu.RUnlock()
-	if obs != nil {
-		r := c.FullPath()
-		if r == "" {
-			r = c.Request.URL.Path
-		}
-		obs.OnDeny(r, key)
+// min 辅助函数
+func min(a, b int) int {
+	if a < b {
+		return a
 	}
-}
-
-func (l *RateLimiter) getLimiter(rateStr string) *limiter.Limiter {
-	l.mu.RLock()
-	lim, ok := l.limitersByRate[rateStr]
-	l.mu.RUnlock()
-	if ok {
-		return lim
-	}
-	l.mu.Lock()
-	defer l.mu.Unlock()
-	if lim, ok = l.limitersByRate[rateStr]; ok {
-		return lim
-	}
-	store := l.store
-	if l.storeFactory != nil {
-		store = l.storeFactory.Create()
-	}
-	r, err := limiter.NewRateFromFormatted(rateStr)
-	if err != nil {
-		r = limiter.Rate{Period: time.Second, Limit: 10}
-	}
-	lim = limiter.New(store, r)
-	l.limitersByRate[rateStr] = lim
-	return lim
-}
-
-func (l *RateLimiter) pickRateForRoute(cfg *RateLimiterConfig, c *gin.Context) string {
-	if cfg.PerRouteRates != nil {
-		if full := c.FullPath(); full != "" {
-			if r, ok := cfg.PerRouteRates[full]; ok && r != "" {
-				return r
-			}
-		}
-		if raw := c.Request.URL.Path; raw != "" {
-			if r, ok := cfg.PerRouteRates[raw]; ok && r != "" {
-				return r
-			}
-		}
-	}
-	if cfg.Rate != "" {
-		return cfg.Rate
-	}
-	return "10-S"
-}
-
-func (l *RateLimiter) getConfig() *RateLimiterConfig {
-	l.mu.RLock()
-	defer l.mu.RUnlock()
-	return l.cfg
-}
-
-func (l *RateLimiter) UpdateConfig(cfg RateLimiterConfig) {
-	l.mu.Lock()
-	defer l.mu.Unlock()
-	l.cfg = &cfg
-	l.compileCIDRs()
-}
-
-func (l *RateLimiter) compileCIDRs() {
-	l.whiteCIDRs = l.whiteCIDRs[:0]
-	l.blackCIDRs = l.blackCIDRs[:0]
-	for _, c := range l.cfg.WhitelistCIDRs {
-		if _, ipnet, err := net.ParseCIDR(strings.TrimSpace(c)); err == nil {
-			l.whiteCIDRs = append(l.whiteCIDRs, ipnet)
-		}
-	}
-	for _, c := range l.cfg.BlacklistCIDRs {
-		if _, ipnet, err := net.ParseCIDR(strings.TrimSpace(c)); err == nil {
-			l.blackCIDRs = append(l.blackCIDRs, ipnet)
-		}
-	}
-}
-
-// -------------------- 以下为向后兼容的全局封装 --------------------
-var (
-	rateLimiterMutex  sync.RWMutex
-	rateLimiterConfig = &RateLimiterConfig{Rate: "10-S", Identifier: "ip", AddHeaders: true, DenyStatus: http.StatusTooManyRequests}
-	rlStore           limiter.Store
-	globalRL          *RateLimiter
-	compiledWhiteCIDR []*net.IPNet
-	compiledBlackCIDR []*net.IPNet
-)
-
-// SetRateLimiterStore 注入外部存储（如 Redis store）
-func SetRateLimiterStore(store limiter.Store) {
-	rateLimiterMutex.Lock()
-	defer rateLimiterMutex.Unlock()
-	rlStore = store
-	globalRL = nil
-}
-
-// SetRateLimiterConfig 动态更新限流配置
-func SetRateLimiterConfig(config RateLimiterConfig) {
-	rateLimiterMutex.Lock()
-	defer rateLimiterMutex.Unlock()
-	rateLimiterConfig = &config
-	globalRL = nil
-}
-
-// GetRateLimiterConfig 获取当前配置（拷贝）
-func GetRateLimiterConfig() RateLimiterConfig {
-	rateLimiterMutex.RLock()
-	defer rateLimiterMutex.RUnlock()
-	return *rateLimiterConfig
-}
-
-// RateLimiterMiddleware 企业级限流中间件（全局版，兼容原接口）
-func RateLimiterMiddleware() gin.HandlerFunc {
-	ensureInitialized()
-	return globalRL.Middleware()
-}
-
-// gin 官方中间件在每次请求创建 store/limiter，开销较大；我们缓存实例并支持动态更新
-func ensureInitialized() {
-	rateLimiterMutex.Lock()
-	defer rateLimiterMutex.Unlock()
-	if globalRL != nil {
-		return
-	}
-	if rlStore == nil {
-		rlStore = memory.NewStore()
-	}
-	compiledWhiteCIDR = compiledWhiteCIDR[:0]
-	compiledBlackCIDR = compiledBlackCIDR[:0]
-	for _, c := range rateLimiterConfig.WhitelistCIDRs {
-		if _, ipnet, err := net.ParseCIDR(strings.TrimSpace(c)); err == nil {
-			compiledWhiteCIDR = append(compiledWhiteCIDR, ipnet)
-		}
-	}
-	for _, c := range rateLimiterConfig.BlacklistCIDRs {
-		if _, ipnet, err := net.ParseCIDR(strings.TrimSpace(c)); err == nil {
-			compiledBlackCIDR = append(compiledBlackCIDR, ipnet)
-		}
-	}
-	inst := NewRateLimiter(*rateLimiterConfig, rlStore)
-	inst.whiteCIDRs = compiledWhiteCIDR
-	inst.blackCIDRs = compiledBlackCIDR
-	globalRL = inst
-}
-
-// 兼容函数，供旧逻辑使用
-func pathSkipped(cfg RateLimiterConfig, fullPath, rawPath string) bool {
-	if len(cfg.SkipPaths) == 0 {
-		return false
-	}
-	p := fullPath
-	if p == "" {
-		p = rawPath
-	}
-	for _, pref := range cfg.SkipPaths {
-		if pref == "" {
-			continue
-		}
-		if strings.HasPrefix(p, pref) {
-			return true
-		}
-	}
-	return false
-}
-
-func clientIPFromRequest(c *gin.Context) string {
-	ip := c.ClientIP()
-	if strings.HasPrefix(ip, "::ffff:") {
-		ip = strings.TrimPrefix(ip, "::ffff:")
-	}
-	return ip
-}
-
-func currentUserID(c *gin.Context) string {
-	v, ok := c.Get("user_id")
-	if !ok {
-		return ""
-	}
-	if s, ok := v.(string); ok {
-		return s
-	}
-	return ""
-}
-
-func ipListed(ip string, nets []*net.IPNet) bool {
-	if ip == "" {
-		return false
-	}
-	pip := net.ParseIP(ip)
-	if pip == nil {
-		return false
-	}
-	for _, n := range nets {
-		if n.Contains(pip) {
-			return true
-		}
-	}
-	return false
-}
-
-func userListed(user string, patterns []string) bool {
-	if user == "" || len(patterns) == 0 {
-		return false
-	}
-	for _, p := range patterns {
-		p = strings.TrimSpace(p)
-		if p == "" {
-			continue
-		}
-		if strings.HasSuffix(p, "*") {
-			if strings.HasPrefix(user, strings.TrimSuffix(p, "*")) {
-				return true
-			}
-			continue
-		}
-		if user == p {
-			return true
-		}
-	}
-	return false
-}
-
-func buildLimitKey(cfg RateLimiterConfig, c *gin.Context, ip, user string) string {
-	switch cfg.Identifier {
-	case "user":
-		if user != "" {
-			return "user:" + user
-		}
-		return "ip:" + ip
-	case "header":
-		hv := strings.TrimSpace(c.GetHeader(cfg.HeaderName))
-		if hv != "" {
-			return "hdr:" + cfg.HeaderName + ":" + hv
-		}
-		return "ip:" + ip
-	case "ip+route":
-		route := c.FullPath()
-		if route == "" {
-			route = c.Request.URL.Path
-		}
-		return "iprt:" + ip + ":" + route
-	default: // ip
-		return "ip:" + ip
-	}
-}
-
-func setStandardHeaders(c *gin.Context, ctx limiter.Context) {
-	c.Header("X-RateLimit-Limit", int64ToString(ctx.Limit))
-	c.Header("X-RateLimit-Remaining", int64ToString(ctx.Remaining))
-	resetSec := int(time.Until(time.Unix(ctx.Reset, 0)).Seconds())
-	if resetSec < 0 {
-		resetSec = 0
-	}
-	c.Header("X-RateLimit-Reset", strconv.Itoa(resetSec))
-}
-
-func setRetryAfter(c *gin.Context, d time.Duration) {
-	sec := int(d.Seconds())
-	if sec < 0 {
-		sec = 0
-	}
-	c.Header("Retry-After", strconv.Itoa(sec))
-}
-
-func int64ToString(v int64) string {
-	return strconv.FormatInt(v, 10)
-}
-
-func denyTooMany(c *gin.Context, cfg RateLimiterConfig, limit, remaining int, reset time.Time) {
-	status := cfg.DenyStatus
-	if status == 0 {
-		status = http.StatusTooManyRequests
-	}
-	msg := cfg.DenyMessage
-	if msg == "" {
-		msg = "Too Many Requests"
-	}
-	c.AbortWithStatusJSON(status, gin.H{"error": msg})
+	return b
 }

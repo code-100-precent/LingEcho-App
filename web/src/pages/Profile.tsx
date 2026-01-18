@@ -15,9 +15,10 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '../components/UI/Tabs'
 import FadeIn from '../components/Animations/FadeIn'
 import LoadingAnimation from '../components/Animations/LoadingAnimation'
 import { showAlert } from '../utils/notification'
-import { getProfile, updateProfile, updatePreferences, changePassword, changePasswordByEmail, uploadAvatar, setupTwoFactor, enableTwoFactor, disableTwoFactor, getUserActivity, getUserDevices, deleteUserDevice, trustUserDevice, TwoFactorSetupResponse, ActivityLog, UserDevice } from '../api/profile'
+import { getProfile, updateProfile, updatePreferences, changePassword, changePasswordByEmail, uploadAvatar, setupTwoFactor, enableTwoFactor, disableTwoFactor, getUserActivity, getUserDevices, deleteUserDevice, trustUserDevice, untrustUserDevice, TwoFactorSetupResponse, ActivityLog, UserDevice } from '../api/profile'
 import { sendEmailCode, sendEmailVerification } from '../api/auth'
 import { motion, AnimatePresence } from 'framer-motion'
+import ConfirmDialog from '../components/UI/ConfirmDialog'
 import AudioController from '../components/UI/AudioController'
 import AuthModal from '../components/Auth/AuthModal'
 
@@ -49,6 +50,21 @@ const Profile = () => {
   // 设备管理相关状态
   const [devices, setDevices] = useState<UserDevice[]>([])
   const [isLoadingDevices, setIsLoadingDevices] = useState(false)
+  
+  // 确认对话框状态
+  const [confirmDialog, setConfirmDialog] = useState<{
+    isOpen: boolean
+    title: string
+    message: string
+    onConfirm: () => void
+    type?: 'warning' | 'danger' | 'info' | 'success'
+  }>({
+    isOpen: false,
+    title: '',
+    message: '',
+    onConfirm: () => {},
+    type: 'warning'
+  })
   
   // 邮箱验证相关状态
   const [isSendingEmailVerification, setIsSendingEmailVerification] = useState(false)
@@ -271,6 +287,35 @@ const Profile = () => {
       }
     } catch (error: any) {
       showAlert(error?.msg || error?.message || '信任设备失败', 'error', '操作失败')
+    } finally {
+      setIsLoading(false)
+    }
+  }
+
+  // 取消信任设备
+  const handleUntrustDevice = async (deviceId: string) => {
+    setConfirmDialog({
+      isOpen: true,
+      title: '取消信任设备',
+      message: '确定要取消信任此设备吗？取消后该设备登录时将需要重新验证。',
+      type: 'warning',
+      onConfirm: () => performUntrustDevice(deviceId)
+    })
+  }
+
+  // 执行取消信任设备操作
+  const performUntrustDevice = async (deviceId: string) => {
+    setIsLoading(true)
+    try {
+      const response = await untrustUserDevice(deviceId)
+      if (response.code === 200) {
+        showAlert('已取消信任设备', 'success', '操作成功')
+        loadDevices() // 重新加载设备列表
+      } else {
+        throw new Error(response.msg || '取消信任设备失败')
+      }
+    } catch (error: any) {
+      showAlert(error?.msg || error?.message || '取消信任设备失败', 'error', '操作失败')
     } finally {
       setIsLoading(false)
     }
@@ -1396,7 +1441,7 @@ const Profile = () => {
                                     </div>
                                   </div>
                                   <div className="flex items-center space-x-2">
-                                    {!device.isTrusted && (
+                                    {!device.isTrusted ? (
                                       <Button
                                         variant="outline"
                                         size="sm"
@@ -1404,6 +1449,15 @@ const Profile = () => {
                                         disabled={isLoading}
                                       >
                                         信任
+                                      </Button>
+                                    ) : (
+                                      <Button
+                                        variant="outline"
+                                        size="sm"
+                                        onClick={() => handleUntrustDevice(device.deviceId)}
+                                        disabled={isLoading}
+                                      >
+                                        取消信任
                                       </Button>
                                     )}
                                     <Button
@@ -1634,6 +1688,17 @@ const Profile = () => {
           </div>
         </div>
       )}
+
+      {/* 确认对话框 */}
+      <ConfirmDialog
+        isOpen={confirmDialog.isOpen}
+        onClose={() => setConfirmDialog(prev => ({ ...prev, isOpen: false }))}
+        onConfirm={confirmDialog.onConfirm}
+        title={confirmDialog.title}
+        message={confirmDialog.message}
+        type={confirmDialog.type}
+        loading={isLoading}
+      />
     </div>
   )
 }

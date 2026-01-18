@@ -102,32 +102,69 @@ func DefaultOperationLogConfig() *OperationLogConfig {
 			"/api/test/",
 		},
 		OperationDescriptions: map[string]string{
-			"/api/auth/login":             "用户登录",
-			"/api/auth/logout":            "用户登出",
-			"/api/auth/register":          "用户注册",
-			"/api/auth/change-password":   "修改密码",
-			"/api/auth/reset-password":    "重置密码",
-			"/api/auth/update":            "更新个人资料",
-			"/api/auth/preferences":       "更新偏好设置",
-			"/api/auth/two-factor":        "两步验证操作",
-			"/api/notification/mark-read": "标记通知已读",
-			"/api/notification/delete":    "删除通知",
-			"/api/notification/clear":     "清空通知",
-			"/api/assistant/create":       "创建助手",
-			"/api/assistant/update":       "更新助手",
-			"/api/assistant/delete":       "删除助手",
-			"/api/chat/send":              "发送消息",
-			"/api/chat/delete":            "删除聊天记录",
-			"/api/voice/training/create":  "创建语音训练",
-			"/api/voice/training/update":  "更新语音训练",
-			"/api/voice/training/delete":  "删除语音训练",
-			"/api/knowledge/create":       "创建知识库",
-			"/api/knowledge/update":       "更新知识库",
-			"/api/knowledge/delete":       "删除知识库",
-			"/api/group/create":           "创建群组",
-			"/api/group/join":             "加入群组",
-			"/api/group/leave":            "离开群组",
-			"/api/upload":                 "文件上传",
+			// 认证相关操作
+			"/api/auth/login":                   "用户登录",
+			"/api/auth/logout":                  "用户登出",
+			"/api/auth/register":                "用户注册",
+			"/api/auth/change-password":         "修改密码",
+			"/api/auth/reset-password":          "重置密码",
+			"/api/auth/update":                  "更新个人资料",
+			"/api/auth/preferences":             "更新偏好设置",
+			"/api/auth/two-factor":              "两步验证操作",
+			"/api/auth/send-email-verification": "发送邮箱验证",
+			"/api/auth/verify-email":            "验证邮箱",
+			"/api/auth/devices":                 "管理设备",
+			"/api/auth/devices/trust":           "信任设备",
+			"/api/auth/devices/untrust":         "取消信任设备",
+
+			// 通知相关操作
+			"/api/notification/mark-read":    "标记通知已读",
+			"/api/notification/delete":       "删除通知",
+			"/api/notification/clear":        "清空通知",
+			"/api/notification/batch-delete": "批量删除通知",
+			"/api/notification/readAll":      "标记全部已读",
+
+			// 助手相关操作
+			"/api/assistant/create": "创建助手",
+			"/api/assistant/update": "更新助手",
+			"/api/assistant/delete": "删除助手",
+
+			// 聊天相关操作
+			"/api/chat/send":   "发送消息",
+			"/api/chat/delete": "删除聊天记录",
+			"/api/chat/clear":  "清空聊天记录",
+
+			// 语音训练相关操作
+			"/api/voice/training/create": "创建语音训练",
+			"/api/voice/training/update": "更新语音训练",
+			"/api/voice/training/delete": "删除语音训练",
+
+			// 知识库相关操作
+			"/api/knowledge/create": "创建知识库",
+			"/api/knowledge/update": "更新知识库",
+			"/api/knowledge/delete": "删除知识库",
+
+			// 群组相关操作
+			"/api/group/create": "创建群组",
+			"/api/group/join":   "加入群组",
+			"/api/group/leave":  "离开群组",
+			"/api/group/update": "更新群组",
+			"/api/group/delete": "删除群组",
+
+			// 凭证相关操作
+			"/api/credentials/create": "创建凭证",
+			"/api/credentials/update": "更新凭证",
+			"/api/credentials/delete": "删除凭证",
+
+			// 文件相关操作
+			"/api/upload":        "文件上传",
+			"/api/upload/avatar": "上传头像",
+
+			// 工作流相关操作
+			"/api/workflow/create":  "创建工作流",
+			"/api/workflow/update":  "更新工作流",
+			"/api/workflow/delete":  "删除工作流",
+			"/api/workflow/execute": "执行工作流",
 		},
 	}
 }
@@ -209,10 +246,40 @@ func (config *OperationLogConfig) GetOperationDescription(method, path string) s
 		return desc
 	}
 
-	// 基于路径模式匹配
+	// 基于路径模式匹配（更智能的匹配）
 	for pattern, desc := range config.OperationDescriptions {
-		if strings.Contains(path, pattern) {
+		if strings.HasPrefix(path, pattern) {
 			return desc
+		}
+	}
+
+	// 基于路径分析生成更有意义的描述
+	pathParts := strings.Split(strings.Trim(path, "/"), "/")
+	if len(pathParts) >= 2 {
+		module := pathParts[1] // api 后的第一个部分
+
+		// 根据模块和HTTP方法生成描述
+		switch module {
+		case "auth":
+			return config.getAuthOperationDesc(method, path)
+		case "notification":
+			return config.getNotificationOperationDesc(method, path)
+		case "assistant":
+			return config.getAssistantOperationDesc(method, path)
+		case "chat":
+			return config.getChatOperationDesc(method, path)
+		case "voice":
+			return config.getVoiceOperationDesc(method, path)
+		case "knowledge":
+			return config.getKnowledgeOperationDesc(method, path)
+		case "group":
+			return config.getGroupOperationDesc(method, path)
+		case "workflow":
+			return config.getWorkflowOperationDesc(method, path)
+		case "upload":
+			return config.getUploadOperationDesc(method, path)
+		default:
+			return config.getDefaultOperationDesc(method, module)
 		}
 	}
 
@@ -228,5 +295,191 @@ func (config *OperationLogConfig) GetOperationDescription(method, path string) s
 		return "部分更新操作"
 	default:
 		return "用户操作"
+	}
+}
+
+// getAuthOperationDesc 获取认证相关操作描述
+func (config *OperationLogConfig) getAuthOperationDesc(method, path string) string {
+	switch method {
+	case "POST":
+		if strings.Contains(path, "login") {
+			return "用户登录"
+		} else if strings.Contains(path, "register") {
+			return "用户注册"
+		} else if strings.Contains(path, "logout") {
+			return "用户登出"
+		} else if strings.Contains(path, "change-password") {
+			return "修改密码"
+		} else if strings.Contains(path, "reset-password") {
+			return "重置密码"
+		} else if strings.Contains(path, "send-email-verification") {
+			return "发送邮箱验证"
+		} else if strings.Contains(path, "verify-email") {
+			return "验证邮箱"
+		}
+		return "认证操作"
+	case "PUT", "PATCH":
+		if strings.Contains(path, "update") {
+			return "更新个人资料"
+		} else if strings.Contains(path, "preferences") {
+			return "更新偏好设置"
+		}
+		return "更新认证信息"
+	case "DELETE":
+		if strings.Contains(path, "devices") {
+			return "删除设备"
+		}
+		return "删除认证信息"
+	default:
+		return "认证相关操作"
+	}
+}
+
+// getNotificationOperationDesc 获取通知相关操作描述
+func (config *OperationLogConfig) getNotificationOperationDesc(method, path string) string {
+	switch method {
+	case "POST":
+		if strings.Contains(path, "batch-delete") {
+			return "批量删除通知"
+		} else if strings.Contains(path, "readAll") {
+			return "标记全部通知已读"
+		}
+		return "通知操作"
+	case "PUT":
+		if strings.Contains(path, "read") {
+			return "标记通知已读"
+		}
+		return "更新通知"
+	case "DELETE":
+		return "删除通知"
+	default:
+		return "通知相关操作"
+	}
+}
+
+// getAssistantOperationDesc 获取助手相关操作描述
+func (config *OperationLogConfig) getAssistantOperationDesc(method, path string) string {
+	switch method {
+	case "POST":
+		return "创建助手"
+	case "PUT", "PATCH":
+		return "更新助手"
+	case "DELETE":
+		return "删除助手"
+	default:
+		return "助手相关操作"
+	}
+}
+
+// getChatOperationDesc 获取聊天相关操作描述
+func (config *OperationLogConfig) getChatOperationDesc(method, path string) string {
+	switch method {
+	case "POST":
+		if strings.Contains(path, "send") {
+			return "发送消息"
+		}
+		return "聊天操作"
+	case "DELETE":
+		if strings.Contains(path, "clear") {
+			return "清空聊天记录"
+		}
+		return "删除聊天记录"
+	default:
+		return "聊天相关操作"
+	}
+}
+
+// getVoiceOperationDesc 获取语音相关操作描述
+func (config *OperationLogConfig) getVoiceOperationDesc(method, path string) string {
+	switch method {
+	case "POST":
+		if strings.Contains(path, "training") {
+			return "创建语音训练"
+		}
+		return "语音操作"
+	case "PUT", "PATCH":
+		if strings.Contains(path, "training") {
+			return "更新语音训练"
+		}
+		return "更新语音设置"
+	case "DELETE":
+		if strings.Contains(path, "training") {
+			return "删除语音训练"
+		}
+		return "删除语音数据"
+	default:
+		return "语音相关操作"
+	}
+}
+
+// getKnowledgeOperationDesc 获取知识库相关操作描述
+func (config *OperationLogConfig) getKnowledgeOperationDesc(method, path string) string {
+	switch method {
+	case "POST":
+		return "创建知识库"
+	case "PUT", "PATCH":
+		return "更新知识库"
+	case "DELETE":
+		return "删除知识库"
+	default:
+		return "知识库相关操作"
+	}
+}
+
+// getGroupOperationDesc 获取群组相关操作描述
+func (config *OperationLogConfig) getGroupOperationDesc(method, path string) string {
+	switch method {
+	case "POST":
+		if strings.Contains(path, "join") {
+			return "加入群组"
+		} else if strings.Contains(path, "leave") {
+			return "离开群组"
+		}
+		return "创建群组"
+	case "PUT", "PATCH":
+		return "更新群组"
+	case "DELETE":
+		return "删除群组"
+	default:
+		return "群组相关操作"
+	}
+}
+
+// getWorkflowOperationDesc 获取工作流相关操作描述
+func (config *OperationLogConfig) getWorkflowOperationDesc(method, path string) string {
+	switch method {
+	case "POST":
+		if strings.Contains(path, "execute") {
+			return "执行工作流"
+		}
+		return "创建工作流"
+	case "PUT", "PATCH":
+		return "更新工作流"
+	case "DELETE":
+		return "删除工作流"
+	default:
+		return "工作流相关操作"
+	}
+}
+
+// getUploadOperationDesc 获取上传相关操作描述
+func (config *OperationLogConfig) getUploadOperationDesc(method, path string) string {
+	if strings.Contains(path, "avatar") {
+		return "上传头像"
+	}
+	return "文件上传"
+}
+
+// getDefaultOperationDesc 获取默认操作描述
+func (config *OperationLogConfig) getDefaultOperationDesc(method, module string) string {
+	switch method {
+	case "POST":
+		return "创建" + module
+	case "PUT", "PATCH":
+		return "更新" + module
+	case "DELETE":
+		return "删除" + module
+	default:
+		return module + "相关操作"
 	}
 }

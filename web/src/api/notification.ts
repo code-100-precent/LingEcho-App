@@ -69,3 +69,14 @@ export const deleteNotification = async (id: string | number): Promise<ApiRespon
 export const batchDeleteNotifications = async (ids: number[]): Promise<ApiResponse<BatchDeleteResponse>> => {
   return post<BatchDeleteResponse>('/notification/batch-delete', { ids })
 }
+
+// 获取所有通知ID（用于全选功能）
+export const getAllNotificationIds = async (params?: {
+  filter?: 'all' | 'read' | 'unread'
+  title?: string
+  content?: string
+  start_time?: string
+  end_time?: string
+}): Promise<ApiResponse<{ ids: number[] }>> => {
+  return get<{ ids: number[] }>('/notification/all-ids', { params })
+}

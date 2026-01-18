@@ -3,6 +3,9 @@ package constants
 const (
 	USER_TABLE_NAME            = "users"
 	USER_CREDENTIAL_TABLE_NAME = "user_credentials"
+	USER_DEVICE_TABLE_NAME     = "user_devices"
+	LOGIN_HISTORY_TABLE_NAME   = "login_histories"
+	ACCOUNT_LOCK_TABLE_NAME    = "account_locks"
 )
 
 // Default Value: 1024

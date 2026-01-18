@@ -113,6 +113,64 @@ type Config struct {
 	LingstorageApiKey    string `env:"LINGSTORAGE_API_KEY"`
 	LingstorageApiSecret string `env:"LINGSTORAGE_API_SECRET"`
 	LingstorageBucket    string `env:"LINGSTORAGE_BUCKET"`
+
+	// 中间件配置
+	Middleware MiddlewareConfig
+}
+
+// MiddlewareConfig 中间件配置
+type MiddlewareConfig struct {
+	// 限流配置
+	RateLimit RateLimiterConfig
+	// 超时配置
+	Timeout TimeoutConfig
+	// 熔断器配置
+	CircuitBreaker CircuitBreakerConfig
+	// 是否启用各个中间件
+	EnableRateLimit      bool `env:"ENABLE_RATE_LIMIT"`
+	EnableTimeout        bool `env:"ENABLE_TIMEOUT"`
+	EnableCircuitBreaker bool `env:"ENABLE_CIRCUIT_BREAKER"`
+	EnableOperationLog   bool `env:"ENABLE_OPERATION_LOG"`
+}
+
+// RateLimiterConfig 限流配置
+type RateLimiterConfig struct {
+	// 全局限流配置
+	GlobalRPS    int           `env:"RATE_LIMIT_GLOBAL_RPS"`   // 全局每秒请求数
+	GlobalBurst  int           `env:"RATE_LIMIT_GLOBAL_BURST"` // 全局突发请求数
+	GlobalWindow time.Duration // 全局时间窗口
+
+	// 用户限流配置
+	UserRPS    int           `env:"RATE_LIMIT_USER_RPS"`   // 用户每秒请求数
+	UserBurst  int           `env:"RATE_LIMIT_USER_BURST"` // 用户突发请求数
+	UserWindow time.Duration // 用户时间窗口
+
+	// IP限流配置
+	IPRPS    int           `env:"RATE_LIMIT_IP_RPS"`   // IP每秒请求数
+	IPBurst  int           `env:"RATE_LIMIT_IP_BURST"` // IP突发请求数
+	IPWindow time.Duration // IP时间窗口
+}
+
+// TimeoutConfig 超时配置
+type TimeoutConfig struct {
+	// 默认超时时间
+	DefaultTimeout time.Duration `env:"DEFAULT_TIMEOUT"`
+	// 超时后的降级响应
+	FallbackResponse interface{}
+}
+
+// CircuitBreakerConfig 熔断器配置
+type CircuitBreakerConfig struct {
+	// 失败阈值
+	FailureThreshold int `env:"CIRCUIT_BREAKER_FAILURE_THRESHOLD"`
+	// 成功阈值（半开状态下）
+	SuccessThreshold int `env:"CIRCUIT_BREAKER_SUCCESS_THRESHOLD"`
+	// 超时时间
+	Timeout time.Duration `env:"CIRCUIT_BREAKER_TIMEOUT"`
+	// 熔断器打开后的等待时间
+	OpenTimeout time.Duration `env:"CIRCUIT_BREAKER_OPEN_TIMEOUT"`
+	// 最大并发请求数
+	MaxConcurrentRequests int `env:"CIRCUIT_BREAKER_MAX_CONCURRENT"`
 }
 
 var GlobalConfig *Config
@@ -232,6 +290,8 @@ func Load() error {
 		LingstorageApiKey:    getStringOrDefault("LINGSTORAGE_API_KEY", ""),
 		LingstorageApiSecret: getStringOrDefault("LINGSTORAGE_API_SECRET", ""),
 		LingstorageBucket:    getStringOrDefault("LINGSTORAGE_BUCKET", "default"),
+		// 中间件配置
+		Middleware: loadMiddlewareConfig(),
 	}
 	GlobalStore = lingstorage.NewClient(&lingstorage.Config{
 		BaseURL:   GlobalConfig.LingstorageBaseUrl,
@@ -346,5 +406,124 @@ func loadCacheConfig() cache.Config {
 			DefaultExpiration: localDefaultExpiration,
 			CleanupInterval:   localCleanupInterval,
 		},
+	}
+}
+
+// loadMiddlewareConfig 加载中间件配置
+func loadMiddlewareConfig() MiddlewareConfig {
+	// 解析时间字符串的辅助函数
+	parseDuration := func(s string, defaultVal time.Duration) time.Duration {
+		if s == "" {
+			return defaultVal
+		}
+		d, err := time.ParseDuration(s)
+		if err != nil {
+			return defaultVal
+		}
+		return d
+	}
+
+	// 根据环境模式设置默认值
+	mode := getStringOrDefault("MODE", "development")
+	var defaultConfig MiddlewareConfig
+
+	if mode == "production" {
+		// 生产环境配置
+		defaultConfig = MiddlewareConfig{
+			RateLimit: RateLimiterConfig{
+				GlobalRPS:    2000,
+				GlobalBurst:  4000,
+				GlobalWindow: time.Minute,
+				UserRPS:      200,
+				UserBurst:    400,
+				UserWindow:   time.Minute,
+				IPRPS:        100,
+				IPBurst:      200,
+				IPWindow:     time.Minute,
+			},
+			Timeout: TimeoutConfig{
+				DefaultTimeout: 30 * time.Second,
+				FallbackResponse: map[string]interface{}{
+					"error":   "service_unavailable",
+					"message": "服务暂时不可用，请稍后重试",
+					"code":    503,
+				},
+			},
+			CircuitBreaker: CircuitBreakerConfig{
+				FailureThreshold:      3,
+				SuccessThreshold:      2,
+				Timeout:               30 * time.Second,
+				OpenTimeout:           30 * time.Second,
+				MaxConcurrentRequests: 200,
+			},
+			EnableRateLimit:      true,
+			EnableTimeout:        true,
+			EnableCircuitBreaker: true,
+			EnableOperationLog:   true,
+		}
+	} else {
+		// 开发环境配置
+		defaultConfig = MiddlewareConfig{
+			RateLimit: RateLimiterConfig{
+				GlobalRPS:    10000,
+				GlobalBurst:  20000,
+				GlobalWindow: time.Minute,
+				UserRPS:      1000,
+				UserBurst:    2000,
+				UserWindow:   time.Minute,
+				IPRPS:        500,
+				IPBurst:      1000,
+				IPWindow:     time.Minute,
+			},
+			Timeout: TimeoutConfig{
+				DefaultTimeout: 60 * time.Second,
+				FallbackResponse: map[string]interface{}{
+					"error":   "service_unavailable",
+					"message": "服务暂时不可用，请稍后重试",
+					"code":    503,
+				},
+			},
+			CircuitBreaker: CircuitBreakerConfig{
+				FailureThreshold:      10,
+				SuccessThreshold:      5,
+				Timeout:               60 * time.Second,
+				OpenTimeout:           60 * time.Second,
+				MaxConcurrentRequests: 1000,
+			},
+			EnableRateLimit:      true,
+			EnableTimeout:        true,
+			EnableCircuitBreaker: false, // 开发环境关闭熔断器
+			EnableOperationLog:   true,
+		}
+	}
+
+	// 从环境变量覆盖配置
+	return MiddlewareConfig{
+		RateLimit: RateLimiterConfig{
+			GlobalRPS:    getIntOrDefault("RATE_LIMIT_GLOBAL_RPS", defaultConfig.RateLimit.GlobalRPS),
+			GlobalBurst:  getIntOrDefault("RATE_LIMIT_GLOBAL_BURST", defaultConfig.RateLimit.GlobalBurst),
+			GlobalWindow: parseDuration(getStringOrDefault("RATE_LIMIT_GLOBAL_WINDOW", "1m"), defaultConfig.RateLimit.GlobalWindow),
+			UserRPS:      getIntOrDefault("RATE_LIMIT_USER_RPS", defaultConfig.RateLimit.UserRPS),
+			UserBurst:    getIntOrDefault("RATE_LIMIT_USER_BURST", defaultConfig.RateLimit.UserBurst),
+			UserWindow:   parseDuration(getStringOrDefault("RATE_LIMIT_USER_WINDOW", "1m"), defaultConfig.RateLimit.UserWindow),
+			IPRPS:        getIntOrDefault("RATE_LIMIT_IP_RPS", defaultConfig.RateLimit.IPRPS),
+			IPBurst:      getIntOrDefault("RATE_LIMIT_IP_BURST", defaultConfig.RateLimit.IPBurst),
+			IPWindow:     parseDuration(getStringOrDefault("RATE_LIMIT_IP_WINDOW", "1m"), defaultConfig.RateLimit.IPWindow),
+		},
+		Timeout: TimeoutConfig{
+			DefaultTimeout:   parseDuration(getStringOrDefault("DEFAULT_TIMEOUT", "30s"), defaultConfig.Timeout.DefaultTimeout),
+			FallbackResponse: defaultConfig.Timeout.FallbackResponse,
+		},
+		CircuitBreaker: CircuitBreakerConfig{
+			FailureThreshold:      getIntOrDefault("CIRCUIT_BREAKER_FAILURE_THRESHOLD", defaultConfig.CircuitBreaker.FailureThreshold),
+			SuccessThreshold:      getIntOrDefault("CIRCUIT_BREAKER_SUCCESS_THRESHOLD", defaultConfig.CircuitBreaker.SuccessThreshold),
+			Timeout:               parseDuration(getStringOrDefault("CIRCUIT_BREAKER_TIMEOUT", "30s"), defaultConfig.CircuitBreaker.Timeout),
+			OpenTimeout:           parseDuration(getStringOrDefault("CIRCUIT_BREAKER_OPEN_TIMEOUT", "30s"), defaultConfig.CircuitBreaker.OpenTimeout),
+			MaxConcurrentRequests: getIntOrDefault("CIRCUIT_BREAKER_MAX_CONCURRENT", defaultConfig.CircuitBreaker.MaxConcurrentRequests),
+		},
+		EnableRateLimit:      getBoolOrDefault("ENABLE_RATE_LIMIT", defaultConfig.EnableRateLimit),
+		EnableTimeout:        getBoolOrDefault("ENABLE_TIMEOUT", defaultConfig.EnableTimeout),
+		EnableCircuitBreaker: getBoolOrDefault("ENABLE_CIRCUIT_BREAKER", defaultConfig.EnableCircuitBreaker),
+		EnableOperationLog:   getBoolOrDefault("ENABLE_OPERATION_LOG", defaultConfig.EnableOperationLog),
 	}
 }

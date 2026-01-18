@@ -62,7 +62,8 @@ const NotificationCenter = () => {
     markAllAsRead,
     markAsRead,
     deleteNotification,
-    batchDeleteNotifications
+    batchDeleteNotifications,
+    getAllNotificationIds
   } = useNotificationStore()
 
   // 加载通知数据
@@ -120,11 +121,20 @@ const NotificationCenter = () => {
   }
 
   // 多选相关函数
-  const handleSelectAll = () => {
-    if (selectedIds.length === notifications.length) {
+  const handleSelectAll = async () => {
+    if (selectedIds.length > 0) {
+      // 如果已有选中项，则清空选择
       setSelectedIds([])
     } else {
-      setSelectedIds(notifications.map(n => n.id))
+      // 获取所有通知ID（根据当前筛选条件）
+      const params = {
+        filter: filter === 'all' ? undefined : filter,
+        title: searchQuery || undefined,
+        start_time: startTime || undefined,
+        end_time: endTime || undefined,
+      }
+      const allIds = await getAllNotificationIds(params)
+      setSelectedIds(allIds)
     }
   }
 
@@ -368,14 +378,14 @@ const NotificationCenter = () => {
                 <div className="flex items-center space-x-2">
                   <input
                     type="checkbox"
-                    checked={selectedIds.length === notifications.length && notifications.length > 0}
+                    checked={selectedIds.length > 0}
                     onChange={handleSelectAll}
                     className="w-3.5 h-3.5 text-primary bg-background border-input rounded focus:ring-2 focus:ring-ring"
                   />
                   <span className="text-xs text-muted-foreground">
                     {selectedIds.length === 0 
                       ? t('notification.selectAll')
-                      : t('notification.selected').replace('{selected}', String(selectedIds.length)).replace('{total}', String(notifications.length))
+                      : `已选择 ${selectedIds.length} 项`
                     }
                   </span>
                 </div>

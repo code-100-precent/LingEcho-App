@@ -1,6 +1,6 @@
 import { create } from 'zustand'
 import { persist } from 'zustand/middleware'
-import { translations, type Language } from '@/locales/translations'
+import { translations, type Language } from '@/locales'
 
 export type { Language }
 

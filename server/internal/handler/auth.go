@@ -239,17 +239,36 @@ func (h *Handlers) handleUserSigninByEmail(c *gin.Context) {
 	deviceType, os, browser := utils.ParseUserAgent(userAgent)
 	deviceID := utils.GetDeviceID(userAgent, clientIP)
 
-	// 10. 创建设备记录
+	// 10. 检查设备信任状态
+	isTrusted, err := models.CheckDeviceTrust(db, user.ID, deviceID)
+	if err != nil {
+		logger.Warn("Failed to check device trust", zap.Error(err))
+	}
+
+	// 如果设备不被信任，要求额外验证或拒绝登录
+	// 邮箱验证码登录本身就是一种额外验证，所以对于邮箱登录我们可以更宽松一些
+	if !isTrusted {
+		logger.Info("Email login from untrusted device, but allowing due to email verification",
+			zap.Uint("userID", user.ID),
+			zap.String("email", user.Email),
+			zap.String("deviceID", deviceID),
+			zap.String("ip", clientIP))
+
+		// 记录为可疑但成功的登录
+		isSuspicious = true
+	}
+
+	// 11. 创建设备记录
 	if _, err := models.CreateOrUpdateUserDevice(db, user.ID, deviceID, fmt.Sprintf("%s on %s", browser, os), deviceType, os, browser, userAgent, clientIP, location); err != nil {
 		logger.Warn("Failed to create/update user device", zap.Error(err))
 	}
 
-	// 11. 记录登录历史
+	// 12. 记录登录历史
 	if err := models.RecordLoginHistory(db, user.ID, form.Email, clientIP, location, country, city, userAgent, deviceID, "email", true, "", isSuspicious); err != nil {
 		logger.Warn("Failed to record login history", zap.Error(err))
 	}
 
-	// 12. 清除失败登录计数
+	// 13. 清除失败登录计数
 	if utils.GlobalLoginSecurityManager != nil {
 		utils.GlobalLoginSecurityManager.ClearFailedLoginCount(form.Email)
 	}
@@ -293,7 +312,7 @@ func (h *Handlers) handleUserSigninByEmail(c *gin.Context) {
 	}
 	if isSuspicious {
 		responseData["suspiciousLogin"] = true
-		responseData["message"] = "Login from new location detected. Please verify your identity."
+		responseData["message"] = "Login from new location or untrusted device detected. Please verify your identity."
 	}
 
 	response.Success(c, "login success", responseData)
@@ -535,17 +554,58 @@ func (h *Handlers) handleUserSigninByPassword(c *gin.Context) {
 	deviceType, os, browser := utils.ParseUserAgent(userAgent)
 	deviceID := utils.GetDeviceID(userAgent, clientIP)
 
-	// 11. 创建设备记录
+	// 11. 检查设备信任状态
+	isTrusted, err := models.CheckDeviceTrust(db, user.ID, deviceID)
+	if err != nil {
+		logger.Warn("Failed to check device trust", zap.Error(err))
+	}
+
+	// 如果设备不被信任，要求额外验证或拒绝登录
+	// 但是如果用户已经有有效的会话令牌，则允许继续（避免取消信任当前设备后立即失去访问权限）
+	if !isTrusted {
+		// 检查是否是通过有效令牌登录（表示用户已经通过了之前的验证）
+		isTokenLogin := form.AuthToken != ""
+
+		if !isTokenLogin {
+			// 记录可疑登录尝试
+			if err := models.RecordLoginHistory(db, user.ID, form.Email, clientIP, location, country, city, userAgent, deviceID, "password", false, "untrusted device", true); err != nil {
+				logger.Warn("Failed to record login history for untrusted device", zap.Error(err))
+			}
+
+			logger.Warn("Login attempt from untrusted device",
+				zap.Uint("userID", user.ID),
+				zap.String("email", user.Email),
+				zap.String("deviceID", deviceID),
+				zap.String("ip", clientIP))
+
+			// 返回需要设备验证的响应
+			response.Success(c, "Device verification required", gin.H{
+				"requiresDeviceVerification": true,
+				"deviceId":                   deviceID,
+				"message":                    "This device is not trusted. Please verify this device or use a trusted device to login.",
+			})
+			return
+		} else {
+			// 令牌登录时，记录警告但允许继续
+			logger.Info("Token login from untrusted device allowed",
+				zap.Uint("userID", user.ID),
+				zap.String("email", user.Email),
+				zap.String("deviceID", deviceID),
+				zap.String("ip", clientIP))
+		}
+	}
+
+	// 12. 创建设备记录
 	if _, err := models.CreateOrUpdateUserDevice(db, user.ID, deviceID, fmt.Sprintf("%s on %s", browser, os), deviceType, os, browser, userAgent, clientIP, location); err != nil {
 		logger.Warn("Failed to create/update user device", zap.Error(err))
 	}
 
-	// 12. 记录登录历史
+	// 13. 记录登录历史
 	if err := models.RecordLoginHistory(db, user.ID, form.Email, clientIP, location, country, city, userAgent, deviceID, "password", true, "", isSuspicious); err != nil {
 		logger.Warn("Failed to record login history", zap.Error(err))
 	}
 
-	// 13. 清除失败登录计数
+	// 14. 清除失败登录计数
 	if utils.GlobalLoginSecurityManager != nil {
 		utils.GlobalLoginSecurityManager.ClearFailedLoginCount(form.Email)
 	}
@@ -1320,6 +1380,121 @@ func (h *Handlers) handleTrustUserDevice(c *gin.Context) {
 	response.Success(c, "信任设备成功", nil)
 }
 
+// handleUntrustUserDevice 取消信任用户设备
+func (h *Handlers) handleUntrustUserDevice(c *gin.Context) {
+	user := models.CurrentUser(c)
+	if user == nil {
+		response.Fail(c, "用户未找到", errors.New("user not found"))
+		return
+	}
+
+	var form struct {
+		DeviceID string `json:"deviceId" binding:"required"`
+	}
+
+	if err := c.ShouldBindJSON(&form); err != nil {
+		response.Fail(c, "Invalid request", err)
+		return
+	}
+
+	err := models.UntrustUserDevice(h.db, user.ID, form.DeviceID)
+	if err != nil {
+		response.Fail(c, "取消信任设备失败", err)
+		return
+	}
+
+	response.Success(c, "取消信任设备成功", nil)
+}
+
+// handleVerifyDeviceForLogin 验证设备用于登录（无需认证）
+func (h *Handlers) handleVerifyDeviceForLogin(c *gin.Context) {
+	var form struct {
+		Email      string `json:"email" binding:"required"`
+		DeviceID   string `json:"deviceId" binding:"required"`
+		VerifyCode string `json:"verifyCode" binding:"required"`
+	}
+
+	if err := c.ShouldBindJSON(&form); err != nil {
+		response.Fail(c, "Invalid request", err)
+		return
+	}
+
+	db := c.MustGet(constants.DbField).(*gorm.DB)
+
+	// 验证邮箱验证码
+	cachedCode, ok := utils.GlobalCache.Get(form.Email + ":device_verify")
+	if !ok || cachedCode != form.VerifyCode {
+		response.Fail(c, "验证码无效或已过期", errors.New("invalid or expired verification code"))
+		return
+	}
+
+	// 清除验证码
+	utils.GlobalCache.Remove(form.Email + ":device_verify")
+
+	// 获取用户
+	user, err := models.GetUserByEmail(db, form.Email)
+	if err != nil {
+		response.Fail(c, "用户不存在", err)
+		return
+	}
+
+	// 信任设备
+	err = models.TrustUserDevice(db, user.ID, form.DeviceID)
+	if err != nil {
+		response.Fail(c, "信任设备失败", err)
+		return
+	}
+
+	logger.Info("Device verified and trusted for login",
+		zap.Uint("userID", user.ID),
+		zap.String("email", user.Email),
+		zap.String("deviceID", form.DeviceID))
+
+	response.Success(c, "设备验证成功，现在可以使用此设备登录", nil)
+}
+
+// handleSendDeviceVerificationCode 发送设备验证码
+func (h *Handlers) handleSendDeviceVerificationCode(c *gin.Context) {
+	var form struct {
+		Email    string `json:"email" binding:"required"`
+		DeviceID string `json:"deviceId" binding:"required"`
+	}
+
+	if err := c.ShouldBindJSON(&form); err != nil {
+		response.Fail(c, "Invalid request", err)
+		return
+	}
+
+	db := c.MustGet(constants.DbField).(*gorm.DB)
+
+	// 验证用户存在
+	user, err := models.GetUserByEmail(db, form.Email)
+	if err != nil {
+		response.Fail(c, "用户不存在", err)
+		return
+	}
+
+	// 生成验证码
+	code := utils.RandNumberText(6)
+	cacheKey := form.Email + ":device_verify"
+	utils.GlobalCache.Add(cacheKey, code)
+
+	// 发送邮件
+	go func() {
+		err := notification.NewMailNotification(config.GlobalConfig.Mail).SendDeviceVerificationCode(user.Email, user.DisplayName, code, form.DeviceID)
+		if err != nil {
+			logger.Error("Failed to send device verification email", zap.Error(err), zap.String("email", user.Email))
+		}
+	}()
+
+	logger.Info("Device verification code sent",
+		zap.Uint("userID", user.ID),
+		zap.String("email", user.Email),
+		zap.String("deviceID", form.DeviceID))
+
+	response.Success(c, "设备验证码已发送到您的邮箱", nil)
+}
+
 // handleResetPassword 重置密码请求
 func (h *Handlers) handleResetPassword(c *gin.Context) {
 	var form struct {
@@ -1402,6 +1577,11 @@ func (h *Handlers) handleSendEmailVerification(c *gin.Context) {
 		return
 	}
 
+	logger.Info("Email verification request",
+		zap.Uint("userId", user.ID),
+		zap.String("email", user.Email),
+		zap.Bool("emailVerified", user.EmailVerified))
+
 	if user.EmailVerified {
 		response.Fail(c, "Email already verified", errors.New("email already verified"))
 		return
@@ -1409,12 +1589,21 @@ func (h *Handlers) handleSendEmailVerification(c *gin.Context) {
 
 	token, err := models.GenerateEmailVerifyToken(h.db, user)
 	if err != nil {
+		logger.Error("Failed to generate verification token", zap.Error(err))
 		response.Fail(c, "Failed to generate verification token", err)
 		return
 	}
 
+	logger.Info("Generated email verification token",
+		zap.String("token", token),
+		zap.String("email", user.Email))
+
 	// 发送邮箱验证邮件
 	utils.Sig().Emit(constants.SigUserVerifyEmail, user, token, c.ClientIP(), c.Request.UserAgent(), h.db)
+
+	logger.Info("Email verification signal emitted",
+		zap.String("email", user.Email),
+		zap.String("token", token))
 
 	response.Success(c, "Verification email sent", nil)
 }

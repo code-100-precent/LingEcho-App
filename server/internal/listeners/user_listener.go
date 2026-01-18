@@ -164,6 +164,10 @@ func sendWelcomeEmail(user *models.User, db *gorm.DB) {
 
 // sendEmailVerification sends email verification
 func sendEmailVerification(user *models.User, hash, clientIp, userAgent string, db *gorm.DB) {
+	logger.Info("Starting email verification process",
+		zap.String("email", user.Email),
+		zap.String("hash", hash))
+
 	if config.GlobalConfig.Mail.Host == "" {
 		logger.Warn("Mail configuration not set, skipping sending email verification")
 		return
@@ -177,6 +181,11 @@ func sendEmailVerification(user *models.User, hash, clientIp, userAgent string, 
 
 	// 构建验证 URL
 	verifyUrl := siteURL + "/verify-email?token=" + hash
+
+	logger.Info("Preparing to send email verification",
+		zap.String("email", user.Email),
+		zap.String("verifyUrl", verifyUrl),
+		zap.String("mailHost", config.GlobalConfig.Mail.Host))
 
 	mailer := notification.NewMailNotification(config.GlobalConfig.Mail)
 	err := mailer.SendVerificationEmail(user.Email, user.DisplayName, verifyUrl)

@@ -397,7 +397,7 @@ const WorkflowManager: React.FC = () => {
         {/* 顶部工具栏 */}
         <div className="h-14 border-b border-gray-200 dark:border-gray-800 dark:bg-gray-800 flex items-center justify-between px-4">
           <div className="flex items-center gap-4">
-            <Button
+            <Button 
               variant="ghost"
               size="sm"
               leftIcon={<ArrowLeft className="w-4 h-4" />}

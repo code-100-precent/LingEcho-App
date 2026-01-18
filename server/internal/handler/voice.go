@@ -514,7 +514,9 @@ func (h *Handlers) SynthesizeWithVoice(c *gin.Context) {
 		req.Language = models.LanguageChinese
 	}
 	if req.StorageKey == "" {
-		req.StorageKey = "voice_synthesis/" + strconv.FormatUint(uint64(req.VoiceCloneID), 10) + "_" + strconv.FormatInt(int64(len(req.Text)), 10) + ".mp3"
+		// 添加时间戳避免文件名冲突
+		timestamp := time.Now().Format("20060102_150405")
+		req.StorageKey = "voice_synthesis/" + strconv.FormatUint(uint64(req.VoiceCloneID), 10) + "_" + timestamp + "_" + strconv.FormatInt(int64(len(req.Text)), 10) + ".mp3"
 	}
 
 	// 1) 获取音色

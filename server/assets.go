@@ -39,6 +39,15 @@ var VerificationHTML string
 //go:embed templates/email/group_invitation.html
 var GroupInvitationHTML string
 
+//go:embed templates/email/email_verification.html
+var EmailVerificationHTML string
+
+//go:embed templates/email/password_reset.html
+var PasswordResetHTML string
+
+//go:embed templates/email/device_verification.html
+var DeviceVerificationHTML string
+
 //go:embed static/js/client.js
 var AssistantJsModule string
 
