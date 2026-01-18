@@ -126,3 +126,38 @@ func (s *InternalNotificationService) BatchDelete(userID uint, notificationIDs [
 	result := s.DB.Where("user_id = ? AND id IN ?", userID, notificationIDs).Delete(&InternalNotification{})
 	return result.RowsAffected, result.Error
 }
+
+// GetAllNotificationIds 获取所有通知ID（用于全选功能）
+func (s *InternalNotificationService) GetAllNotificationIds(
+	userID uint,
+	filter string,
+	titleKeyword, contentKeyword string,
+	startTime, endTime time.Time,
+) ([]uint, error) {
+	var ids []uint
+
+	db := s.DB.Model(&InternalNotification{}).Where("user_id = ?", userID)
+
+	// 应用筛选条件
+	if filter == "read" {
+		db = db.Where("`read` = ?", true)
+	} else if filter == "unread" {
+		db = db.Where("`read` = ?", false)
+	}
+	if titleKeyword != "" {
+		db = db.Where("title LIKE ?", "%"+titleKeyword+"%")
+	}
+	if contentKeyword != "" {
+		db = db.Where("content LIKE ?", "%"+contentKeyword+"%")
+	}
+	if !startTime.IsZero() && !endTime.IsZero() {
+		db = db.Where("created_at BETWEEN ? AND ?", startTime, endTime)
+	} else if !startTime.IsZero() {
+		db = db.Where("created_at >= ?", startTime)
+	} else if !endTime.IsZero() {
+		db = db.Where("created_at <= ?", endTime)
+	}
+
+	err := db.Pluck("id", &ids).Error
+	return ids, err
+}

@@ -7,6 +7,7 @@ import Button from '../UI/Button'
 import Input from '../UI/Input'
 import PasswordStrength from './PasswordStrength'
 import CaptchaModal from './CaptchaModal'
+import DeviceVerificationModal from './DeviceVerificationModal'
 import { useAuthStore } from '@/stores/authStore.ts'
 import { showAlert } from '@/utils/notification.ts'
 import { sendEmailCode, registerUserByEmail, registerUser, loginWithPassword, loginWithEmailCode } from '@/api/auth.ts'
@@ -35,6 +36,14 @@ const AuthModal = ({ isOpen, onClose, initialMode = 'login' }: AuthModalProps) =
   const [twoFactorCode, setTwoFactorCode] = useState('')
   const [showCaptchaModal, setShowCaptchaModal] = useState(false)
   const [pendingAction, setPendingAction] = useState<'login' | 'register' | null>(null)
+  
+  // 设备验证相关状态
+  const [showDeviceVerification, setShowDeviceVerification] = useState(false)
+  const [deviceVerificationData, setDeviceVerificationData] = useState<{
+    email: string
+    deviceId: string
+    message: string
+  }>({ email: '', deviceId: '', message: '' })
   
   // 系统初始化信息
   const [showMemoryDBWarning, setShowMemoryDBWarning] = useState(false)
@@ -307,6 +316,18 @@ const AuthModal = ({ isOpen, onClose, initialMode = 'login' }: AuthModalProps) =
           })
           
           if (response.code === 200) {
+            // 检查是否需要设备验证
+            if (response.data.requiresDeviceVerification) {
+              setShowDeviceVerification(true)
+              setDeviceVerificationData({
+                email: formData.email,
+                deviceId: response.data.deviceId || '',
+                message: response.data.message || '此设备不受信任，需要验证'
+              })
+              showAlert('检测到新设备登录，请验证设备', 'warning', '需要设备验证')
+              return
+            }
+            
             // 检查是否需要两步验证
             if (response.data.requiresTwoFactor) {
               setShowTwoFactorInput(true)
@@ -1210,6 +1231,23 @@ const AuthModal = ({ isOpen, onClose, initialMode = 'login' }: AuthModalProps) =
       }}
       onVerify={handleCaptchaVerify}
       title={mode === 'login' ? '登录验证' : '注册验证'}
+    />
+
+    {/* 设备验证弹窗 */}
+    <DeviceVerificationModal
+      isOpen={showDeviceVerification}
+      onClose={() => {
+        setShowDeviceVerification(false)
+        setDeviceVerificationData({ email: '', deviceId: '', message: '' })
+      }}
+      onSuccess={() => {
+        setShowDeviceVerification(false)
+        setDeviceVerificationData({ email: '', deviceId: '', message: '' })
+        showAlert('设备验证成功，请重新登录', 'success', '验证完成')
+      }}
+      email={deviceVerificationData.email}
+      deviceId={deviceVerificationData.deviceId}
+      message={deviceVerificationData.message}
     />
     </>
   )

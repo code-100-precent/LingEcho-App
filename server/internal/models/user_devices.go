@@ -3,61 +3,55 @@ package models
 import (
 	"time"
 
+	"github.com/code-100-precent/LingEcho/pkg/constants"
 	"gorm.io/gorm"
 )
 
-// 注意：此文件中的函数不应导入 utils 包，以避免循环导入
-
 // UserDevice 用户设备表
 type UserDevice struct {
-	ID         uint      `gorm:"primaryKey" json:"id"`
+	BaseModel
 	UserID     uint      `gorm:"index;not null" json:"userId"`
-	DeviceID   string    `gorm:"size:128;index;not null" json:"deviceId"` // 设备唯一标识
-	DeviceName string    `gorm:"size:128" json:"deviceName"`              // 设备名称
-	DeviceType string    `gorm:"size:64" json:"deviceType"`               // 设备类型：desktop, mobile, tablet, web
-	OS         string    `gorm:"size:64" json:"os"`                       // 操作系统
-	Browser    string    `gorm:"size:64" json:"browser"`                  // 浏览器
-	UserAgent  string    `gorm:"type:text" json:"userAgent"`              // 完整User-Agent
-	IPAddress  string    `gorm:"size:128;index" json:"ipAddress"`         // IP地址
-	Location   string    `gorm:"size:256" json:"location"`                // 地理位置（城市、国家）
-	IsTrusted  bool      `gorm:"default:false" json:"isTrusted"`          // 是否信任设备
-	IsActive   bool      `gorm:"default:true" json:"isActive"`            // 是否激活
-	LastUsedAt time.Time `gorm:"index" json:"lastUsedAt"`                 // 最后使用时间
-	CreatedAt  time.Time `json:"createdAt"`
-	UpdatedAt  time.Time `json:"updatedAt"`
+	DeviceID   string    `gorm:"size:128;index;not null" json:"deviceId"`
+	DeviceName string    `gorm:"size:128" json:"deviceName"`
+	DeviceType string    `gorm:"size:64" json:"deviceType"`
+	OS         string    `gorm:"size:64" json:"os"`
+	Browser    string    `gorm:"size:64" json:"browser"`
+	UserAgent  string    `gorm:"type:text" json:"userAgent"`
+	IPAddress  string    `gorm:"size:128;index" json:"ipAddress"`
+	Location   string    `gorm:"size:256" json:"location"`
+	IsTrusted  bool      `gorm:"default:false" json:"isTrusted"`
+	IsActive   bool      `gorm:"default:true" json:"isActive"`
+	LastUsedAt time.Time `gorm:"index" json:"lastUsedAt"`
 }
 
-// TableName 指定表名
 func (UserDevice) TableName() string {
-	return "user_devices"
+	return constants.USER_DEVICE_TABLE_NAME
 }
 
 // LoginHistory 登录历史记录表（用于异地登录检测）
 type LoginHistory struct {
-	ID            uint      `gorm:"primaryKey" json:"id"`
-	UserID        uint      `gorm:"index;not null" json:"userId"`
-	Email         string    `gorm:"size:128;index" json:"email"`             // 登录邮箱
-	IPAddress     string    `gorm:"size:128;index" json:"ipAddress"`         // IP地址
-	Location      string    `gorm:"size:256" json:"location"`                // 地理位置
-	Country       string    `gorm:"size:64" json:"country"`                  // 国家
-	City          string    `gorm:"size:128" json:"city"`                    // 城市
-	UserAgent     string    `gorm:"type:text" json:"userAgent"`              // User-Agent
-	DeviceID      string    `gorm:"size:128;index" json:"deviceId"`          // 设备ID
-	LoginType     string    `gorm:"size:32" json:"loginType"`                // 登录类型：password, email, token
-	Success       bool      `gorm:"index" json:"success"`                    // 是否成功
-	FailureReason string    `gorm:"size:256" json:"failureReason"`           // 失败原因
-	IsSuspicious  bool      `gorm:"default:false;index" json:"isSuspicious"` // 是否可疑（异地登录等）
-	CreatedAt     time.Time `gorm:"index" json:"createdAt"`
+	BaseModel
+	UserID        uint   `gorm:"index;not null" json:"userId"`
+	Email         string `gorm:"size:128;index" json:"email"`
+	IPAddress     string `gorm:"size:128;index" json:"ipAddress"`
+	Location      string `gorm:"size:256" json:"location"`
+	Country       string `gorm:"size:64" json:"country"`
+	City          string `gorm:"size:128" json:"city"`
+	UserAgent     string `gorm:"type:text" json:"userAgent"`
+	DeviceID      string `gorm:"size:128;index" json:"deviceId"`
+	LoginType     string `gorm:"size:32" json:"loginType"`
+	Success       bool   `gorm:"index" json:"success"`
+	FailureReason string `gorm:"size:256" json:"failureReason"`
+	IsSuspicious  bool   `gorm:"default:false;index" json:"isSuspicious"`
 }
 
-// TableName 指定表名
 func (LoginHistory) TableName() string {
-	return "login_histories"
+	return constants.LOGIN_HISTORY_TABLE_NAME
 }
 
 // AccountLock 账号锁定记录
 type AccountLock struct {
-	ID             uint      `gorm:"primaryKey" json:"id"`
+	BaseModel
 	UserID         uint      `gorm:"index;not null" json:"userId"`
 	Email          string    `gorm:"size:128;index;not null" json:"email"` // 邮箱（用于未登录时的锁定）
 	IPAddress      string    `gorm:"size:128;index" json:"ipAddress"`      // 锁定IP
@@ -66,13 +60,10 @@ type AccountLock struct {
 	Reason         string    `gorm:"size:256" json:"reason"`               // 锁定原因
 	FailedAttempts int       `gorm:"default:0" json:"failedAttempts"`      // 失败次数
 	IsActive       bool      `gorm:"default:true;index" json:"isActive"`   // 是否激活
-	CreatedAt      time.Time `json:"createdAt"`
-	UpdatedAt      time.Time `json:"updatedAt"`
 }
 
-// TableName 指定表名
 func (AccountLock) TableName() string {
-	return "account_locks"
+	return constants.ACCOUNT_LOCK_TABLE_NAME
 }
 
 // IsLocked 检查账号是否被锁定
@@ -86,19 +77,13 @@ func (al *AccountLock) IsLocked() bool {
 // CreateOrUpdateAccountLock 创建或更新账号锁定记录
 func CreateOrUpdateAccountLock(db *gorm.DB, email string, userID uint, ipAddress string, failedAttempts int) (*AccountLock, error) {
 	var lock AccountLock
-
-	// 查找现有锁定记录
 	query := db.Where("email = ? AND is_active = ?", email, true)
 	if userID > 0 {
 		query = query.Or("user_id = ? AND is_active = ?", userID, true)
 	}
-
 	err := query.First(&lock).Error
-
 	lockTime := 30 * time.Minute // 锁定30分钟
-
 	if err == gorm.ErrRecordNotFound {
-		// 创建新锁定记录
 		lock = AccountLock{
 			Email:          email,
 			UserID:         userID,
@@ -188,11 +173,8 @@ func GetRecentLoginLocations(db *gorm.DB, userID uint, limit int) ([]LoginHistor
 // CreateOrUpdateUserDevice 创建或更新用户设备
 func CreateOrUpdateUserDevice(db *gorm.DB, userID uint, deviceID, deviceName, deviceType, os, browser, userAgent, ipAddress, location string) (*UserDevice, error) {
 	var device UserDevice
-
 	err := db.Where("user_id = ? AND device_id = ?", userID, deviceID).First(&device).Error
-
 	if err == gorm.ErrRecordNotFound {
-		// 创建新设备
 		device = UserDevice{
 			UserID:     userID,
 			DeviceID:   deviceID,
@@ -203,13 +185,12 @@ func CreateOrUpdateUserDevice(db *gorm.DB, userID uint, deviceID, deviceName, de
 			UserAgent:  userAgent,
 			IPAddress:  ipAddress,
 			Location:   location,
-			IsTrusted:  false, // 新设备默认不信任
+			IsTrusted:  false,
 			IsActive:   true,
 			LastUsedAt: time.Now(),
 		}
 		err = db.Create(&device).Error
 	} else if err == nil {
-		// 更新现有设备
 		device.DeviceName = deviceName
 		device.OS = os
 		device.Browser = browser
@@ -244,4 +225,34 @@ func TrustUserDevice(db *gorm.DB, userID uint, deviceID string) error {
 	return db.Model(&UserDevice{}).
 		Where("user_id = ? AND device_id = ?", userID, deviceID).
 		Update("is_trusted", true).Error
+}
+
+// UntrustUserDevice 取消信任设备
+func UntrustUserDevice(db *gorm.DB, userID uint, deviceID string) error {
+	return db.Model(&UserDevice{}).
+		Where("user_id = ? AND device_id = ?", userID, deviceID).
+		Update("is_trusted", false).Error
+}
+
+// GetUserDevice 获取用户的特定设备
+func GetUserDevice(db *gorm.DB, userID uint, deviceID string) (*UserDevice, error) {
+	var device UserDevice
+	err := db.Where("user_id = ? AND device_id = ? AND is_active = ?", userID, deviceID, true).
+		First(&device).Error
+	if err == gorm.ErrRecordNotFound {
+		return nil, nil
+	}
+	return &device, err
+}
+
+// CheckDeviceTrust 检查设备是否被信任
+func CheckDeviceTrust(db *gorm.DB, userID uint, deviceID string) (bool, error) {
+	device, err := GetUserDevice(db, userID, deviceID)
+	if err != nil {
+		return false, err
+	}
+	if device == nil {
+		return false, nil
+	}
+	return device.IsTrusted, nil
 }

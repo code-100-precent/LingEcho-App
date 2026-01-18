@@ -228,6 +228,14 @@ func main() {
 	monitor.Start()
 	defer monitor.Stop()
 
+	// 13.5. Initialize Global Middleware Manager
+	middleware.InitGlobalMiddlewareManager(config.GlobalConfig.Middleware)
+	logger.Info("Global middleware manager initialized with config",
+		zap.Bool("rateLimit", config.GlobalConfig.Middleware.EnableRateLimit),
+		zap.Bool("timeout", config.GlobalConfig.Middleware.EnableTimeout),
+		zap.Bool("circuitBreaker", config.GlobalConfig.Middleware.EnableCircuitBreaker),
+		zap.Bool("operationLog", config.GlobalConfig.Middleware.EnableOperationLog))
+
 	// 14. Initialize Neo4j Graph Database (if enabled)
 	if config.GlobalConfig.Neo4jEnabled {
 		graphStore, err := graph.NewNeo4jStore(
@@ -304,27 +312,8 @@ func main() {
 	// Logger Handle Middleware
 	r.Use(middleware.LoggerMiddleware(zap.L()))
 
-	// RateLimit Middleware - Loosen rate limiting configuration
-	middleware.SetRateLimiterConfig(middleware.RateLimiterConfig{
-		Rate:        "1000-M", // 1000 requests per minute, much more relaxed than the default 10 per second
-		Identifier:  "ip",
-		AddHeaders:  true,
-		DenyStatus:  429,
-		DenyMessage: "Requests too frequent, please try again later",
-		PerRouteRates: map[string]string{
-			"/api/voice/oneshot": "100-M", // Voice interface slightly stricter
-			"/api/chat/call":     "50-M",  // Real-time call interface
-			"/api/assistant":     "200-M", // Assistant-related interface
-		},
-		SkipPaths: []string{
-			"/health",
-			"/metrics",
-			"/static/",
-			"/uploads/",
-			"/media/", // keep for backward compatibility
-		},
-	})
-	r.Use(middleware.RateLimiterMiddleware())
+	// Note: Advanced middleware (rate limiting, timeout, circuit breaker)
+	// is applied in route registration via middleware.ApplyGlobalMiddlewares()
 
 	// Assets Middleware
 	r.Use(LingEcho.WithStaticAssets(r, utils.GetEnv(constants.ENV_STATIC_PREFIX), utils.GetEnv(constants.ENV_STATIC_ROOT)))

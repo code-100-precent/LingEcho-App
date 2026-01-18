@@ -186,3 +186,41 @@ func (h *Handlers) handleBatchDeleteNotifications(c *gin.Context) {
 		"totalRequested": len(request.IDs),
 	})
 }
+
+// handleGetAllNotificationIds 获取所有通知ID（用于全选功能）
+func (h *Handlers) handleGetAllNotificationIds(c *gin.Context) {
+	user := models.CurrentUser(c)
+	if user == nil {
+		response.Fail(c, "User is not logged in.", nil)
+		return
+	}
+
+	var (
+		filterBy = c.Query("filter")  // read / unread
+		title    = c.Query("title")   // 按标题查询
+		content  = c.Query("content") // 按内容查询
+		layout   = "2006-01-02T15:04:05Z07:00"
+		startStr = c.Query("start_time") // 开始时间
+		endStr   = c.Query("end_time")   // 结束时间
+		start    time.Time
+		end      time.Time
+	)
+
+	if startStr != "" {
+		start, _ = time.Parse(layout, startStr)
+	}
+	if endStr != "" {
+		end, _ = time.Parse(layout, endStr)
+	}
+
+	service := notification.NewInternalNotificationService(h.db)
+	ids, err := service.GetAllNotificationIds(user.ID, filterBy, title, content, start, end)
+	if err != nil {
+		response.AbortWithStatusJSON(c, http.StatusInternalServerError, err)
+		return
+	}
+
+	response.Success(c, "success", gin.H{
+		"ids": ids,
+	})
+}

@@ -6,6 +6,7 @@ import {
   markNotificationAsRead, 
   deleteNotification,
   batchDeleteNotifications,
+  getAllNotificationIds,
   type Notification,
 } from '../api/notification'
 
@@ -36,6 +37,13 @@ interface NotificationState {
   markAsRead: (id: string) => Promise<void>
   deleteNotification: (id: string) => Promise<void>
   batchDeleteNotifications: (ids: number[]) => Promise<void>
+  getAllNotificationIds: (params?: {
+    filter?: 'all' | 'read' | 'unread'
+    title?: string
+    content?: string
+    start_time?: string
+    end_time?: string
+  }) => Promise<number[]>
   setUnreadCount: (count: number) => void
   clearNotifications: () => void
   addNotification: (notification: { type: 'success' | 'error' | 'warning' | 'info'; title: string; message: string }) => void
@@ -163,6 +171,19 @@ export const useNotificationStore = create<NotificationState>((set, get) => ({
       }
     } catch (error) {
       console.error('Failed to batch delete notifications:', error)
+    }
+  },
+
+  getAllNotificationIds: async (params = {}) => {
+    try {
+      const response = await getAllNotificationIds(params)
+      if (response.code === 200) {
+        return response.data.ids
+      }
+      return []
+    } catch (error) {
+      console.error('Failed to get all notification IDs:', error)
+      return []
     }
   },
 

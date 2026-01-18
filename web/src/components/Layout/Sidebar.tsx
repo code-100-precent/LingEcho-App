@@ -21,6 +21,7 @@ import {
   GitBranch, // 工作流图标
   LayoutDashboard, // 概览图标
   Phone, // 外呼中心图标
+  Info, // 关于我们图标
 } from 'lucide-react'
 import { useAuthStore } from '@/stores/authStore'
 import { useI18nStore } from '@/stores/i18nStore'
@@ -95,6 +96,7 @@ const Sidebar = () => {
     { name: t('nav.sidebar.groups'), href: '/groups', icon: Users },
     { name: t('nav.sidebar.deviceManagement'), href: '/devices', icon: Smartphone },
     { name: t('nav.sidebar.callCenter'), href: '/call-center', icon: Phone },
+    { name: t('nav.about'), href: '/about', icon: Info },
     { name: t('nav.docs'), href: '/docs', icon: BookOpen },
   ]
 

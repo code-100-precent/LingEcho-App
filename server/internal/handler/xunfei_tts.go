@@ -2,6 +2,7 @@ package handlers
 
 import (
 	"strconv"
+	"time"
 
 	"github.com/code-100-precent/LingEcho/pkg/response"
 	"github.com/code-100-precent/LingEcho/pkg/voiceclone"
@@ -72,8 +73,10 @@ func (h *Handlers) XunfeiSynthesize(c *gin.Context) {
 	// 生成存储路径
 	key := req.Key
 	if key == "" {
+		// 添加时间戳避免文件名冲突
+		timestamp := time.Now().Format("20060102_150405")
 		// 只生成相对存储 key，统一由存储层决定对外前缀
-		key = "xunfei/" + req.AssetID + "_" + strconv.FormatInt(int64(len(req.Text)), 10) + ".wav"
+		key = "xunfei/" + req.AssetID + "_" + timestamp + "_" + strconv.FormatInt(int64(len(req.Text)), 10) + ".wav"
 	}
 
 	// 调用讯飞合成（使用 voiceclone）

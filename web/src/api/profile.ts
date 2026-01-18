@@ -204,3 +204,8 @@ export const deleteUserDevice = async (deviceId: string): Promise<ApiResponse<nu
 export const trustUserDevice = async (deviceId: string): Promise<ApiResponse<null>> => {
   return post('/auth/devices/trust', { deviceId })
 }
+
+// 取消信任用户设备
+export const untrustUserDevice = async (deviceId: string): Promise<ApiResponse<null>> => {
+  return post('/auth/devices/untrust', { deviceId })
+}
