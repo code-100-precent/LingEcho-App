@@ -83,6 +83,22 @@ export const auth: Record<Language, Record<string, string>> = {
     'profile.systemNotifications': '系统更新',
     'profile.systemNotificationsDesc': '接收系统更新和功能通知',
     'profile.preferencesUpdated': '偏好设置已更新',
+
+    // Profile Messages
+    'profile.messages.userInfoUpdated': '用户信息已更新',
+    'profile.messages.loadSuccess': '加载成功',
+    'profile.messages.getUserInfoFailed': '获取用户信息失败',
+    'profile.messages.loadFailed': '加载失败',
+    'profile.messages.verifyFailed': '验证失败',
+    'profile.messages.enableSuccess': '启用成功',
+    'profile.messages.disableSuccess': '禁用成功',
+    'profile.messages.updateSuccess': '更新成功',
+    'profile.messages.passwordChangeSuccess': '密码修改成功',
+    'profile.messages.invalidFileFormat': '文件格式不正确',
+    'profile.messages.fileFormatError': '文件格式错误',
+    'profile.messages.fileTooLarge': '文件过大',
+    'profile.messages.uploadFailed': '上传失败',
+    'profile.messages.avatarUploadSuccess': '头像上传成功',
   },
   en: {
     // Profile Page
@@ -166,6 +182,22 @@ export const auth: Record<Language, Record<string, string>> = {
     'profile.systemNotifications': 'System Updates',
     'profile.systemNotificationsDesc': 'Receive system updates and feature notifications',
     'profile.preferencesUpdated': 'Preferences updated',
+
+    // Profile Messages
+    'profile.messages.userInfoUpdated': 'User information updated',
+    'profile.messages.loadSuccess': 'Load successful',
+    'profile.messages.getUserInfoFailed': 'Failed to get user information',
+    'profile.messages.loadFailed': 'Load failed',
+    'profile.messages.verifyFailed': 'Verification failed',
+    'profile.messages.enableSuccess': 'Enabled successfully',
+    'profile.messages.disableSuccess': 'Disabled successfully',
+    'profile.messages.updateSuccess': 'Updated successfully',
+    'profile.messages.passwordChangeSuccess': 'Password changed successfully',
+    'profile.messages.invalidFileFormat': 'Invalid file format',
+    'profile.messages.fileFormatError': 'File format error',
+    'profile.messages.fileTooLarge': 'File too large',
+    'profile.messages.uploadFailed': 'Upload failed',
+    'profile.messages.avatarUploadSuccess': 'Avatar uploaded successfully',
   },
   ja: {
     // プロフィールページ
@@ -249,5 +281,21 @@ export const auth: Record<Language, Record<string, string>> = {
     'profile.systemNotifications': 'システム更新',
     'profile.systemNotificationsDesc': 'システム更新と機能通知を受信',
     'profile.preferencesUpdated': '設定が更新されました',
+
+    // プロフィールメッセージ
+    'profile.messages.userInfoUpdated': 'ユーザー情報が更新されました',
+    'profile.messages.loadSuccess': '読み込み成功',
+    'profile.messages.getUserInfoFailed': 'ユーザー情報の取得に失敗しました',
+    'profile.messages.loadFailed': '読み込みに失敗しました',
+    'profile.messages.verifyFailed': '検証に失敗しました',
+    'profile.messages.enableSuccess': '正常に有効化されました',
+    'profile.messages.disableSuccess': '正常に無効化されました',
+    'profile.messages.updateSuccess': '正常に更新されました',
+    'profile.messages.passwordChangeSuccess': 'パスワードが正常に変更されました',
+    'profile.messages.invalidFileFormat': 'ファイル形式が正しくありません',
+    'profile.messages.fileFormatError': 'ファイル形式エラー',
+    'profile.messages.fileTooLarge': 'ファイルが大きすぎます',
+    'profile.messages.uploadFailed': 'アップロードに失敗しました',
+    'profile.messages.avatarUploadSuccess': 'アバターが正常にアップロードされました',
   }
 }
