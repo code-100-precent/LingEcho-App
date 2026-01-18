@@ -12,6 +12,10 @@ export interface RegisterUserForm {
   source?: string
   captchaId?: string
   captchaCode?: string
+  // 智能风控字段
+  mouseTrack?: string       // 鼠标轨迹数据（JSON字符串）
+  formFillTime?: number     // 表单填写时间（毫秒）
+  keystrokePattern?: string // 按键模式数据（JSON字符串）
 }
 
 // 邮箱验证码注册表单类型
@@ -28,6 +32,10 @@ export interface EmailRegisterForm {
   source?: string
   captchaId?: string
   captchaCode?: string
+  // 智能风控字段
+  mouseTrack?: string       // 鼠标轨迹数据（JSON字符串）
+  formFillTime?: number     // 表单填写时间（毫秒）
+  keystrokePattern?: string // 按键模式数据（JSON字符串）
 }
 
 // 验证码响应类型
