@@ -3,8 +3,9 @@ package handlers
 import (
 	"strconv"
 
+	apperrors "github.com/code-100-precent/LingEcho/pkg/errors"
+
 	"github.com/code-100-precent/LingEcho/internal/models"
-	"github.com/code-100-precent/LingEcho/pkg/response"
 	"github.com/gin-gonic/gin"
 	"gorm.io/gorm"
 )
@@ -43,13 +44,13 @@ type UpdateGroupQuotaRequest struct {
 func (h *Handlers) ListUserQuotas(c *gin.Context) {
 	user := models.CurrentUser(c)
 	if user == nil {
-		response.Fail(c, "Unauthorized", "User not logged in")
+		apperrors.HandleError(c, apperrors.New(apperrors.ErrInternalServer, "Unauthorized"))
 		return
 	}
 
 	var quotas []models.UserQuota
 	if err := h.db.Where("user_id = ?", user.ID).Find(&quotas).Error; err != nil {
-		response.Fail(c, "Query failed", err.Error())
+		apperrors.HandleError(c, apperrors.New(apperrors.ErrInternalServer, "Query failed"))
 		return
 	}
 
@@ -63,21 +64,21 @@ func (h *Handlers) ListUserQuotas(c *gin.Context) {
 		}
 	}
 
-	response.Success(c, "查询成功", quotas)
+	apperrors.RespondSuccess(c, quotas)
 }
 
 // GetUserQuota gets user quota details
 func (h *Handlers) GetUserQuota(c *gin.Context) {
 	user := models.CurrentUser(c)
 	if user == nil {
-		response.Fail(c, "Unauthorized", "User not logged in")
+		apperrors.HandleError(c, apperrors.New(apperrors.ErrInternalServer, "Unauthorized"))
 		return
 	}
 
 	quotaType := models.QuotaType(c.Param("type"))
 	quota, err := models.GetUserQuota(h.db, user.ID, quotaType)
 	if err != nil {
-		response.Fail(c, "Query failed", err.Error())
+		apperrors.HandleError(c, apperrors.New(apperrors.ErrInternalServer, "Query failed"))
 		return
 	}
 
@@ -85,27 +86,27 @@ func (h *Handlers) GetUserQuota(c *gin.Context) {
 	models.UpdateUserQuotaUsage(h.db, user.ID, quotaType)
 	quota, _ = models.GetUserQuota(h.db, user.ID, quotaType)
 
-	response.Success(c, "查询成功", quota)
+	apperrors.RespondSuccess(c, quota)
 }
 
 // CreateUserQuota creates user quota
 func (h *Handlers) CreateUserQuota(c *gin.Context) {
 	user := models.CurrentUser(c)
 	if user == nil {
-		response.Fail(c, "Unauthorized", "User not logged in")
+		apperrors.HandleError(c, apperrors.New(apperrors.ErrInternalServer, "Unauthorized"))
 		return
 	}
 
 	var req CreateUserQuotaRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		response.Fail(c, "Invalid parameters", err.Error())
+		apperrors.HandleError(c, apperrors.New(apperrors.ErrInternalServer, "Invalid parameters"))
 		return
 	}
 
 	// 检查是否已存在
 	var existing models.UserQuota
 	if err := h.db.Where("user_id = ? AND quota_type = ?", user.ID, req.QuotaType).First(&existing).Error; err == nil {
-		response.Fail(c, "配额已存在", "该类型的配额已配置，请使用更新接口")
+		apperrors.HandleError(c, apperrors.New(apperrors.ErrInternalServer, "配额已存在"))
 		return
 	}
 
@@ -122,18 +123,18 @@ func (h *Handlers) CreateUserQuota(c *gin.Context) {
 	}
 
 	if err := h.db.Create(&quota).Error; err != nil {
-		response.Fail(c, "Creation failed", err.Error())
+		apperrors.HandleError(c, apperrors.New(apperrors.ErrInternalServer, "Creation failed"))
 		return
 	}
 
-	response.Success(c, "创建成功", quota)
+	apperrors.RespondSuccess(c, quota)
 }
 
 // UpdateUserQuota updates user quota
 func (h *Handlers) UpdateUserQuota(c *gin.Context) {
 	user := models.CurrentUser(c)
 	if user == nil {
-		response.Fail(c, "Unauthorized", "User not logged in")
+		apperrors.HandleError(c, apperrors.New(apperrors.ErrInternalServer, "Unauthorized"))
 		return
 	}
 
@@ -141,16 +142,16 @@ func (h *Handlers) UpdateUserQuota(c *gin.Context) {
 	var quota models.UserQuota
 	if err := h.db.Where("user_id = ? AND quota_type = ?", user.ID, quotaType).First(&quota).Error; err != nil {
 		if err == gorm.ErrRecordNotFound {
-			response.Fail(c, "配额不存在", nil)
+			apperrors.HandleError(c, apperrors.New(apperrors.ErrInternalServer, "配额不存在"))
 		} else {
-			response.Fail(c, "Query failed", err.Error())
+			apperrors.HandleError(c, apperrors.New(apperrors.ErrInternalServer, "Query failed"))
 		}
 		return
 	}
 
 	var req UpdateUserQuotaRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		response.Fail(c, "Invalid parameters", err.Error())
+		apperrors.HandleError(c, apperrors.New(apperrors.ErrInternalServer, "Invalid parameters"))
 		return
 	}
 
@@ -165,62 +166,62 @@ func (h *Handlers) UpdateUserQuota(c *gin.Context) {
 	}
 
 	if err := h.db.Save(&quota).Error; err != nil {
-		response.Fail(c, "Update failed", err.Error())
+		apperrors.HandleError(c, apperrors.New(apperrors.ErrInternalServer, "Update failed"))
 		return
 	}
 
-	response.Success(c, "更新成功", quota)
+	apperrors.RespondSuccess(c, quota)
 }
 
 // DeleteUserQuota deletes user quota
 func (h *Handlers) DeleteUserQuota(c *gin.Context) {
 	user := models.CurrentUser(c)
 	if user == nil {
-		response.Fail(c, "Unauthorized", "User not logged in")
+		apperrors.HandleError(c, apperrors.New(apperrors.ErrInternalServer, "Unauthorized"))
 		return
 	}
 
 	quotaType := models.QuotaType(c.Param("type"))
 	if err := h.db.Where("user_id = ? AND quota_type = ?", user.ID, quotaType).Delete(&models.UserQuota{}).Error; err != nil {
-		response.Fail(c, "Deletion failed", err.Error())
+		apperrors.HandleError(c, apperrors.New(apperrors.ErrInternalServer, "Deletion failed"))
 		return
 	}
 
-	response.Success(c, "删除成功", nil)
+	apperrors.RespondSuccess(c, nil)
 }
 
 // ListGroupQuotas gets group quota list
 func (h *Handlers) ListGroupQuotas(c *gin.Context) {
 	user := models.CurrentUser(c)
 	if user == nil {
-		response.Fail(c, "Unauthorized", "User not logged in")
+		apperrors.HandleError(c, apperrors.New(apperrors.ErrInternalServer, "Unauthorized"))
 		return
 	}
 
 	id, err := strconv.ParseUint(c.Param("id"), 10, 32)
 	if err != nil {
-		response.Fail(c, "参数错误", "无效的组织ID")
+		apperrors.HandleError(c, apperrors.New(apperrors.ErrInternalServer, "参数错误"))
 		return
 	}
 
 	// 检查权限：只有创建者或管理员可以查看
 	var group models.Group
 	if err := h.db.First(&group, id).Error; err != nil {
-		response.Fail(c, "组织不存在", nil)
+		apperrors.HandleError(c, apperrors.New(apperrors.ErrInternalServer, "组织不存在"))
 		return
 	}
 
 	if group.CreatorID != user.ID {
 		var member models.GroupMember
 		if err := h.db.Where("group_id = ? AND user_id = ? AND role = ?", group.ID, user.ID, models.GroupRoleAdmin).First(&member).Error; err != nil {
-			response.Fail(c, "权限不足", "只有创建者或管理员可以查看配额")
+			apperrors.HandleError(c, apperrors.New(apperrors.ErrInternalServer, "权限不足"))
 			return
 		}
 	}
 
 	var quotas []models.GroupQuota
 	if err := h.db.Where("group_id = ?", id).Find(&quotas).Error; err != nil {
-		response.Fail(c, "Query failed", err.Error())
+		apperrors.HandleError(c, apperrors.New(apperrors.ErrInternalServer, "Query failed"))
 		return
 	}
 
@@ -234,20 +235,20 @@ func (h *Handlers) ListGroupQuotas(c *gin.Context) {
 		}
 	}
 
-	response.Success(c, "查询成功", quotas)
+	apperrors.RespondSuccess(c, quotas)
 }
 
 // GetGroupQuota 获取组织配额详情
 func (h *Handlers) GetGroupQuota(c *gin.Context) {
 	user := models.CurrentUser(c)
 	if user == nil {
-		response.Fail(c, "Unauthorized", "User not logged in")
+		apperrors.HandleError(c, apperrors.New(apperrors.ErrInternalServer, "Unauthorized"))
 		return
 	}
 
 	id, err := strconv.ParseUint(c.Param("id"), 10, 32)
 	if err != nil {
-		response.Fail(c, "参数错误", "无效的组织ID")
+		apperrors.HandleError(c, apperrors.New(apperrors.ErrInternalServer, "参数错误"))
 		return
 	}
 
@@ -256,21 +257,21 @@ func (h *Handlers) GetGroupQuota(c *gin.Context) {
 	// 检查权限
 	var group models.Group
 	if err := h.db.First(&group, id).Error; err != nil {
-		response.Fail(c, "组织不存在", nil)
+		apperrors.HandleError(c, apperrors.New(apperrors.ErrInternalServer, "组织不存在"))
 		return
 	}
 
 	if group.CreatorID != user.ID {
 		var member models.GroupMember
 		if err := h.db.Where("group_id = ? AND user_id = ? AND role = ?", group.ID, user.ID, models.GroupRoleAdmin).First(&member).Error; err != nil {
-			response.Fail(c, "权限不足", "只有创建者或管理员可以查看配额")
+			apperrors.HandleError(c, apperrors.New(apperrors.ErrInternalServer, "权限不足"))
 			return
 		}
 	}
 
 	quota, err := models.GetGroupQuota(h.db, uint(id), quotaType)
 	if err != nil {
-		response.Fail(c, "Query failed", err.Error())
+		apperrors.HandleError(c, apperrors.New(apperrors.ErrInternalServer, "Query failed"))
 		return
 	}
 
@@ -278,45 +279,45 @@ func (h *Handlers) GetGroupQuota(c *gin.Context) {
 	models.UpdateGroupQuotaUsage(h.db, uint(id), quotaType)
 	quota, _ = models.GetGroupQuota(h.db, uint(id), quotaType)
 
-	response.Success(c, "查询成功", quota)
+	apperrors.RespondSuccess(c, quota)
 }
 
 // CreateGroupQuota 创建组织配额
 func (h *Handlers) CreateGroupQuota(c *gin.Context) {
 	user := models.CurrentUser(c)
 	if user == nil {
-		response.Fail(c, "Unauthorized", "User not logged in")
+		apperrors.HandleError(c, apperrors.New(apperrors.ErrInternalServer, "Unauthorized"))
 		return
 	}
 
 	id, err := strconv.ParseUint(c.Param("id"), 10, 32)
 	if err != nil {
-		response.Fail(c, "参数错误", "无效的组织ID")
+		apperrors.HandleError(c, apperrors.New(apperrors.ErrInternalServer, "参数错误"))
 		return
 	}
 
 	// 检查权限：只有创建者可以创建配额
 	var group models.Group
 	if err := h.db.First(&group, id).Error; err != nil {
-		response.Fail(c, "组织不存在", nil)
+		apperrors.HandleError(c, apperrors.New(apperrors.ErrInternalServer, "组织不存在"))
 		return
 	}
 
 	if group.CreatorID != user.ID {
-		response.Fail(c, "权限不足", "只有创建者可以创建配额")
+		apperrors.HandleError(c, apperrors.New(apperrors.ErrInternalServer, "权限不足"))
 		return
 	}
 
 	var req CreateGroupQuotaRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		response.Fail(c, "Invalid parameters", err.Error())
+		apperrors.HandleError(c, apperrors.New(apperrors.ErrInternalServer, "Invalid parameters"))
 		return
 	}
 
 	// 检查是否已存在
 	var existing models.GroupQuota
 	if err := h.db.Where("group_id = ? AND quota_type = ?", id, req.QuotaType).First(&existing).Error; err == nil {
-		response.Fail(c, "配额已存在", "该类型的配额已配置，请使用更新接口")
+		apperrors.HandleError(c, apperrors.New(apperrors.ErrInternalServer, "配额已存在"))
 		return
 	}
 
@@ -333,24 +334,24 @@ func (h *Handlers) CreateGroupQuota(c *gin.Context) {
 	}
 
 	if err := h.db.Create(&quota).Error; err != nil {
-		response.Fail(c, "Creation failed", err.Error())
+		apperrors.HandleError(c, apperrors.New(apperrors.ErrInternalServer, "Creation failed"))
 		return
 	}
 
-	response.Success(c, "创建成功", quota)
+	apperrors.RespondSuccess(c, quota)
 }
 
 // UpdateGroupQuota 更新组织配额
 func (h *Handlers) UpdateGroupQuota(c *gin.Context) {
 	user := models.CurrentUser(c)
 	if user == nil {
-		response.Fail(c, "Unauthorized", "User not logged in")
+		apperrors.HandleError(c, apperrors.New(apperrors.ErrInternalServer, "Unauthorized"))
 		return
 	}
 
 	id, err := strconv.ParseUint(c.Param("id"), 10, 32)
 	if err != nil {
-		response.Fail(c, "参数错误", "无效的组织ID")
+		apperrors.HandleError(c, apperrors.New(apperrors.ErrInternalServer, "参数错误"))
 		return
 	}
 
@@ -359,28 +360,28 @@ func (h *Handlers) UpdateGroupQuota(c *gin.Context) {
 	// 检查权限
 	var group models.Group
 	if err := h.db.First(&group, id).Error; err != nil {
-		response.Fail(c, "组织不存在", nil)
+		apperrors.HandleError(c, apperrors.New(apperrors.ErrInternalServer, "组织不存在"))
 		return
 	}
 
 	if group.CreatorID != user.ID {
-		response.Fail(c, "权限不足", "只有创建者可以更新配额")
+		apperrors.HandleError(c, apperrors.New(apperrors.ErrInternalServer, "权限不足"))
 		return
 	}
 
 	var quota models.GroupQuota
 	if err := h.db.Where("group_id = ? AND quota_type = ?", id, quotaType).First(&quota).Error; err != nil {
 		if err == gorm.ErrRecordNotFound {
-			response.Fail(c, "配额不存在", nil)
+			apperrors.HandleError(c, apperrors.New(apperrors.ErrInternalServer, "配额不存在"))
 		} else {
-			response.Fail(c, "Query failed", err.Error())
+			apperrors.HandleError(c, apperrors.New(apperrors.ErrInternalServer, "Query failed"))
 		}
 		return
 	}
 
 	var req UpdateGroupQuotaRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		response.Fail(c, "Invalid parameters", err.Error())
+		apperrors.HandleError(c, apperrors.New(apperrors.ErrInternalServer, "Invalid parameters"))
 		return
 	}
 
@@ -395,24 +396,24 @@ func (h *Handlers) UpdateGroupQuota(c *gin.Context) {
 	}
 
 	if err := h.db.Save(&quota).Error; err != nil {
-		response.Fail(c, "Update failed", err.Error())
+		apperrors.HandleError(c, apperrors.New(apperrors.ErrInternalServer, "Update failed"))
 		return
 	}
 
-	response.Success(c, "更新成功", quota)
+	apperrors.RespondSuccess(c, quota)
 }
 
 // DeleteGroupQuota 删除组织配额
 func (h *Handlers) DeleteGroupQuota(c *gin.Context) {
 	user := models.CurrentUser(c)
 	if user == nil {
-		response.Fail(c, "Unauthorized", "User not logged in")
+		apperrors.HandleError(c, apperrors.New(apperrors.ErrInternalServer, "Unauthorized"))
 		return
 	}
 
 	id, err := strconv.ParseUint(c.Param("id"), 10, 32)
 	if err != nil {
-		response.Fail(c, "参数错误", "无效的组织ID")
+		apperrors.HandleError(c, apperrors.New(apperrors.ErrInternalServer, "参数错误"))
 		return
 	}
 
@@ -421,19 +422,19 @@ func (h *Handlers) DeleteGroupQuota(c *gin.Context) {
 	// 检查权限
 	var group models.Group
 	if err := h.db.First(&group, id).Error; err != nil {
-		response.Fail(c, "组织不存在", nil)
+		apperrors.HandleError(c, apperrors.New(apperrors.ErrInternalServer, "组织不存在"))
 		return
 	}
 
 	if group.CreatorID != user.ID {
-		response.Fail(c, "权限不足", "只有创建者可以删除配额")
+		apperrors.HandleError(c, apperrors.New(apperrors.ErrInternalServer, "权限不足"))
 		return
 	}
 
 	if err := h.db.Where("group_id = ? AND quota_type = ?", id, quotaType).Delete(&models.GroupQuota{}).Error; err != nil {
-		response.Fail(c, "Deletion failed", err.Error())
+		apperrors.HandleError(c, apperrors.New(apperrors.ErrInternalServer, "Deletion failed"))
 		return
 	}
 
-	response.Success(c, "删除成功", nil)
+	apperrors.RespondSuccess(c, nil)
 }

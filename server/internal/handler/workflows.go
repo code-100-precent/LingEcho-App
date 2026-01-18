@@ -1,6 +1,9 @@
 package handlers
 
 import (
+	apperrors "github.com/code-100-precent/LingEcho/pkg/errors"
+	"github.com/code-100-precent/LingEcho/pkg/response"
+
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -12,7 +15,6 @@ import (
 	workflowdef "github.com/code-100-precent/LingEcho/internal/workflow"
 	"github.com/code-100-precent/LingEcho/pkg/events"
 	"github.com/code-100-precent/LingEcho/pkg/logger"
-	"github.com/code-100-precent/LingEcho/pkg/response"
 	"github.com/code-100-precent/LingEcho/pkg/websocket"
 	runtimewf "github.com/code-100-precent/LingEcho/pkg/workflow"
 	"github.com/gin-gonic/gin"
@@ -87,13 +89,13 @@ type workflowDefinitionInput struct {
 func (h *Handlers) CreateWorkflowDefinition(c *gin.Context) {
 	user := models.CurrentUser(c)
 	if user == nil {
-		response.Fail(c, "unauthorized", "User not logged in")
+		apperrors.HandleError(c, apperrors.New(apperrors.ErrInternalServer, "unauthorized"))
 		return
 	}
 
 	var input workflowDefinitionInput
 	if err := c.ShouldBindJSON(&input); err != nil {
-		response.Fail(c, "invalid payload", err.Error())
+		apperrors.HandleError(c, apperrors.New(apperrors.ErrInternalServer, "invalid payload"))
 		return
 	}
 
@@ -105,21 +107,21 @@ func (h *Handlers) CreateWorkflowDefinition(c *gin.Context) {
 		// 验证用户是否有权限访问该组织
 		var group models.Group
 		if err := h.db.Where("id = ?", uid).First(&group).Error; err != nil {
-			response.Fail(c, "organization not found", nil)
+			apperrors.HandleError(c, apperrors.New(apperrors.ErrInternalServer, "organization not found"))
 			return
 		}
 		// 检查用户是否是组织成员或创建者
 		if group.CreatorID != user.ID {
 			var member models.GroupMember
 			if err := h.db.Where("group_id = ? AND user_id = ?", uid, user.ID).First(&member).Error; err != nil {
-				response.Fail(c, "insufficient permissions", "You are not a member of this organization")
+				apperrors.HandleError(c, apperrors.New(apperrors.ErrInternalServer, "insufficient permissions"))
 				return
 			}
 		}
 	}
 
 	if err := validateWorkflowGraph(input.Definition); err != nil {
-		response.Fail(c, "invalid workflow definition", err.Error())
+		apperrors.HandleError(c, apperrors.New(apperrors.ErrInternalServer, "invalid workflow definition"))
 		return
 	}
 
@@ -147,7 +149,7 @@ func (h *Handlers) CreateWorkflowDefinition(c *gin.Context) {
 	}
 
 	if err := h.db.Create(&def).Error; err != nil {
-		response.Fail(c, "failed to create workflow definition", err.Error())
+		apperrors.HandleError(c, apperrors.New(apperrors.ErrInternalServer, "failed to create workflow definition"))
 		return
 	}
 
@@ -170,14 +172,14 @@ func (h *Handlers) CreateWorkflowDefinition(c *gin.Context) {
 	// Ignore error for initial version save (non-critical)
 	_ = h.db.Create(&initialVersion).Error
 
-	response.Success(c, "workflow definition created", def)
+	apperrors.RespondSuccess(c, def)
 }
 
 // ListWorkflowDefinitions returns definitions with optional status filter.
 func (h *Handlers) ListWorkflowDefinitions(c *gin.Context) {
 	user := models.CurrentUser(c)
 	if user == nil {
-		response.Fail(c, "unauthorized", "User not logged in")
+		apperrors.HandleError(c, apperrors.New(apperrors.ErrInternalServer, "unauthorized"))
 		return
 	}
 
@@ -221,47 +223,47 @@ func (h *Handlers) ListWorkflowDefinitions(c *gin.Context) {
 	}
 
 	if err := query.Order("updated_at desc").Find(&list).Error; err != nil {
-		response.Fail(c, "failed to list workflow definitions", err.Error())
+		apperrors.HandleError(c, apperrors.New(apperrors.ErrInternalServer, "failed to list workflow definitions"))
 		return
 	}
 
-	response.Success(c, "ok", list)
+	apperrors.RespondSuccess(c, list)
 }
 
 // GetWorkflowDefinition returns a single definition.
 func (h *Handlers) GetWorkflowDefinition(c *gin.Context) {
 	id, err := strconv.Atoi(c.Param("id"))
 	if err != nil {
-		response.Fail(c, "invalid id", nil)
+		apperrors.HandleError(c, apperrors.New(apperrors.ErrInternalServer, "invalid id"))
 		return
 	}
 
 	var def models.WorkflowDefinition
 	if err := h.db.First(&def, id).Error; err != nil {
-		response.Fail(c, "workflow definition not found", err.Error())
+		apperrors.HandleError(c, apperrors.New(apperrors.ErrInternalServer, "workflow definition not found"))
 		return
 	}
 
-	response.Success(c, "ok", def)
+	apperrors.RespondSuccess(c, def)
 }
 
 // UpdateWorkflowDefinition updates definition fields.
 func (h *Handlers) UpdateWorkflowDefinition(c *gin.Context) {
 	user := models.CurrentUser(c)
 	if user == nil {
-		response.Fail(c, "unauthorized", nil)
+		apperrors.HandleError(c, apperrors.New(apperrors.ErrInternalServer, "unauthorized"))
 		return
 	}
 
 	id, err := strconv.Atoi(c.Param("id"))
 	if err != nil {
-		response.Fail(c, "invalid id", nil)
+		apperrors.HandleError(c, apperrors.New(apperrors.ErrInternalServer, "invalid id"))
 		return
 	}
 
 	var def models.WorkflowDefinition
 	if err := h.db.First(&def, id).Error; err != nil {
-		response.Fail(c, "workflow definition not found", err.Error())
+		apperrors.HandleError(c, apperrors.New(apperrors.ErrInternalServer, "workflow definition not found"))
 		return
 	}
 
@@ -278,43 +280,43 @@ func (h *Handlers) UpdateWorkflowDefinition(c *gin.Context) {
 		GroupID     interface{}           `json:"groupId,omitempty"` // 组织ID，如果设置则表示这是组织共享的工作流
 	}
 	if err := c.ShouldBindJSON(&input); err != nil {
-		response.Fail(c, "invalid payload", err.Error())
+		apperrors.HandleError(c, apperrors.New(apperrors.ErrInternalServer, "invalid payload"))
 		return
 	}
 
 	if input.Version == 0 {
-		response.Fail(c, "invalid payload", "version is required")
+		apperrors.HandleError(c, apperrors.New(apperrors.ErrInternalServer, "invalid payload"))
 		return
 	}
 
 	if input.Definition != nil {
 		if err := validateWorkflowGraph(*input.Definition); err != nil {
-			response.Fail(c, "invalid workflow definition", err.Error())
+			apperrors.HandleError(c, apperrors.New(apperrors.ErrInternalServer, "invalid workflow definition"))
 			return
 		}
 	}
 
 	if input.Version != def.Version {
-		response.Fail(c, "version conflict", fmt.Sprintf("expected version %d", def.Version))
+		apperrors.HandleError(c, apperrors.New(apperrors.ErrInternalServer, "version conflict"))
 		return
 	}
 
 	// 检查权限：只有创建者或组织管理员可以更新
 	if def.UserID != user.ID {
 		if def.GroupID == nil {
-			response.Fail(c, "insufficient permissions", nil)
+			apperrors.HandleError(c, apperrors.New(apperrors.ErrInternalServer, "insufficient permissions"))
 			return
 		}
 		// 检查用户是否是组织创建者或管理员
 		var group models.Group
 		if err := h.db.Where("id = ?", *def.GroupID).First(&group).Error; err != nil {
-			response.Fail(c, "organization not found", nil)
+			apperrors.HandleError(c, apperrors.New(apperrors.ErrInternalServer, "organization not found"))
 			return
 		}
 		if group.CreatorID != user.ID {
 			var member models.GroupMember
 			if err := h.db.Where("group_id = ? AND user_id = ? AND role = ?", *def.GroupID, user.ID, models.GroupRoleAdmin).First(&member).Error; err != nil {
-				response.Fail(c, "insufficient permissions", "Only creator or admin can update organization-shared workflows")
+				apperrors.HandleError(c, apperrors.New(apperrors.ErrInternalServer, "insufficient permissions"))
 				return
 			}
 		}
@@ -328,13 +330,13 @@ func (h *Handlers) UpdateWorkflowDefinition(c *gin.Context) {
 			groupID = &uid
 			var group models.Group
 			if err := h.db.Where("id = ?", uid).First(&group).Error; err != nil {
-				response.Fail(c, "organization not found", nil)
+				apperrors.HandleError(c, apperrors.New(apperrors.ErrInternalServer, "organization not found"))
 				return
 			}
 			if group.CreatorID != user.ID {
 				var member models.GroupMember
 				if err := h.db.Where("group_id = ? AND user_id = ?", uid, user.ID).First(&member).Error; err != nil {
-					response.Fail(c, "insufficient permissions", "You are not a member of this organization")
+					apperrors.HandleError(c, apperrors.New(apperrors.ErrInternalServer, "insufficient permissions"))
 					return
 				}
 			}
@@ -408,53 +410,53 @@ func (h *Handlers) UpdateWorkflowDefinition(c *gin.Context) {
 		Where("id = ? AND version = ?", def.ID, oldVersion).
 		Updates(updates)
 	if tx.Error != nil {
-		response.Fail(c, "failed to update workflow definition", tx.Error.Error())
+		apperrors.HandleError(c, apperrors.New(apperrors.ErrInternalServer, "failed to update workflow definition"))
 		return
 	}
 	if tx.RowsAffected == 0 {
-		response.Fail(c, "version conflict", "workflow definition was updated by others")
+		apperrors.HandleError(c, apperrors.New(apperrors.ErrInternalServer, "version conflict"))
 		return
 	}
 
-	response.Success(c, "workflow definition updated", def)
+	apperrors.RespondSuccess(c, def)
 }
 
 // DeleteWorkflowDefinition deletes a workflow definition.
 func (h *Handlers) DeleteWorkflowDefinition(c *gin.Context) {
 	user := models.CurrentUser(c)
 	if user == nil {
-		response.Fail(c, "unauthorized", "User not logged in")
+		apperrors.HandleError(c, apperrors.New(apperrors.ErrInternalServer, "unauthorized"))
 		return
 	}
 
 	id, err := strconv.Atoi(c.Param("id"))
 	if err != nil {
-		response.Fail(c, "invalid id", nil)
+		apperrors.HandleError(c, apperrors.New(apperrors.ErrInternalServer, "invalid id"))
 		return
 	}
 
 	var def models.WorkflowDefinition
 	if err := h.db.First(&def, id).Error; err != nil {
-		response.Fail(c, "workflow definition not found", err.Error())
+		apperrors.HandleError(c, apperrors.New(apperrors.ErrInternalServer, "workflow definition not found"))
 		return
 	}
 
 	// 检查权限：只有创建者或组织管理员可以删除
 	if def.UserID != user.ID {
 		if def.GroupID == nil {
-			response.Fail(c, "insufficient permissions", nil)
+			apperrors.HandleError(c, apperrors.New(apperrors.ErrInternalServer, "insufficient permissions"))
 			return
 		}
 		// 检查用户是否是组织创建者或管理员
 		var group models.Group
 		if err := h.db.Where("id = ?", *def.GroupID).First(&group).Error; err != nil {
-			response.Fail(c, "organization not found", nil)
+			apperrors.HandleError(c, apperrors.New(apperrors.ErrInternalServer, "organization not found"))
 			return
 		}
 		if group.CreatorID != user.ID {
 			var member models.GroupMember
 			if err := h.db.Where("group_id = ? AND user_id = ? AND role = ?", *def.GroupID, user.ID, models.GroupRoleAdmin).First(&member).Error; err != nil {
-				response.Fail(c, "insufficient permissions", "Only creator or admin can delete organization-shared workflows")
+				apperrors.HandleError(c, apperrors.New(apperrors.ErrInternalServer, "insufficient permissions"))
 				return
 			}
 		}
@@ -462,7 +464,7 @@ func (h *Handlers) DeleteWorkflowDefinition(c *gin.Context) {
 
 	// 软删除：使用 GORM 的 Delete 方法
 	if err := h.db.Delete(&def).Error; err != nil {
-		response.Fail(c, "failed to delete workflow definition", err.Error())
+		apperrors.HandleError(c, apperrors.New(apperrors.ErrInternalServer, "failed to delete workflow definition"))
 		return
 	}
 
@@ -553,19 +555,19 @@ func validateWorkflowGraph(graph models.WorkflowGraph) error {
 func (h *Handlers) RunWorkflowDefinition(c *gin.Context) {
 	user := models.CurrentUser(c)
 	if user == nil {
-		response.Fail(c, "unauthorized", "User not logged in")
+		apperrors.HandleError(c, apperrors.New(apperrors.ErrInternalServer, "unauthorized"))
 		return
 	}
 
 	id, err := strconv.Atoi(c.Param("id"))
 	if err != nil {
-		response.Fail(c, "invalid id", nil)
+		apperrors.HandleError(c, apperrors.New(apperrors.ErrInternalServer, "invalid id"))
 		return
 	}
 
 	var def models.WorkflowDefinition
 	if err := h.db.First(&def, id).Error; err != nil {
-		response.Fail(c, "workflow definition not found", err.Error())
+		apperrors.HandleError(c, apperrors.New(apperrors.ErrInternalServer, "workflow definition not found"))
 		return
 	}
 
@@ -579,7 +581,7 @@ func (h *Handlers) RunWorkflowDefinition(c *gin.Context) {
 		if err.Error() == "EOF" {
 			// Empty body is allowed, continue with empty parameters
 		} else {
-			response.Fail(c, "invalid payload", err.Error())
+			apperrors.HandleError(c, apperrors.New(apperrors.ErrInternalServer, "invalid payload"))
 			return
 		}
 	}
@@ -587,7 +589,7 @@ func (h *Handlers) RunWorkflowDefinition(c *gin.Context) {
 	// Build runtime workflow from definition
 	runtimeWf, err := workflowdef.BuildRuntimeWorkflow(&def)
 	if err != nil {
-		response.Fail(c, "failed to build workflow", err.Error())
+		apperrors.HandleError(c, apperrors.New(apperrors.ErrInternalServer, "failed to build workflow"))
 		return
 	}
 
@@ -629,7 +631,7 @@ func (h *Handlers) RunWorkflowDefinition(c *gin.Context) {
 	}
 
 	if err := h.db.Create(&instance).Error; err != nil {
-		response.Fail(c, "failed to create workflow instance", err.Error())
+		apperrors.HandleError(c, apperrors.New(apperrors.ErrInternalServer, "failed to create workflow instance"))
 		return
 	}
 
@@ -663,7 +665,7 @@ func (h *Handlers) RunWorkflowDefinition(c *gin.Context) {
 	}
 
 	if err := h.db.Save(&instance).Error; err != nil {
-		response.Fail(c, "failed to update workflow instance", err.Error())
+		apperrors.HandleError(c, apperrors.New(apperrors.ErrInternalServer, "failed to update workflow instance"))
 		return
 	}
 
@@ -676,36 +678,36 @@ func (h *Handlers) RunWorkflowDefinition(c *gin.Context) {
 	}
 
 	if execErr != nil {
-		response.Fail(c, "workflow execution failed", execErr.Error())
+		apperrors.HandleError(c, apperrors.New(apperrors.ErrInternalServer, "workflow execution failed"))
 		return
 	}
 
-	response.Success(c, "workflow executed successfully", responseData)
+	apperrors.RespondSuccess(c, responseData)
 }
 
 // TestWorkflowNode tests a single node with provided inputs
 func (h *Handlers) TestWorkflowNode(c *gin.Context) {
 	user := models.CurrentUser(c)
 	if user == nil {
-		response.Fail(c, "unauthorized", "User not logged in")
+		apperrors.HandleError(c, apperrors.New(apperrors.ErrInternalServer, "unauthorized"))
 		return
 	}
 
 	id, err := strconv.Atoi(c.Param("id"))
 	if err != nil {
-		response.Fail(c, "invalid id", nil)
+		apperrors.HandleError(c, apperrors.New(apperrors.ErrInternalServer, "invalid id"))
 		return
 	}
 
 	nodeID := c.Param("nodeId")
 	if nodeID == "" {
-		response.Fail(c, "invalid node id", nil)
+		apperrors.HandleError(c, apperrors.New(apperrors.ErrInternalServer, "invalid node id"))
 		return
 	}
 
 	var def models.WorkflowDefinition
 	if err := h.db.First(&def, id).Error; err != nil {
-		response.Fail(c, "workflow definition not found", err.Error())
+		apperrors.HandleError(c, apperrors.New(apperrors.ErrInternalServer, "workflow definition not found"))
 		return
 	}
 
@@ -719,7 +721,7 @@ func (h *Handlers) TestWorkflowNode(c *gin.Context) {
 	}
 
 	if targetNode == nil {
-		response.Fail(c, "node not found", fmt.Sprintf("Node %s not found in workflow", nodeID))
+		apperrors.HandleError(c, apperrors.New(apperrors.ErrInternalServer, "node not found"))
 		return
 	}
 
@@ -730,7 +732,7 @@ func (h *Handlers) TestWorkflowNode(c *gin.Context) {
 	if err := c.ShouldBindJSON(&input); err != nil {
 		// Empty body is allowed
 		if err.Error() != "EOF" {
-			response.Fail(c, "invalid payload", err.Error())
+			apperrors.HandleError(c, apperrors.New(apperrors.ErrInternalServer, "invalid payload"))
 			return
 		}
 	}
@@ -759,7 +761,7 @@ func (h *Handlers) TestWorkflowNode(c *gin.Context) {
 	// Build runtime node from definition
 	runtimeNode, err := workflowdef.BuildRuntimeNode(targetNode, &def.Definition)
 	if err != nil {
-		response.Fail(c, "failed to build node", err.Error())
+		apperrors.HandleError(c, apperrors.New(apperrors.ErrInternalServer, "failed to build node"))
 		return
 	}
 
@@ -818,25 +820,25 @@ func (h *Handlers) TestWorkflowNode(c *gin.Context) {
 
 	if execErr != nil {
 		responseData["error"] = execErr.Error()
-		response.Fail(c, "node test failed", responseData)
+		apperrors.HandleError(c, apperrors.New(apperrors.ErrInternalServer, "node test failed"))
 		return
 	}
 
-	response.Success(c, "node test completed", responseData)
+	apperrors.RespondSuccess(c, responseData)
 }
 
 // ListWorkflowVersions returns all historical versions of a workflow definition.
 func (h *Handlers) ListWorkflowVersions(c *gin.Context) {
 	id, err := strconv.Atoi(c.Param("id"))
 	if err != nil {
-		response.Fail(c, "invalid id", nil)
+		apperrors.HandleError(c, apperrors.New(apperrors.ErrInternalServer, "invalid id"))
 		return
 	}
 
 	// Verify workflow definition exists
 	var def models.WorkflowDefinition
 	if err := h.db.First(&def, id).Error; err != nil {
-		response.Fail(c, "workflow definition not found", err.Error())
+		apperrors.HandleError(c, apperrors.New(apperrors.ErrInternalServer, "workflow definition not found"))
 		return
 	}
 
@@ -844,68 +846,68 @@ func (h *Handlers) ListWorkflowVersions(c *gin.Context) {
 	if err := h.db.Where("definition_id = ?", id).
 		Order("version desc").
 		Find(&versions).Error; err != nil {
-		response.Fail(c, "failed to list workflow versions", err.Error())
+		apperrors.HandleError(c, apperrors.New(apperrors.ErrInternalServer, "failed to list workflow versions"))
 		return
 	}
 
-	response.Success(c, "ok", versions)
+	apperrors.RespondSuccess(c, versions)
 }
 
 // GetWorkflowVersion returns a specific version of a workflow definition.
 func (h *Handlers) GetWorkflowVersion(c *gin.Context) {
 	id, err := strconv.Atoi(c.Param("id"))
 	if err != nil {
-		response.Fail(c, "invalid id", nil)
+		apperrors.HandleError(c, apperrors.New(apperrors.ErrInternalServer, "invalid id"))
 		return
 	}
 
 	versionId, err := strconv.Atoi(c.Param("versionId"))
 	if err != nil {
-		response.Fail(c, "invalid version id", nil)
+		apperrors.HandleError(c, apperrors.New(apperrors.ErrInternalServer, "invalid version id"))
 		return
 	}
 
 	// Verify workflow definition exists
 	var def models.WorkflowDefinition
 	if err := h.db.First(&def, id).Error; err != nil {
-		response.Fail(c, "workflow definition not found", err.Error())
+		apperrors.HandleError(c, apperrors.New(apperrors.ErrInternalServer, "workflow definition not found"))
 		return
 	}
 
 	var version models.WorkflowVersion
 	if err := h.db.Where("definition_id = ? AND id = ?", id, versionId).
 		First(&version).Error; err != nil {
-		response.Fail(c, "workflow version not found", err.Error())
+		apperrors.HandleError(c, apperrors.New(apperrors.ErrInternalServer, "workflow version not found"))
 		return
 	}
 
-	response.Success(c, "ok", version)
+	apperrors.RespondSuccess(c, version)
 }
 
 // RollbackWorkflowVersion restores a workflow definition to a specific version.
 func (h *Handlers) RollbackWorkflowVersion(c *gin.Context) {
 	user := models.CurrentUser(c)
 	if user == nil {
-		response.Fail(c, "unauthorized", nil)
+		apperrors.HandleError(c, apperrors.New(apperrors.ErrInternalServer, "unauthorized"))
 		return
 	}
 
 	id, err := strconv.Atoi(c.Param("id"))
 	if err != nil {
-		response.Fail(c, "invalid id", nil)
+		apperrors.HandleError(c, apperrors.New(apperrors.ErrInternalServer, "invalid id"))
 		return
 	}
 
 	versionId, err := strconv.Atoi(c.Param("versionId"))
 	if err != nil {
-		response.Fail(c, "invalid version id", nil)
+		apperrors.HandleError(c, apperrors.New(apperrors.ErrInternalServer, "invalid version id"))
 		return
 	}
 
 	// Get current workflow definition
 	var def models.WorkflowDefinition
 	if err := h.db.First(&def, id).Error; err != nil {
-		response.Fail(c, "workflow definition not found", err.Error())
+		apperrors.HandleError(c, apperrors.New(apperrors.ErrInternalServer, "workflow definition not found"))
 		return
 	}
 
@@ -913,7 +915,7 @@ func (h *Handlers) RollbackWorkflowVersion(c *gin.Context) {
 	var version models.WorkflowVersion
 	if err := h.db.Where("definition_id = ? AND id = ?", id, versionId).
 		First(&version).Error; err != nil {
-		response.Fail(c, "workflow version not found", err.Error())
+		apperrors.HandleError(c, apperrors.New(apperrors.ErrInternalServer, "workflow version not found"))
 		return
 	}
 
@@ -934,7 +936,7 @@ func (h *Handlers) RollbackWorkflowVersion(c *gin.Context) {
 		ChangeNote:   fmt.Sprintf("Rollback to version %d", version.Version),
 	}
 	if err := h.db.Create(&currentVersionHistory).Error; err != nil {
-		response.Fail(c, "failed to save version history", err.Error())
+		apperrors.HandleError(c, apperrors.New(apperrors.ErrInternalServer, "failed to save version history"))
 		return
 	}
 
@@ -964,18 +966,18 @@ func (h *Handlers) RollbackWorkflowVersion(c *gin.Context) {
 	if err := h.db.Model(&models.WorkflowDefinition{}).
 		Where("id = ?", def.ID).
 		Updates(updates).Error; err != nil {
-		response.Fail(c, "failed to rollback workflow definition", err.Error())
+		apperrors.HandleError(c, apperrors.New(apperrors.ErrInternalServer, "failed to rollback workflow definition"))
 		return
 	}
 
-	response.Success(c, "workflow definition rolled back", def)
+	apperrors.RespondSuccess(c, def)
 }
 
 // CompareWorkflowVersions compares two versions of a workflow definition.
 func (h *Handlers) CompareWorkflowVersions(c *gin.Context) {
 	id, err := strconv.Atoi(c.Param("id"))
 	if err != nil {
-		response.Fail(c, "invalid id", nil)
+		apperrors.HandleError(c, apperrors.New(apperrors.ErrInternalServer, "invalid id"))
 		return
 	}
 
@@ -984,26 +986,26 @@ func (h *Handlers) CompareWorkflowVersions(c *gin.Context) {
 	version2Id := c.Query("version2")
 
 	if version1Id == "" || version2Id == "" {
-		response.Fail(c, "invalid parameters", "version1 and version2 are required")
+		apperrors.HandleError(c, apperrors.New(apperrors.ErrInternalServer, "invalid parameters"))
 		return
 	}
 
 	v1Id, err := strconv.Atoi(version1Id)
 	if err != nil {
-		response.Fail(c, "invalid version1 id", nil)
+		apperrors.HandleError(c, apperrors.New(apperrors.ErrInternalServer, "invalid version1 id"))
 		return
 	}
 
 	v2Id, err := strconv.Atoi(version2Id)
 	if err != nil {
-		response.Fail(c, "invalid version2 id", nil)
+		apperrors.HandleError(c, apperrors.New(apperrors.ErrInternalServer, "invalid version2 id"))
 		return
 	}
 
 	// Verify workflow definition exists
 	var def models.WorkflowDefinition
 	if err := h.db.First(&def, id).Error; err != nil {
-		response.Fail(c, "workflow definition not found", err.Error())
+		apperrors.HandleError(c, apperrors.New(apperrors.ErrInternalServer, "workflow definition not found"))
 		return
 	}
 
@@ -1011,13 +1013,13 @@ func (h *Handlers) CompareWorkflowVersions(c *gin.Context) {
 	var v1, v2 models.WorkflowVersion
 	if err := h.db.Where("definition_id = ? AND id = ?", id, v1Id).
 		First(&v1).Error; err != nil {
-		response.Fail(c, "workflow version 1 not found", err.Error())
+		apperrors.HandleError(c, apperrors.New(apperrors.ErrInternalServer, "workflow version 1 not found"))
 		return
 	}
 
 	if err := h.db.Where("definition_id = ? AND id = ?", id, v2Id).
 		First(&v2).Error; err != nil {
-		response.Fail(c, "workflow version 2 not found", err.Error())
+		apperrors.HandleError(c, apperrors.New(apperrors.ErrInternalServer, "workflow version 2 not found"))
 		return
 	}
 

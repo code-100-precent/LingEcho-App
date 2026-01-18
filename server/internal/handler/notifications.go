@@ -1,13 +1,15 @@
 package handlers
 
 import (
+	apperrors "github.com/code-100-precent/LingEcho/pkg/errors"
+	"github.com/code-100-precent/LingEcho/pkg/response"
+
 	"fmt"
 	"net/http"
 	"time"
 
 	"github.com/code-100-precent/LingEcho/internal/models"
 	"github.com/code-100-precent/LingEcho/pkg/notification"
-	"github.com/code-100-precent/LingEcho/pkg/response"
 	"github.com/gin-gonic/gin"
 )
 
@@ -17,22 +19,22 @@ func (h *Handlers) handleUnReadNotificationCount(c *gin.Context) {
 
 	users, err := models.GetUserByEmail(h.db, user.Email)
 	if err != nil {
-		response.AbortWithStatus(c, http.StatusUnauthorized)
+		apperrors.HandleError(c, apperrors.New(apperrors.ErrUnauthorized, "User not found"))
 		return
 	}
 	unreadNotificationCount, err := notification.NewInternalNotificationService(h.db).GetUnreadNotificationsCount(users.ID)
 	if err != nil {
-		response.AbortWithStatusJSON(c, http.StatusInternalServerError, err)
+		apperrors.HandleError(c, apperrors.Wrap(err, apperrors.ErrInternalServer, "Failed to get unread notifications count"))
 		return
 	}
-	response.Success(c, "success", unreadNotificationCount)
+	apperrors.RespondSuccess(c, unreadNotificationCount)
 }
 
 // ListNotifications list user notifications
 func (h *Handlers) handleListNotifications(c *gin.Context) {
 	user := models.CurrentUser(c)
 	if user == nil {
-		response.Fail(c, "User is not logged in.", nil)
+		apperrors.HandleError(c, apperrors.New(apperrors.ErrInternalServer, "User is not logged in."))
 	}
 	page := c.DefaultQuery("page", "1")
 	size := c.DefaultQuery("size", "10")
@@ -72,7 +74,7 @@ func (h *Handlers) handleListNotifications(c *gin.Context) {
 		end,
 	)
 	if err != nil {
-		response.AbortWithStatusJSON(c, http.StatusInternalServerError, err)
+		apperrors.HandleError(c, apperrors.Wrap(err, apperrors.ErrInternalServer, "Failed to get notifications"))
 		return
 	}
 	response.Success(c, "success", gin.H{
@@ -89,21 +91,21 @@ func (h *Handlers) handleListNotifications(c *gin.Context) {
 func (h *Handlers) handleAllNotifications(c *gin.Context) {
 	user := models.CurrentUser(c)
 	if user == nil {
-		response.Fail(c, "User is not logged in.", nil)
+		apperrors.HandleError(c, apperrors.New(apperrors.ErrInternalServer, "User is not logged in."))
 	}
 	err := notification.NewInternalNotificationService(h.db).MarkAllAsRead(user.ID)
 	if err != nil {
-		response.AbortWithStatusJSON(c, http.StatusInternalServerError, err)
+		apperrors.HandleError(c, apperrors.Wrap(err, apperrors.ErrInternalServer, "Failed to mark all notifications as read"))
 		return
 	}
-	response.Success(c, "already mark all notifications", nil)
+	apperrors.RespondSuccess(c, nil)
 }
 
 // handleMarkNotificationAsRead 将指定通知标记为已读
 func (h *Handlers) handleMarkNotificationAsRead(c *gin.Context) {
 	user := models.CurrentUser(c)
 	if user == nil {
-		response.Fail(c, "User is not logged in.", nil)
+		apperrors.HandleError(c, apperrors.New(apperrors.ErrInternalServer, "User is not logged in."))
 		return
 	}
 
@@ -118,7 +120,7 @@ func (h *Handlers) handleMarkNotificationAsRead(c *gin.Context) {
 
 	_, err = notification.NewInternalNotificationService(h.db).GetOne(user.ID, notificationID)
 	if err != nil {
-		response.Fail(c, "You don't have permission to flag this message.", nil)
+		apperrors.HandleError(c, apperrors.New(apperrors.ErrInternalServer, "You don't have permission to flag this message."))
 		return
 	}
 
@@ -129,13 +131,13 @@ func (h *Handlers) handleMarkNotificationAsRead(c *gin.Context) {
 		return
 	}
 
-	response.Success(c, "Notification marked as read", nil)
+	apperrors.RespondSuccess(c, nil)
 }
 
 func (h *Handlers) handleDeleteNotification(c *gin.Context) {
 	user := models.CurrentUser(c)
 	if user == nil {
-		response.Fail(c, "User is not logged in.", nil)
+		apperrors.HandleError(c, apperrors.New(apperrors.ErrInternalServer, "User is not logged in."))
 		return
 	}
 	var notificationID uint
@@ -149,14 +151,14 @@ func (h *Handlers) handleDeleteNotification(c *gin.Context) {
 		response.AbortWithStatusJSON(c, http.StatusInternalServerError, err)
 		return
 	}
-	response.Success(c, "Notification deleted", nil)
+	apperrors.RespondSuccess(c, nil)
 }
 
 // handleBatchDeleteNotifications 批量删除通知
 func (h *Handlers) handleBatchDeleteNotifications(c *gin.Context) {
 	user := models.CurrentUser(c)
 	if user == nil {
-		response.Fail(c, "User is not logged in.", nil)
+		apperrors.HandleError(c, apperrors.New(apperrors.ErrInternalServer, "User is not logged in."))
 		return
 	}
 
@@ -165,12 +167,12 @@ func (h *Handlers) handleBatchDeleteNotifications(c *gin.Context) {
 	}
 
 	if err := c.ShouldBindJSON(&request); err != nil {
-		response.Fail(c, "Invalid request format", err)
+		apperrors.HandleError(c, apperrors.New(apperrors.ErrInternalServer, "Invalid request format"))
 		return
 	}
 
 	if len(request.IDs) == 0 {
-		response.Fail(c, "No notification IDs provided", nil)
+		apperrors.HandleError(c, apperrors.New(apperrors.ErrInternalServer, "No notification IDs provided"))
 		return
 	}
 
@@ -191,7 +193,7 @@ func (h *Handlers) handleBatchDeleteNotifications(c *gin.Context) {
 func (h *Handlers) handleGetAllNotificationIds(c *gin.Context) {
 	user := models.CurrentUser(c)
 	if user == nil {
-		response.Fail(c, "User is not logged in.", nil)
+		apperrors.HandleError(c, apperrors.New(apperrors.ErrInternalServer, "User is not logged in."))
 		return
 	}
 

@@ -1,4 +1,4 @@
-import { get, post, del, ApiResponse } from '@/utils/request'
+import { BaseApiService } from './base.service'
 
 // 提供商的灵活配置类型
 export interface ProviderConfig {
@@ -43,17 +43,38 @@ export interface CreateCredentialResponse {
   apiSecret: string
 }
 
-// 获取用户密钥列表
-export const fetchUserCredentials = async (): Promise<ApiResponse<Credential[]>> => {
-  return get('/credentials/')
+class CredentialService extends BaseApiService {
+  constructor() {
+    super('/credentials')
+  }
+
+  // 获取用户密钥列表
+  async fetchUserCredentials(): Promise<Credential[]> {
+    const response = await this.get<Credential[]>('/', {}, { enabled: true, ttl: 60000 })
+    return this.handleResponse(response)
+  }
+
+  // 创建密钥
+  async createCredential(data: CreateCredentialForm): Promise<CreateCredentialResponse> {
+    const response = await this.post<CreateCredentialResponse>('/', data)
+    // 创建后清除缓存
+    this.invalidateCache()
+    return this.handleResponse(response)
+  }
+
+  // 删除密钥
+  async deleteCredential(id: number): Promise<null> {
+    const response = await this.delete<null>(`/${id}`)
+    // 删除后清除缓存
+    this.invalidateCache()
+    return this.handleResponse(response)
+  }
 }
 
-// 创建密钥
-export const createCredential = async (data: CreateCredentialForm): Promise<ApiResponse<CreateCredentialResponse>> => {
-  return post('/credentials/', data)
-}
+// 导出单例
+export const credentialService = new CredentialService()
 
-// 删除密钥
-export const deleteCredential = async (id: number): Promise<ApiResponse<null>> => {
-  return del(`/credentials/${id}`)
-}
+// 兼容性导出
+export const fetchUserCredentials = credentialService.fetchUserCredentials.bind(credentialService)
+export const createCredential = credentialService.createCredential.bind(credentialService)
+export const deleteCredential = credentialService.deleteCredential.bind(credentialService)

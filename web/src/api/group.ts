@@ -1,4 +1,4 @@
-import { get, post, put, del, ApiResponse } from '@/utils/request'
+import { BaseApiService } from './base.service'
 
 // 组织权限
 export interface GroupPermission {
@@ -95,66 +95,6 @@ export interface UserSearchResult {
   createdAt: string
 }
 
-// 创建组织
-export const createGroup = async (data: CreateGroupRequest): Promise<ApiResponse<Group>> => {
-  return post('/group', data)
-}
-
-// 获取组织列表
-export const getGroupList = async (): Promise<ApiResponse<Group[]>> => {
-  return get('/group')
-}
-
-// 获取组织详情
-export const getGroup = async (id: number): Promise<ApiResponse<Group>> => {
-  return get(`/group/${id}`)
-}
-
-// 更新组织
-export const updateGroup = async (id: number, data: UpdateGroupRequest): Promise<ApiResponse<Group>> => {
-  return put(`/group/${id}`, data)
-}
-
-// 删除组织
-export const deleteGroup = async (id: number): Promise<ApiResponse<null>> => {
-  return del(`/group/${id}`)
-}
-
-// 离开组织
-export const leaveGroup = async (id: number): Promise<ApiResponse<null>> => {
-  return post(`/group/${id}/leave`)
-}
-
-// 移除成员
-export const removeMember = async (groupId: number, memberId: number): Promise<ApiResponse<null>> => {
-  return del(`/group/${groupId}/members/${memberId}`)
-}
-
-// 邀请用户
-export const inviteUser = async (groupId: number, data: InviteUserRequest): Promise<ApiResponse<GroupInvitation>> => {
-  return post(`/group/${groupId}/invite`, data)
-}
-
-// 获取邀请列表
-export const getInvitations = async (): Promise<ApiResponse<GroupInvitation[]>> => {
-  return get('/group/invitations')
-}
-
-// 接受邀请
-export const acceptInvitation = async (id: number): Promise<ApiResponse<null>> => {
-  return post(`/group/invitations/${id}/accept`)
-}
-
-// 拒绝邀请
-export const rejectInvitation = async (id: number): Promise<ApiResponse<null>> => {
-  return post(`/group/invitations/${id}/reject`)
-}
-
-// 搜索用户（用于邀请）
-export const searchUsers = async (keyword: string, limit: number = 20): Promise<ApiResponse<UserSearchResult[]>> => {
-  return get('/group/search-users', { params: { keyword, limit } })
-}
-
 // 组织共享的资源
 export interface GroupSharedResources {
   assistants: Array<{
@@ -172,24 +112,135 @@ export interface GroupSharedResources {
   }>
 }
 
-// 获取组织共享的资源
-export const getGroupSharedResources = async (groupId: number): Promise<ApiResponse<GroupSharedResources>> => {
-  return get(`/group/${groupId}/resources`)
-}
-
-// 上传组织头像
-export const uploadGroupAvatar = async (groupId: number, file: File): Promise<ApiResponse<{ avatar: string }>> => {
-  const formData = new FormData()
-  formData.append('avatar', file)
-  return post(`/group/${groupId}/avatar`, formData)
-}
-
-// 更新成员角色
+// 更新成员角色请求
 export interface UpdateMemberRoleRequest {
   role: string
 }
 
-export const updateMemberRole = async (groupId: number, memberId: number, role: string): Promise<ApiResponse<null>> => {
-  return put(`/group/${groupId}/members/${memberId}/role`, { role })
+class GroupService extends BaseApiService {
+  constructor() {
+    super('/group')
+  }
+
+  // 创建组织
+  async createGroup(data: CreateGroupRequest): Promise<Group> {
+    const response = await this.post<Group>('', data)
+    this.invalidateCache()
+    return this.handleResponse(response)
+  }
+
+  // 获取组织列表
+  async getGroupList(): Promise<Group[]> {
+    const response = await this.get<Group[]>('', {}, { enabled: true, ttl: 60000 })
+    return this.handleResponse(response)
+  }
+
+  // 获取组织详情
+  async getGroup(id: number): Promise<Group> {
+    const response = await this.get<Group>(`/${id}`, {}, { enabled: true, ttl: 300000 })
+    return this.handleResponse(response)
+  }
+
+  // 更新组织
+  async updateGroup(id: number, data: UpdateGroupRequest): Promise<Group> {
+    const response = await this.put<Group>(`/${id}`, data)
+    this.invalidateCache()
+    return this.handleResponse(response)
+  }
+
+  // 删除组织
+  async deleteGroup(id: number): Promise<null> {
+    const response = await this.delete<null>(`/${id}`)
+    this.invalidateCache()
+    return this.handleResponse(response)
+  }
+
+  // 离开组织
+  async leaveGroup(id: number): Promise<null> {
+    const response = await this.post<null>(`/${id}/leave`)
+    this.invalidateCache()
+    return this.handleResponse(response)
+  }
+
+  // 移除成员
+  async removeMember(groupId: number, memberId: number): Promise<null> {
+    const response = await this.delete<null>(`/${groupId}/members/${memberId}`)
+    this.invalidateCache()
+    return this.handleResponse(response)
+  }
+
+  // 邀请用户
+  async inviteUser(groupId: number, data: InviteUserRequest): Promise<GroupInvitation> {
+    const response = await this.post<GroupInvitation>(`/${groupId}/invite`, data)
+    return this.handleResponse(response)
+  }
+
+  // 获取邀请列表
+  async getInvitations(): Promise<GroupInvitation[]> {
+    const response = await this.get<GroupInvitation[]>('/invitations', {}, { enabled: true, ttl: 30000 })
+    return this.handleResponse(response)
+  }
+
+  // 接受邀请
+  async acceptInvitation(id: number): Promise<null> {
+    const response = await this.post<null>(`/invitations/${id}/accept`)
+    this.invalidateCache()
+    return this.handleResponse(response)
+  }
+
+  // 拒绝邀请
+  async rejectInvitation(id: number): Promise<null> {
+    const response = await this.post<null>(`/invitations/${id}/reject`)
+    this.invalidateCache()
+    return this.handleResponse(response)
+  }
+
+  // 搜索用户（用于邀请）
+  async searchUsers(keyword: string, limit: number = 20): Promise<UserSearchResult[]> {
+    const response = await this.get<UserSearchResult[]>('/search-users', { params: { keyword, limit } })
+    return this.handleResponse(response)
+  }
+
+  // 获取组织共享的资源
+  async getGroupSharedResources(groupId: number): Promise<GroupSharedResources> {
+    const response = await this.get<GroupSharedResources>(`/${groupId}/resources`, {}, { enabled: true, ttl: 60000 })
+    return this.handleResponse(response)
+  }
+
+  // 上传组织头像
+  async uploadGroupAvatar(groupId: number, file: File): Promise<{ avatar: string }> {
+    const formData = new FormData()
+    formData.append('avatar', file)
+    const response = await this.post<{ avatar: string }>(`/${groupId}/avatar`, formData)
+    this.invalidateCache()
+    return this.handleResponse(response)
+  }
+
+  // 更新成员角色
+  async updateMemberRole(groupId: number, memberId: number, role: string): Promise<null> {
+    const response = await this.put<null>(`/${groupId}/members/${memberId}/role`, { role })
+    this.invalidateCache()
+    return this.handleResponse(response)
+  }
 }
+
+// 导出单例
+export const groupService = new GroupService()
+
+// 兼容性导出
+export const createGroup = groupService.createGroup.bind(groupService)
+export const getGroupList = groupService.getGroupList.bind(groupService)
+export const getGroup = groupService.getGroup.bind(groupService)
+export const updateGroup = groupService.updateGroup.bind(groupService)
+export const deleteGroup = groupService.deleteGroup.bind(groupService)
+export const leaveGroup = groupService.leaveGroup.bind(groupService)
+export const removeMember = groupService.removeMember.bind(groupService)
+export const inviteUser = groupService.inviteUser.bind(groupService)
+export const getInvitations = groupService.getInvitations.bind(groupService)
+export const acceptInvitation = groupService.acceptInvitation.bind(groupService)
+export const rejectInvitation = groupService.rejectInvitation.bind(groupService)
+export const searchUsers = groupService.searchUsers.bind(groupService)
+export const getGroupSharedResources = groupService.getGroupSharedResources.bind(groupService)
+export const uploadGroupAvatar = groupService.uploadGroupAvatar.bind(groupService)
+export const updateMemberRole = groupService.updateMemberRole.bind(groupService)
 

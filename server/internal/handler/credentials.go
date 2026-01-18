@@ -4,30 +4,31 @@ import (
 	"fmt"
 
 	"github.com/code-100-precent/LingEcho/internal/models"
-	"github.com/code-100-precent/LingEcho/pkg/response"
+	apperrors "github.com/code-100-precent/LingEcho/pkg/errors"
 	"github.com/gin-gonic/gin"
 )
 
-// UpdateRateLimiterConfig updates rate limiter configuration
+// handleCreateCredential creates a new user credential
 func (h *Handlers) handleCreateCredential(c *gin.Context) {
 	var credential models.UserCredentialRequest
 	if err := c.ShouldBindJSON(&credential); err != nil {
-		response.Fail(c, "Invalid request", nil)
+		apperrors.HandleError(c, apperrors.Wrap(err, apperrors.ErrInvalidInput, "Invalid request"))
 		return
 	}
 
 	user := models.CurrentUser(c)
 	if user == nil {
-		response.Fail(c, "User is not logged in.", nil)
+		apperrors.HandleError(c, apperrors.New(apperrors.ErrUnauthorized, "User is not logged in"))
+		return
 	}
 
 	userCredential, err := models.CreateUserCredential(h.db, user.ID, &credential)
 	if err != nil {
-		response.Fail(c, "create user credential failed", err)
+		apperrors.HandleError(c, apperrors.Wrap(err, apperrors.ErrInternalServer, "create user credential failed"))
 		return
 	}
 
-	response.Success(c, "create user credential success", gin.H{
+	apperrors.RespondSuccess(c, gin.H{
 		"apiKey":    userCredential.APIKey,
 		"apiSecret": userCredential.APISecret,
 		"name":      credential.Name,
@@ -38,17 +39,17 @@ func (h *Handlers) handleGetCredential(c *gin.Context) {
 	user := models.CurrentUser(c)
 	credentials, err := models.GetUserCredentials(h.db, user.ID)
 	if err != nil {
-		response.Fail(c, "get user credentials failed", err)
+		apperrors.HandleError(c, apperrors.Wrap(err, apperrors.ErrInternalServer, "get user credentials failed"))
 		return
 	}
-	response.Success(c, "get user credentials success", credentials)
+	apperrors.RespondSuccess(c, credentials)
 }
 
 // handleDeleteCredential 删除用户凭证
 func (h *Handlers) handleDeleteCredential(c *gin.Context) {
 	user := models.CurrentUser(c)
 	if user == nil {
-		response.Fail(c, "User is not logged in.", nil)
+		apperrors.HandleError(c, apperrors.New(apperrors.ErrUnauthorized, "User is not logged in"))
 		return
 	}
 
@@ -57,16 +58,16 @@ func (h *Handlers) handleDeleteCredential(c *gin.Context) {
 	var credentialID uint
 	_, err := fmt.Sscanf(idStr, "%d", &credentialID)
 	if err != nil {
-		response.Fail(c, "Invalid credential ID", err)
+		apperrors.HandleError(c, apperrors.Wrap(err, apperrors.ErrInvalidInput, "Invalid credential ID"))
 		return
 	}
 
 	// Delete credential
 	err = models.DeleteUserCredential(h.db, user.ID, credentialID)
 	if err != nil {
-		response.Fail(c, "Failed to delete credential", err)
+		apperrors.HandleError(c, apperrors.Wrap(err, apperrors.ErrInternalServer, "Failed to delete credential"))
 		return
 	}
 
-	response.Success(c, "Credential deleted successfully", nil)
+	apperrors.RespondSuccess(c, nil)
 }

@@ -1,6 +1,9 @@
 package handlers
 
 import (
+	apperrors "github.com/code-100-precent/LingEcho/pkg/errors"
+	"github.com/code-100-precent/LingEcho/pkg/response"
+
 	"crypto/md5"
 	"encoding/json"
 	"errors"
@@ -19,7 +22,6 @@ import (
 	"github.com/code-100-precent/LingEcho/pkg/constants"
 	"github.com/code-100-precent/LingEcho/pkg/logger"
 	"github.com/code-100-precent/LingEcho/pkg/notification"
-	"github.com/code-100-precent/LingEcho/pkg/response"
 	"github.com/code-100-precent/LingEcho/pkg/utils"
 	"github.com/gin-gonic/gin"
 	"go.uber.org/zap"
@@ -92,13 +94,13 @@ type GroupInvitationResponse struct {
 func (h *Handlers) CreateGroup(c *gin.Context) {
 	user := models.CurrentUser(c)
 	if user == nil {
-		response.Fail(c, "未授权", "用户未登录")
+		apperrors.HandleError(c, apperrors.New(apperrors.ErrInternalServer, "未授权"))
 		return
 	}
 
 	var req CreateGroupRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		response.Fail(c, "参数错误", err.Error())
+		apperrors.HandleError(c, apperrors.New(apperrors.ErrInternalServer, "参数错误"))
 		return
 	}
 
@@ -111,7 +113,7 @@ func (h *Handlers) CreateGroup(c *gin.Context) {
 	}
 
 	if err := h.db.Create(&group).Error; err != nil {
-		response.Fail(c, "创建组织失败", err.Error())
+		apperrors.HandleError(c, apperrors.New(apperrors.ErrInternalServer, "创建组织失败"))
 		return
 	}
 
@@ -124,21 +126,21 @@ func (h *Handlers) CreateGroup(c *gin.Context) {
 	if err := h.db.Create(&member).Error; err != nil {
 		// 如果创建成员失败，删除组织
 		h.db.Delete(&group)
-		response.Fail(c, "创建组织失败", "无法添加创建者为成员")
+		apperrors.HandleError(c, apperrors.New(apperrors.ErrInternalServer, "创建组织失败"))
 		return
 	}
 
 	// 加载创建者信息
 	h.db.Preload("Creator").First(&group, group.ID)
 
-	response.Success(c, "创建组织成功", group)
+	apperrors.RespondSuccess(c, group)
 }
 
 // ListGroups 获取用户创建或加入的组织列表
 func (h *Handlers) ListGroups(c *gin.Context) {
 	user := models.CurrentUser(c)
 	if user == nil {
-		response.Fail(c, "未授权", "用户未登录")
+		apperrors.HandleError(c, apperrors.New(apperrors.ErrInternalServer, "未授权"))
 		return
 	}
 
@@ -150,7 +152,7 @@ func (h *Handlers) ListGroups(c *gin.Context) {
 		Group("groups.id").
 		Preload("Creator").
 		Find(&groups).Error; err != nil {
-		response.Fail(c, "查询组织列表失败", err.Error())
+		apperrors.HandleError(c, apperrors.New(apperrors.ErrInternalServer, "查询组织列表失败"))
 		return
 	}
 
@@ -189,29 +191,29 @@ func (h *Handlers) ListGroups(c *gin.Context) {
 		})
 	}
 
-	response.Success(c, "查询成功", groupResponses)
+	apperrors.RespondSuccess(c, groupResponses)
 }
 
 // GetGroup 获取组织详情
 func (h *Handlers) GetGroup(c *gin.Context) {
 	user := models.CurrentUser(c)
 	if user == nil {
-		response.Fail(c, "未授权", "用户未登录")
+		apperrors.HandleError(c, apperrors.New(apperrors.ErrInternalServer, "未授权"))
 		return
 	}
 
 	id, err := strconv.ParseUint(c.Param("id"), 10, 32)
 	if err != nil {
-		response.Fail(c, "参数错误", "无效的组织ID")
+		apperrors.HandleError(c, apperrors.New(apperrors.ErrInternalServer, "参数错误"))
 		return
 	}
 
 	var group models.Group
 	if err := h.db.Preload("Creator").First(&group, id).Error; err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
-			response.Fail(c, "组织不存在", nil)
+			apperrors.HandleError(c, apperrors.New(apperrors.ErrInternalServer, "组织不存在"))
 		} else {
-			response.Fail(c, "查询失败", err.Error())
+			apperrors.HandleError(c, apperrors.New(apperrors.ErrInternalServer, "查询失败"))
 		}
 		return
 	}
@@ -220,7 +222,7 @@ func (h *Handlers) GetGroup(c *gin.Context) {
 	var member models.GroupMember
 	if err := h.db.Where("group_id = ? AND user_id = ?", group.ID, user.ID).First(&member).Error; err != nil {
 		if group.CreatorID != user.ID {
-			response.Fail(c, "权限不足", "您不是该组织的成员")
+			apperrors.HandleError(c, apperrors.New(apperrors.ErrInternalServer, "权限不足"))
 			return
 		}
 	}
@@ -228,7 +230,7 @@ func (h *Handlers) GetGroup(c *gin.Context) {
 	// 获取成员列表（重新查询以确保获取最新数据）
 	var members []models.GroupMember
 	if err := h.db.Preload("User").Where("group_id = ?", group.ID).Find(&members).Error; err != nil {
-		response.Fail(c, "查询成员列表失败", err.Error())
+		apperrors.HandleError(c, apperrors.New(apperrors.ErrInternalServer, "查询成员列表失败"))
 		return
 	}
 
@@ -273,35 +275,35 @@ func (h *Handlers) GetGroup(c *gin.Context) {
 		Members:     memberResponses,
 	}
 
-	response.Success(c, "查询成功", groupResponse)
+	apperrors.RespondSuccess(c, groupResponse)
 }
 
 // UpdateGroup 更新组织信息
 func (h *Handlers) UpdateGroup(c *gin.Context) {
 	user := models.CurrentUser(c)
 	if user == nil {
-		response.Fail(c, "未授权", "用户未登录")
+		apperrors.HandleError(c, apperrors.New(apperrors.ErrInternalServer, "未授权"))
 		return
 	}
 
 	id, err := strconv.ParseUint(c.Param("id"), 10, 32)
 	if err != nil {
-		response.Fail(c, "参数错误", "无效的组织ID")
+		apperrors.HandleError(c, apperrors.New(apperrors.ErrInternalServer, "参数错误"))
 		return
 	}
 
 	var req UpdateGroupRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		response.Fail(c, "参数错误", err.Error())
+		apperrors.HandleError(c, apperrors.New(apperrors.ErrInternalServer, "参数错误"))
 		return
 	}
 
 	var group models.Group
 	if err := h.db.First(&group, id).Error; err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
-			response.Fail(c, "组织不存在", nil)
+			apperrors.HandleError(c, apperrors.New(apperrors.ErrInternalServer, "组织不存在"))
 		} else {
-			response.Fail(c, "查询失败", err.Error())
+			apperrors.HandleError(c, apperrors.New(apperrors.ErrInternalServer, "查询失败"))
 		}
 		return
 	}
@@ -310,7 +312,7 @@ func (h *Handlers) UpdateGroup(c *gin.Context) {
 	if group.CreatorID != user.ID {
 		var member models.GroupMember
 		if err := h.db.Where("group_id = ? AND user_id = ? AND role = ?", group.ID, user.ID, models.GroupRoleAdmin).First(&member).Error; err != nil {
-			response.Fail(c, "权限不足", "只有创建者或管理员可以更新组织信息")
+			apperrors.HandleError(c, apperrors.New(apperrors.ErrInternalServer, "权限不足"))
 			return
 		}
 	}
@@ -330,41 +332,41 @@ func (h *Handlers) UpdateGroup(c *gin.Context) {
 	}
 
 	if err := h.db.Save(&group).Error; err != nil {
-		response.Fail(c, "更新失败", err.Error())
+		apperrors.HandleError(c, apperrors.New(apperrors.ErrInternalServer, "更新失败"))
 		return
 	}
 
 	h.db.Preload("Creator").First(&group, group.ID)
-	response.Success(c, "更新成功", group)
+	apperrors.RespondSuccess(c, group)
 }
 
 // DeleteGroup 删除组织
 func (h *Handlers) DeleteGroup(c *gin.Context) {
 	user := models.CurrentUser(c)
 	if user == nil {
-		response.Fail(c, "未授权", "用户未登录")
+		apperrors.HandleError(c, apperrors.New(apperrors.ErrInternalServer, "未授权"))
 		return
 	}
 
 	id, err := strconv.ParseUint(c.Param("id"), 10, 32)
 	if err != nil {
-		response.Fail(c, "参数错误", "无效的组织ID")
+		apperrors.HandleError(c, apperrors.New(apperrors.ErrInternalServer, "参数错误"))
 		return
 	}
 
 	var group models.Group
 	if err := h.db.First(&group, id).Error; err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
-			response.Fail(c, "组织不存在", nil)
+			apperrors.HandleError(c, apperrors.New(apperrors.ErrInternalServer, "组织不存在"))
 		} else {
-			response.Fail(c, "查询失败", err.Error())
+			apperrors.HandleError(c, apperrors.New(apperrors.ErrInternalServer, "查询失败"))
 		}
 		return
 	}
 
 	// 只有创建者可以删除组织
 	if group.CreatorID != user.ID {
-		response.Fail(c, "权限不足", "只有创建者可以删除组织")
+		apperrors.HandleError(c, apperrors.New(apperrors.ErrInternalServer, "权限不足"))
 		return
 	}
 
@@ -374,18 +376,18 @@ func (h *Handlers) DeleteGroup(c *gin.Context) {
 	h.db.Where("group_id = ?", group.ID).Delete(&models.GroupInvitation{})
 	// 删除组织
 	if err := h.db.Delete(&group).Error; err != nil {
-		response.Fail(c, "删除失败", err.Error())
+		apperrors.HandleError(c, apperrors.New(apperrors.ErrInternalServer, "删除失败"))
 		return
 	}
 
-	response.Success(c, "删除成功", nil)
+	apperrors.RespondSuccess(c, nil)
 }
 
 // SearchUsers 搜索用户（用于邀请）
 func (h *Handlers) SearchUsers(c *gin.Context) {
 	user := models.CurrentUser(c)
 	if user == nil {
-		response.Fail(c, "未授权", "用户未登录")
+		apperrors.HandleError(c, apperrors.New(apperrors.ErrInternalServer, "未授权"))
 		return
 	}
 
@@ -397,7 +399,7 @@ func (h *Handlers) SearchUsers(c *gin.Context) {
 	}
 
 	if keyword == "" {
-		response.Fail(c, "参数错误", "搜索关键词不能为空")
+		apperrors.HandleError(c, apperrors.New(apperrors.ErrInternalServer, "参数错误"))
 		return
 	}
 
@@ -412,7 +414,7 @@ func (h *Handlers) SearchUsers(c *gin.Context) {
 		Select("id, email, display_name, first_name, last_name, avatar, created_at")
 
 	if err := query.Find(&users).Error; err != nil {
-		response.Fail(c, "搜索失败", err.Error())
+		apperrors.HandleError(c, apperrors.New(apperrors.ErrInternalServer, "搜索失败"))
 		return
 	}
 
@@ -440,35 +442,35 @@ func (h *Handlers) SearchUsers(c *gin.Context) {
 		})
 	}
 
-	response.Success(c, "搜索成功", results)
+	apperrors.RespondSuccess(c, results)
 }
 
 // InviteUser 邀请用户加入组织
 func (h *Handlers) InviteUser(c *gin.Context) {
 	user := models.CurrentUser(c)
 	if user == nil {
-		response.Fail(c, "未授权", "用户未登录")
+		apperrors.HandleError(c, apperrors.New(apperrors.ErrInternalServer, "未授权"))
 		return
 	}
 
 	id, err := strconv.ParseUint(c.Param("id"), 10, 32)
 	if err != nil {
-		response.Fail(c, "参数错误", "无效的组织ID")
+		apperrors.HandleError(c, apperrors.New(apperrors.ErrInternalServer, "参数错误"))
 		return
 	}
 
 	var req InviteUserRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		response.Fail(c, "参数错误", err.Error())
+		apperrors.HandleError(c, apperrors.New(apperrors.ErrInternalServer, "参数错误"))
 		return
 	}
 
 	var group models.Group
 	if err := h.db.First(&group, id).Error; err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
-			response.Fail(c, "组织不存在", nil)
+			apperrors.HandleError(c, apperrors.New(apperrors.ErrInternalServer, "组织不存在"))
 		} else {
-			response.Fail(c, "查询失败", err.Error())
+			apperrors.HandleError(c, apperrors.New(apperrors.ErrInternalServer, "查询失败"))
 		}
 		return
 	}
@@ -477,7 +479,7 @@ func (h *Handlers) InviteUser(c *gin.Context) {
 	if group.CreatorID != user.ID {
 		var member models.GroupMember
 		if err := h.db.Where("group_id = ? AND user_id = ? AND role = ?", group.ID, user.ID, models.GroupRoleAdmin).First(&member).Error; err != nil {
-			response.Fail(c, "权限不足", "只有创建者或管理员可以邀请用户")
+			apperrors.HandleError(c, apperrors.New(apperrors.ErrInternalServer, "权限不足"))
 			return
 		}
 	}
@@ -486,9 +488,9 @@ func (h *Handlers) InviteUser(c *gin.Context) {
 	var invitee models.User
 	if err := h.db.First(&invitee, req.UserID).Error; err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
-			response.Fail(c, "用户不存在", nil)
+			apperrors.HandleError(c, apperrors.New(apperrors.ErrInternalServer, "用户不存在"))
 		} else {
-			response.Fail(c, "查询失败", err.Error())
+			apperrors.HandleError(c, apperrors.New(apperrors.ErrInternalServer, "查询失败"))
 		}
 		return
 	}
@@ -496,14 +498,14 @@ func (h *Handlers) InviteUser(c *gin.Context) {
 	// 检查用户是否已经是成员
 	var existingMember models.GroupMember
 	if err := h.db.Where("group_id = ? AND user_id = ?", group.ID, invitee.ID).First(&existingMember).Error; err == nil {
-		response.Fail(c, "用户已是成员", nil)
+		apperrors.HandleError(c, apperrors.New(apperrors.ErrInternalServer, "用户已是成员"))
 		return
 	}
 
 	// 检查是否已有待处理的邀请
 	var existingInvitation models.GroupInvitation
 	if err := h.db.Where("group_id = ? AND invitee_id = ? AND status = ?", group.ID, invitee.ID, "pending").First(&existingInvitation).Error; err == nil {
-		response.Fail(c, "邀请已存在", "该用户已有待处理的邀请")
+		apperrors.HandleError(c, apperrors.New(apperrors.ErrInternalServer, "邀请已存在"))
 		return
 	}
 
@@ -518,7 +520,7 @@ func (h *Handlers) InviteUser(c *gin.Context) {
 	}
 
 	if err := h.db.Create(&invitation).Error; err != nil {
-		response.Fail(c, "创建邀请失败", err.Error())
+		apperrors.HandleError(c, apperrors.New(apperrors.ErrInternalServer, "创建邀请失败"))
 		return
 	}
 
@@ -573,14 +575,14 @@ func (h *Handlers) InviteUser(c *gin.Context) {
 		}
 	}()
 
-	response.Success(c, "邀请已发送", invitation)
+	apperrors.RespondSuccess(c, invitation)
 }
 
 // ListInvitations 获取用户的邀请列表
 func (h *Handlers) ListInvitations(c *gin.Context) {
 	user := models.CurrentUser(c)
 	if user == nil {
-		response.Fail(c, "未授权", "用户未登录")
+		apperrors.HandleError(c, apperrors.New(apperrors.ErrInternalServer, "未授权"))
 		return
 	}
 
@@ -591,7 +593,7 @@ func (h *Handlers) ListInvitations(c *gin.Context) {
 		Preload("Inviter").
 		Order("created_at desc").
 		Find(&invitations).Error; err != nil {
-		response.Fail(c, "查询失败", err.Error())
+		apperrors.HandleError(c, apperrors.New(apperrors.ErrInternalServer, "查询失败"))
 		return
 	}
 
@@ -620,48 +622,48 @@ func (h *Handlers) ListInvitations(c *gin.Context) {
 		})
 	}
 
-	response.Success(c, "查询成功", validInvitations)
+	apperrors.RespondSuccess(c, validInvitations)
 }
 
 // AcceptInvitation 接受邀请
 func (h *Handlers) AcceptInvitation(c *gin.Context) {
 	user := models.CurrentUser(c)
 	if user == nil {
-		response.Fail(c, "未授权", "用户未登录")
+		apperrors.HandleError(c, apperrors.New(apperrors.ErrInternalServer, "未授权"))
 		return
 	}
 
 	id, err := strconv.ParseUint(c.Param("id"), 10, 32)
 	if err != nil {
-		response.Fail(c, "参数错误", "无效的邀请ID")
+		apperrors.HandleError(c, apperrors.New(apperrors.ErrInternalServer, "参数错误"))
 		return
 	}
 
 	var invitation models.GroupInvitation
 	if err := h.db.Preload("Group").First(&invitation, id).Error; err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
-			response.Fail(c, "邀请不存在", nil)
+			apperrors.HandleError(c, apperrors.New(apperrors.ErrInternalServer, "邀请不存在"))
 		} else {
-			response.Fail(c, "查询失败", err.Error())
+			apperrors.HandleError(c, apperrors.New(apperrors.ErrInternalServer, "查询失败"))
 		}
 		return
 	}
 
 	// 检查是否是当前用户的邀请
 	if invitation.InviteeID != user.ID {
-		response.Fail(c, "权限不足", "这不是您的邀请")
+		apperrors.HandleError(c, apperrors.New(apperrors.ErrInternalServer, "权限不足"))
 		return
 	}
 
 	// 检查邀请状态
 	if invitation.Status != "pending" {
-		response.Fail(c, "邀请已处理", "该邀请已被处理")
+		apperrors.HandleError(c, apperrors.New(apperrors.ErrInternalServer, "邀请已处理"))
 		return
 	}
 
 	// 检查是否过期
 	if invitation.ExpiresAt != nil && invitation.ExpiresAt.Before(time.Now()) {
-		response.Fail(c, "邀请已过期", nil)
+		apperrors.HandleError(c, apperrors.New(apperrors.ErrInternalServer, "邀请已过期"))
 		return
 	}
 
@@ -671,7 +673,7 @@ func (h *Handlers) AcceptInvitation(c *gin.Context) {
 		// 用户已是成员，更新邀请状态
 		invitation.Status = "accepted"
 		h.db.Save(&invitation)
-		response.Success(c, "您已是该组织的成员", nil)
+		apperrors.RespondSuccess(c, nil)
 		return
 	}
 
@@ -683,7 +685,7 @@ func (h *Handlers) AcceptInvitation(c *gin.Context) {
 	}
 
 	if err := h.db.Create(&member).Error; err != nil {
-		response.Fail(c, "加入组织失败", err.Error())
+		apperrors.HandleError(c, apperrors.New(apperrors.ErrInternalServer, "加入组织失败"))
 		return
 	}
 
@@ -691,42 +693,42 @@ func (h *Handlers) AcceptInvitation(c *gin.Context) {
 	invitation.Status = "accepted"
 	h.db.Save(&invitation)
 
-	response.Success(c, "成功加入组织", nil)
+	apperrors.RespondSuccess(c, nil)
 }
 
 // RejectInvitation 拒绝邀请
 func (h *Handlers) RejectInvitation(c *gin.Context) {
 	user := models.CurrentUser(c)
 	if user == nil {
-		response.Fail(c, "未授权", "用户未登录")
+		apperrors.HandleError(c, apperrors.New(apperrors.ErrInternalServer, "未授权"))
 		return
 	}
 
 	id, err := strconv.ParseUint(c.Param("id"), 10, 32)
 	if err != nil {
-		response.Fail(c, "参数错误", "无效的邀请ID")
+		apperrors.HandleError(c, apperrors.New(apperrors.ErrInternalServer, "参数错误"))
 		return
 	}
 
 	var invitation models.GroupInvitation
 	if err := h.db.First(&invitation, id).Error; err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
-			response.Fail(c, "邀请不存在", nil)
+			apperrors.HandleError(c, apperrors.New(apperrors.ErrInternalServer, "邀请不存在"))
 		} else {
-			response.Fail(c, "查询失败", err.Error())
+			apperrors.HandleError(c, apperrors.New(apperrors.ErrInternalServer, "查询失败"))
 		}
 		return
 	}
 
 	// 检查是否是当前用户的邀请
 	if invitation.InviteeID != user.ID {
-		response.Fail(c, "权限不足", "这不是您的邀请")
+		apperrors.HandleError(c, apperrors.New(apperrors.ErrInternalServer, "权限不足"))
 		return
 	}
 
 	// 检查邀请状态
 	if invitation.Status != "pending" {
-		response.Fail(c, "邀请已处理", "该邀请已被处理")
+		apperrors.HandleError(c, apperrors.New(apperrors.ErrInternalServer, "邀请已处理"))
 		return
 	}
 
@@ -734,74 +736,74 @@ func (h *Handlers) RejectInvitation(c *gin.Context) {
 	invitation.Status = "rejected"
 	h.db.Save(&invitation)
 
-	response.Success(c, "已拒绝邀请", nil)
+	apperrors.RespondSuccess(c, nil)
 }
 
 // LeaveGroup 离开组织
 func (h *Handlers) LeaveGroup(c *gin.Context) {
 	user := models.CurrentUser(c)
 	if user == nil {
-		response.Fail(c, "未授权", "用户未登录")
+		apperrors.HandleError(c, apperrors.New(apperrors.ErrInternalServer, "未授权"))
 		return
 	}
 
 	id, err := strconv.ParseUint(c.Param("id"), 10, 32)
 	if err != nil {
-		response.Fail(c, "参数错误", "无效的组织ID")
+		apperrors.HandleError(c, apperrors.New(apperrors.ErrInternalServer, "参数错误"))
 		return
 	}
 
 	var group models.Group
 	if err := h.db.First(&group, id).Error; err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
-			response.Fail(c, "组织不存在", nil)
+			apperrors.HandleError(c, apperrors.New(apperrors.ErrInternalServer, "组织不存在"))
 		} else {
-			response.Fail(c, "查询失败", err.Error())
+			apperrors.HandleError(c, apperrors.New(apperrors.ErrInternalServer, "查询失败"))
 		}
 		return
 	}
 
 	// 创建者不能离开组织，只能删除组织
 	if group.CreatorID == user.ID {
-		response.Fail(c, "无法离开", "创建者不能离开组织，请删除组织")
+		apperrors.HandleError(c, apperrors.New(apperrors.ErrInternalServer, "无法离开"))
 		return
 	}
 
 	// 删除成员记录
 	if err := h.db.Where("group_id = ? AND user_id = ?", group.ID, user.ID).Delete(&models.GroupMember{}).Error; err != nil {
-		response.Fail(c, "离开组织失败", err.Error())
+		apperrors.HandleError(c, apperrors.New(apperrors.ErrInternalServer, "离开组织失败"))
 		return
 	}
 
-	response.Success(c, "已离开组织", nil)
+	apperrors.RespondSuccess(c, nil)
 }
 
 // RemoveMember 移除成员（仅管理员）
 func (h *Handlers) RemoveMember(c *gin.Context) {
 	user := models.CurrentUser(c)
 	if user == nil {
-		response.Fail(c, "未授权", "用户未登录")
+		apperrors.HandleError(c, apperrors.New(apperrors.ErrInternalServer, "未授权"))
 		return
 	}
 
 	groupID, err := strconv.ParseUint(c.Param("id"), 10, 32)
 	if err != nil {
-		response.Fail(c, "参数错误", "无效的组织ID")
+		apperrors.HandleError(c, apperrors.New(apperrors.ErrInternalServer, "参数错误"))
 		return
 	}
 
 	memberID, err := strconv.ParseUint(c.Param("memberId"), 10, 32)
 	if err != nil {
-		response.Fail(c, "参数错误", "无效的成员ID")
+		apperrors.HandleError(c, apperrors.New(apperrors.ErrInternalServer, "参数错误"))
 		return
 	}
 
 	var group models.Group
 	if err := h.db.First(&group, groupID).Error; err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
-			response.Fail(c, "组织不存在", nil)
+			apperrors.HandleError(c, apperrors.New(apperrors.ErrInternalServer, "组织不存在"))
 		} else {
-			response.Fail(c, "查询失败", err.Error())
+			apperrors.HandleError(c, apperrors.New(apperrors.ErrInternalServer, "查询失败"))
 		}
 		return
 	}
@@ -810,43 +812,43 @@ func (h *Handlers) RemoveMember(c *gin.Context) {
 	if group.CreatorID != user.ID {
 		var member models.GroupMember
 		if err := h.db.Where("group_id = ? AND user_id = ? AND role = ?", group.ID, user.ID, models.GroupRoleAdmin).First(&member).Error; err != nil {
-			response.Fail(c, "权限不足", "只有创建者或管理员可以移除成员")
+			apperrors.HandleError(c, apperrors.New(apperrors.ErrInternalServer, "权限不足"))
 			return
 		}
 	}
 
 	// 不能移除创建者
 	if group.CreatorID == uint(memberID) {
-		response.Fail(c, "无法移除", "不能移除组织创建者")
+		apperrors.HandleError(c, apperrors.New(apperrors.ErrInternalServer, "无法移除"))
 		return
 	}
 
 	// 删除成员记录
 	if err := h.db.Where("group_id = ? AND user_id = ?", group.ID, memberID).Delete(&models.GroupMember{}).Error; err != nil {
-		response.Fail(c, "移除成员失败", err.Error())
+		apperrors.HandleError(c, apperrors.New(apperrors.ErrInternalServer, "移除成员失败"))
 		return
 	}
 
-	response.Success(c, "已移除成员", nil)
+	apperrors.RespondSuccess(c, nil)
 }
 
 // UpdateMemberRole 更新成员角色（仅创建者或管理员）
 func (h *Handlers) UpdateMemberRole(c *gin.Context) {
 	user := models.CurrentUser(c)
 	if user == nil {
-		response.Fail(c, "未授权", "用户未登录")
+		apperrors.HandleError(c, apperrors.New(apperrors.ErrInternalServer, "未授权"))
 		return
 	}
 
 	groupID, err := strconv.ParseUint(c.Param("id"), 10, 32)
 	if err != nil {
-		response.Fail(c, "参数错误", "无效的组织ID")
+		apperrors.HandleError(c, apperrors.New(apperrors.ErrInternalServer, "参数错误"))
 		return
 	}
 
 	memberID, err := strconv.ParseUint(c.Param("memberId"), 10, 32)
 	if err != nil {
-		response.Fail(c, "参数错误", "无效的成员ID")
+		apperrors.HandleError(c, apperrors.New(apperrors.ErrInternalServer, "参数错误"))
 		return
 	}
 
@@ -854,22 +856,22 @@ func (h *Handlers) UpdateMemberRole(c *gin.Context) {
 		Role string `json:"role" binding:"required"`
 	}
 	if err := c.ShouldBindJSON(&req); err != nil {
-		response.Fail(c, "参数错误", err.Error())
+		apperrors.HandleError(c, apperrors.New(apperrors.ErrInternalServer, "参数错误"))
 		return
 	}
 
 	// 验证角色
 	if req.Role != models.GroupRoleAdmin && req.Role != models.GroupRoleMember {
-		response.Fail(c, "参数错误", "无效的角色")
+		apperrors.HandleError(c, apperrors.New(apperrors.ErrInternalServer, "参数错误"))
 		return
 	}
 
 	var group models.Group
 	if err := h.db.First(&group, groupID).Error; err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
-			response.Fail(c, "组织不存在", nil)
+			apperrors.HandleError(c, apperrors.New(apperrors.ErrInternalServer, "组织不存在"))
 		} else {
-			response.Fail(c, "查询失败", err.Error())
+			apperrors.HandleError(c, apperrors.New(apperrors.ErrInternalServer, "查询失败"))
 		}
 		return
 	}
@@ -878,14 +880,14 @@ func (h *Handlers) UpdateMemberRole(c *gin.Context) {
 	if group.CreatorID != user.ID {
 		var adminMember models.GroupMember
 		if err := h.db.Where("group_id = ? AND user_id = ? AND role = ?", group.ID, user.ID, models.GroupRoleAdmin).First(&adminMember).Error; err != nil {
-			response.Fail(c, "权限不足", "只有创建者或管理员可以更新成员角色")
+			apperrors.HandleError(c, apperrors.New(apperrors.ErrInternalServer, "权限不足"))
 			return
 		}
 	}
 
 	// 不能修改创建者的角色
 	if group.CreatorID == uint(memberID) {
-		response.Fail(c, "无法修改", "不能修改组织创建者的角色")
+		apperrors.HandleError(c, apperrors.New(apperrors.ErrInternalServer, "无法修改"))
 		return
 	}
 
@@ -893,9 +895,9 @@ func (h *Handlers) UpdateMemberRole(c *gin.Context) {
 	var member models.GroupMember
 	if err := h.db.Where("group_id = ? AND id = ?", group.ID, memberID).First(&member).Error; err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
-			response.Fail(c, "成员不存在", nil)
+			apperrors.HandleError(c, apperrors.New(apperrors.ErrInternalServer, "成员不存在"))
 		} else {
-			response.Fail(c, "查询失败", err.Error())
+			apperrors.HandleError(c, apperrors.New(apperrors.ErrInternalServer, "查询失败"))
 		}
 		return
 	}
@@ -903,33 +905,33 @@ func (h *Handlers) UpdateMemberRole(c *gin.Context) {
 	// 更新角色
 	member.Role = req.Role
 	if err := h.db.Save(&member).Error; err != nil {
-		response.Fail(c, "更新角色失败", err.Error())
+		apperrors.HandleError(c, apperrors.New(apperrors.ErrInternalServer, "更新角色失败"))
 		return
 	}
 
-	response.Success(c, "角色更新成功", nil)
+	apperrors.RespondSuccess(c, nil)
 }
 
 // GetGroupSharedResources 获取组织共享的资源（助手和知识库）
 func (h *Handlers) GetGroupSharedResources(c *gin.Context) {
 	user := models.CurrentUser(c)
 	if user == nil {
-		response.Fail(c, "未授权", "用户未登录")
+		apperrors.HandleError(c, apperrors.New(apperrors.ErrInternalServer, "未授权"))
 		return
 	}
 
 	groupID, err := strconv.ParseUint(c.Param("id"), 10, 32)
 	if err != nil {
-		response.Fail(c, "参数错误", "无效的组织ID")
+		apperrors.HandleError(c, apperrors.New(apperrors.ErrInternalServer, "参数错误"))
 		return
 	}
 
 	var group models.Group
 	if err := h.db.First(&group, groupID).Error; err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
-			response.Fail(c, "组织不存在", nil)
+			apperrors.HandleError(c, apperrors.New(apperrors.ErrInternalServer, "组织不存在"))
 		} else {
-			response.Fail(c, "查询失败", err.Error())
+			apperrors.HandleError(c, apperrors.New(apperrors.ErrInternalServer, "查询失败"))
 		}
 		return
 	}
@@ -938,7 +940,7 @@ func (h *Handlers) GetGroupSharedResources(c *gin.Context) {
 	if group.CreatorID != user.ID {
 		var member models.GroupMember
 		if err := h.db.Where("group_id = ? AND user_id = ? AND role = ?", group.ID, user.ID, models.GroupRoleAdmin).First(&member).Error; err != nil {
-			response.Fail(c, "权限不足", "只有创建者或管理员可以查看组织资源")
+			apperrors.HandleError(c, apperrors.New(apperrors.ErrInternalServer, "权限不足"))
 			return
 		}
 	}
@@ -946,14 +948,14 @@ func (h *Handlers) GetGroupSharedResources(c *gin.Context) {
 	// 查询组织共享的助手
 	var assistants []models.Assistant
 	if err := h.db.Where("group_id = ?", groupID).Order("created_at DESC").Find(&assistants).Error; err != nil {
-		response.Fail(c, "查询助手失败", err.Error())
+		apperrors.HandleError(c, apperrors.New(apperrors.ErrInternalServer, "查询助手失败"))
 		return
 	}
 
 	// 查询组织共享的知识库
 	var knowledgeBases []models.Knowledge
 	if err := h.db.Where("group_id = ?", groupID).Order("created_at DESC").Find(&knowledgeBases).Error; err != nil {
-		response.Fail(c, "查询知识库失败", err.Error())
+		apperrors.HandleError(c, apperrors.New(apperrors.ErrInternalServer, "查询知识库失败"))
 		return
 	}
 
@@ -963,29 +965,29 @@ func (h *Handlers) GetGroupSharedResources(c *gin.Context) {
 		"knowledgeBases": knowledgeBases,
 	}
 
-	response.Success(c, "获取成功", result)
+	apperrors.RespondSuccess(c, result)
 }
 
 // UploadGroupAvatar 上传组织头像
 func (h *Handlers) UploadGroupAvatar(c *gin.Context) {
 	user := models.CurrentUser(c)
 	if user == nil {
-		response.Fail(c, "未授权", "用户未登录")
+		apperrors.HandleError(c, apperrors.New(apperrors.ErrInternalServer, "未授权"))
 		return
 	}
 
 	groupID, err := strconv.ParseUint(c.Param("id"), 10, 32)
 	if err != nil {
-		response.Fail(c, "参数错误", "无效的组织ID")
+		apperrors.HandleError(c, apperrors.New(apperrors.ErrInternalServer, "参数错误"))
 		return
 	}
 
 	var group models.Group
 	if err := h.db.First(&group, groupID).Error; err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
-			response.Fail(c, "组织不存在", nil)
+			apperrors.HandleError(c, apperrors.New(apperrors.ErrInternalServer, "组织不存在"))
 		} else {
-			response.Fail(c, "查询失败", err.Error())
+			apperrors.HandleError(c, apperrors.New(apperrors.ErrInternalServer, "查询失败"))
 		}
 		return
 	}
@@ -994,7 +996,7 @@ func (h *Handlers) UploadGroupAvatar(c *gin.Context) {
 	if group.CreatorID != user.ID {
 		var member models.GroupMember
 		if err := h.db.Where("group_id = ? AND user_id = ? AND role = ?", group.ID, user.ID, models.GroupRoleAdmin).First(&member).Error; err != nil {
-			response.Fail(c, "权限不足", "只有创建者或管理员可以上传组织头像")
+			apperrors.HandleError(c, apperrors.New(apperrors.ErrInternalServer, "权限不足"))
 			return
 		}
 	}
@@ -1002,7 +1004,7 @@ func (h *Handlers) UploadGroupAvatar(c *gin.Context) {
 	// 获取上传的文件
 	file, header, err := c.Request.FormFile("avatar")
 	if err != nil {
-		response.Fail(c, "获取上传文件失败", err.Error())
+		apperrors.HandleError(c, apperrors.New(apperrors.ErrInternalServer, "获取上传文件失败"))
 		return
 	}
 	defer file.Close()
@@ -1018,14 +1020,14 @@ func (h *Handlers) UploadGroupAvatar(c *gin.Context) {
 
 	contentType := header.Header.Get("Content-Type")
 	if !allowedTypes[contentType] {
-		response.Fail(c, "无效的文件类型", "只允许上传 jpeg, jpg, png, gif, webp 格式的图片")
+		apperrors.HandleError(c, apperrors.New(apperrors.ErrInternalServer, "无效的文件类型"))
 		return
 	}
 
 	// 验证文件大小 (最大5MB)
 	maxSize := int64(5 * 1024 * 1024)
 	if header.Size > maxSize {
-		response.Fail(c, "文件过大", "文件大小不能超过5MB")
+		apperrors.HandleError(c, apperrors.New(apperrors.ErrInternalServer, "文件过大"))
 		return
 	}
 
@@ -1050,7 +1052,7 @@ func (h *Handlers) UploadGroupAvatar(c *gin.Context) {
 	// 上传新头像
 	//err = store.Write(fileName, file)
 	//if err != nil {
-	//	response.Fail(c, "上传头像失败", err.Error())
+	//	apperrors.HandleError(c, apperrors.New(apperrors.ErrInternalServer, "上传头像失败")))
 	//	return
 	//}
 	reader, err := config.GlobalStore.UploadFromReader(&lingstorage.UploadFromReaderRequest{
@@ -1082,7 +1084,7 @@ func (h *Handlers) UploadGroupAvatar(c *gin.Context) {
 	// 更新组织头像
 	if err := h.db.Model(&group).Update("avatar", avatarURL).Error; err != nil {
 		//store.Delete(fileName)
-		response.Fail(c, "更新组织头像失败", err.Error())
+		apperrors.HandleError(c, apperrors.New(apperrors.ErrInternalServer, "更新组织头像失败"))
 		return
 	}
 
@@ -1092,40 +1094,17 @@ func (h *Handlers) UploadGroupAvatar(c *gin.Context) {
 	})
 }
 
-// extractKeyFromURL 从URL中提取文件路径
-func extractKeyFromURL(url string) string {
-	if url == "" {
-		return ""
-	}
-
-	if strings.Contains(url, "/avatars/") {
-		parts := strings.Split(url, "/avatars/")
-		if len(parts) > 1 {
-			return "avatars/" + parts[1]
-		}
-	}
-
-	// 简单实现：如果URL包含路径，提取路径部分
-	if strings.Contains(url, "/") {
-		parts := strings.Split(url, "/")
-		if len(parts) > 0 {
-			return strings.Join(parts[len(parts)-2:], "/") // 返回最后两部分（目录+文件名）
-		}
-	}
-	return ""
-}
-
 // GetOverviewConfig 获取组织的概览配置
 func (h *Handlers) GetOverviewConfig(c *gin.Context) {
 	user := models.CurrentUser(c)
 	if user == nil {
-		response.Fail(c, "未授权", "用户未登录")
+		apperrors.HandleError(c, apperrors.New(apperrors.ErrInternalServer, "未授权"))
 		return
 	}
 
 	groupID, err := strconv.ParseUint(c.Param("id"), 10, 32)
 	if err != nil {
-		response.Fail(c, "参数错误", "无效的组织ID")
+		apperrors.HandleError(c, apperrors.New(apperrors.ErrInternalServer, "参数错误"))
 		return
 	}
 
@@ -1133,9 +1112,9 @@ func (h *Handlers) GetOverviewConfig(c *gin.Context) {
 	var group models.Group
 	if err := h.db.First(&group, groupID).Error; err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
-			response.Fail(c, "组织不存在", nil)
+			apperrors.HandleError(c, apperrors.New(apperrors.ErrInternalServer, "组织不存在"))
 		} else {
-			response.Fail(c, "查询失败", err.Error())
+			apperrors.HandleError(c, apperrors.New(apperrors.ErrInternalServer, "查询失败"))
 		}
 		return
 	}
@@ -1144,7 +1123,7 @@ func (h *Handlers) GetOverviewConfig(c *gin.Context) {
 	var member models.GroupMember
 	if err := h.db.Where("group_id = ? AND user_id = ?", group.ID, user.ID).First(&member).Error; err != nil {
 		if group.CreatorID != user.ID {
-			response.Fail(c, "权限不足", "您不是该组织的成员")
+			apperrors.HandleError(c, apperrors.New(apperrors.ErrInternalServer, "权限不足"))
 			return
 		}
 	}
@@ -1152,7 +1131,7 @@ func (h *Handlers) GetOverviewConfig(c *gin.Context) {
 	// 获取配置
 	config, err := models.GetOverviewConfig(h.db, uint(groupID))
 	if err != nil {
-		response.Fail(c, "查询配置失败", err.Error())
+		apperrors.HandleError(c, apperrors.New(apperrors.ErrInternalServer, "查询配置失败"))
 		return
 	}
 
@@ -1160,14 +1139,14 @@ func (h *Handlers) GetOverviewConfig(c *gin.Context) {
 		// 返回null表示没有配置
 		// 返回空配置也可以被短时间缓存
 		c.Header("Cache-Control", "private, max-age=60")
-		response.Success(c, "查询成功", nil)
+		apperrors.RespondSuccess(c, nil)
 		return
 	}
 
 	// 解析配置JSON
 	var configData map[string]interface{}
 	if err := json.Unmarshal(config.Config, &configData); err != nil {
-		response.Fail(c, "解析配置失败", err.Error())
+		apperrors.HandleError(c, apperrors.New(apperrors.ErrInternalServer, "解析配置失败"))
 		return
 	}
 
@@ -1208,20 +1187,20 @@ func (h *Handlers) GetOverviewConfig(c *gin.Context) {
 	c.Header("ETag", etag)
 	c.Header("Vary", "Authorization")
 
-	response.Success(c, "查询成功", result)
+	apperrors.RespondSuccess(c, result)
 }
 
 // SaveOverviewConfig 保存或更新概览配置
 func (h *Handlers) SaveOverviewConfig(c *gin.Context) {
 	user := models.CurrentUser(c)
 	if user == nil {
-		response.Fail(c, "未授权", "用户未登录")
+		apperrors.HandleError(c, apperrors.New(apperrors.ErrInternalServer, "未授权"))
 		return
 	}
 
 	groupID, err := strconv.ParseUint(c.Param("id"), 10, 32)
 	if err != nil {
-		response.Fail(c, "参数错误", "无效的组织ID")
+		apperrors.HandleError(c, apperrors.New(apperrors.ErrInternalServer, "参数错误"))
 		return
 	}
 
@@ -1229,9 +1208,9 @@ func (h *Handlers) SaveOverviewConfig(c *gin.Context) {
 	var group models.Group
 	if err := h.db.First(&group, groupID).Error; err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
-			response.Fail(c, "组织不存在", nil)
+			apperrors.HandleError(c, apperrors.New(apperrors.ErrInternalServer, "组织不存在"))
 		} else {
-			response.Fail(c, "查询失败", err.Error())
+			apperrors.HandleError(c, apperrors.New(apperrors.ErrInternalServer, "查询失败"))
 		}
 		return
 	}
@@ -1239,7 +1218,7 @@ func (h *Handlers) SaveOverviewConfig(c *gin.Context) {
 	if group.CreatorID != user.ID {
 		var member models.GroupMember
 		if err := h.db.Where("group_id = ? AND user_id = ? AND role = ?", group.ID, user.ID, models.GroupRoleAdmin).First(&member).Error; err != nil {
-			response.Fail(c, "权限不足", "只有创建者或管理员可以保存配置")
+			apperrors.HandleError(c, apperrors.New(apperrors.ErrInternalServer, "权限不足"))
 			return
 		}
 	}
@@ -1256,7 +1235,7 @@ func (h *Handlers) SaveOverviewConfig(c *gin.Context) {
 	}
 
 	if err := c.ShouldBindJSON(&req); err != nil {
-		response.Fail(c, "参数错误", err.Error())
+		apperrors.HandleError(c, apperrors.New(apperrors.ErrInternalServer, "参数错误"))
 		return
 	}
 
@@ -1276,14 +1255,14 @@ func (h *Handlers) SaveOverviewConfig(c *gin.Context) {
 	// 保存配置
 	config, err := models.SaveOverviewConfig(h.db, uint(groupID), req.Name, req.Description, configData)
 	if err != nil {
-		response.Fail(c, "保存配置失败", err.Error())
+		apperrors.HandleError(c, apperrors.New(apperrors.ErrInternalServer, "保存配置失败"))
 		return
 	}
 
 	// 解析配置JSON用于响应
 	var configDataResp map[string]interface{}
 	if err := json.Unmarshal(config.Config, &configDataResp); err != nil {
-		response.Fail(c, "解析配置失败", err.Error())
+		apperrors.HandleError(c, apperrors.New(apperrors.ErrInternalServer, "解析配置失败"))
 		return
 	}
 
@@ -1305,20 +1284,20 @@ func (h *Handlers) SaveOverviewConfig(c *gin.Context) {
 		result["footer"] = footer
 	}
 
-	response.Success(c, "保存成功", result)
+	apperrors.RespondSuccess(c, result)
 }
 
 // DeleteOverviewConfig 删除概览配置
 func (h *Handlers) DeleteOverviewConfig(c *gin.Context) {
 	user := models.CurrentUser(c)
 	if user == nil {
-		response.Fail(c, "未授权", "用户未登录")
+		apperrors.HandleError(c, apperrors.New(apperrors.ErrInternalServer, "未授权"))
 		return
 	}
 
 	groupID, err := strconv.ParseUint(c.Param("id"), 10, 32)
 	if err != nil {
-		response.Fail(c, "参数错误", "无效的组织ID")
+		apperrors.HandleError(c, apperrors.New(apperrors.ErrInternalServer, "参数错误"))
 		return
 	}
 
@@ -1326,9 +1305,9 @@ func (h *Handlers) DeleteOverviewConfig(c *gin.Context) {
 	var group models.Group
 	if err := h.db.First(&group, groupID).Error; err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
-			response.Fail(c, "组织不存在", nil)
+			apperrors.HandleError(c, apperrors.New(apperrors.ErrInternalServer, "组织不存在"))
 		} else {
-			response.Fail(c, "查询失败", err.Error())
+			apperrors.HandleError(c, apperrors.New(apperrors.ErrInternalServer, "查询失败"))
 		}
 		return
 	}
@@ -1336,30 +1315,30 @@ func (h *Handlers) DeleteOverviewConfig(c *gin.Context) {
 	if group.CreatorID != user.ID {
 		var member models.GroupMember
 		if err := h.db.Where("group_id = ? AND user_id = ? AND role = ?", group.ID, user.ID, models.GroupRoleAdmin).First(&member).Error; err != nil {
-			response.Fail(c, "权限不足", "只有创建者或管理员可以删除配置")
+			apperrors.HandleError(c, apperrors.New(apperrors.ErrInternalServer, "权限不足"))
 			return
 		}
 	}
 
 	if err := models.DeleteOverviewConfig(h.db, uint(groupID)); err != nil {
-		response.Fail(c, "删除配置失败", err.Error())
+		apperrors.HandleError(c, apperrors.New(apperrors.ErrInternalServer, "删除配置失败"))
 		return
 	}
 
-	response.Success(c, "删除成功", nil)
+	apperrors.RespondSuccess(c, nil)
 }
 
 // GetGroupStatistics 获取组织统计数据
 func (h *Handlers) GetGroupStatistics(c *gin.Context) {
 	user := models.CurrentUser(c)
 	if user == nil {
-		response.Fail(c, "未授权", "用户未登录")
+		apperrors.HandleError(c, apperrors.New(apperrors.ErrInternalServer, "未授权"))
 		return
 	}
 
 	groupID, err := strconv.ParseUint(c.Param("id"), 10, 32)
 	if err != nil {
-		response.Fail(c, "参数错误", "无效的组织ID")
+		apperrors.HandleError(c, apperrors.New(apperrors.ErrInternalServer, "参数错误"))
 		return
 	}
 
@@ -1367,9 +1346,9 @@ func (h *Handlers) GetGroupStatistics(c *gin.Context) {
 	var group models.Group
 	if err := h.db.First(&group, groupID).Error; err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
-			response.Fail(c, "组织不存在", nil)
+			apperrors.HandleError(c, apperrors.New(apperrors.ErrInternalServer, "组织不存在"))
 		} else {
-			response.Fail(c, "查询失败", err.Error())
+			apperrors.HandleError(c, apperrors.New(apperrors.ErrInternalServer, "查询失败"))
 		}
 		return
 	}
@@ -1378,7 +1357,7 @@ func (h *Handlers) GetGroupStatistics(c *gin.Context) {
 	var member models.GroupMember
 	if err := h.db.Where("group_id = ? AND user_id = ?", group.ID, user.ID).First(&member).Error; err != nil {
 		if group.CreatorID != user.ID {
-			response.Fail(c, "权限不足", "您不是该组织的成员")
+			apperrors.HandleError(c, apperrors.New(apperrors.ErrInternalServer, "权限不足"))
 			return
 		}
 	}
@@ -1779,5 +1758,5 @@ func (h *Handlers) GetGroupStatistics(c *gin.Context) {
 		"table":               tableData,
 	}
 
-	response.Success(c, "查询成功", stats)
+	apperrors.RespondSuccess(c, stats)
 }

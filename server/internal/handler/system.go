@@ -1,6 +1,9 @@
 package handlers
 
 import (
+	apperrors "github.com/code-100-precent/LingEcho/pkg/errors"
+	"github.com/code-100-precent/LingEcho/pkg/response"
+
 	"context"
 	"encoding/json"
 	"net/http"
@@ -11,7 +14,6 @@ import (
 	"github.com/code-100-precent/LingEcho/pkg/cache"
 	"github.com/code-100-precent/LingEcho/pkg/config"
 	"github.com/code-100-precent/LingEcho/pkg/constants"
-	"github.com/code-100-precent/LingEcho/pkg/response"
 	"github.com/code-100-precent/LingEcho/pkg/utils"
 	"github.com/gin-gonic/gin"
 )
@@ -20,13 +22,13 @@ import (
 func (h *Handlers) UpdateRateLimiterConfig(c *gin.Context) {
 	//var config middleware.RateLimiterConfig
 	//if err := c.ShouldBindJSON(&config); err != nil {
-	//	response.Fail(c, "invalid request", nil)
+	//	apperrors.HandleError(c, apperrors.New(apperrors.ErrInternalServer, "invalid request"))
 	//	return
 	//}
 
 	// Update rate limiter configuration
 	//middleware.SetRateLimiterConfig(config)
-	response.Success(c, "rate limiter config updated", nil)
+	apperrors.RespondSuccess(c, nil)
 }
 
 // HealthCheck health check endpoint
@@ -193,13 +195,13 @@ func (h *Handlers) SaveVoiceCloneConfig(c *gin.Context) {
 	}
 
 	if err := c.ShouldBindJSON(&req); err != nil {
-		response.Fail(c, "参数错误", err.Error())
+		apperrors.HandleError(c, apperrors.New(apperrors.ErrInternalServer, "参数错误"))
 		return
 	}
 
 	// 验证配置
 	if !h.isConfigValid(req.Provider, req.Config) {
-		response.Fail(c, "配置无效", "请确保填写了所有必需的配置项")
+		apperrors.HandleError(c, apperrors.New(apperrors.ErrInternalServer, "配置无效"))
 		return
 	}
 
@@ -211,21 +213,21 @@ func (h *Handlers) SaveVoiceCloneConfig(c *gin.Context) {
 	case "volcengine":
 		configKey = constants.KEY_VOICE_CLONE_VOLCENGINE_CONFIG
 	default:
-		response.Fail(c, "不支持的提供商", "只支持 xunfei 和 volcengine")
+		apperrors.HandleError(c, apperrors.New(apperrors.ErrInternalServer, "不支持的提供商"))
 		return
 	}
 
 	// 序列化为 JSON
 	configJSON, err := json.Marshal(req.Config)
 	if err != nil {
-		response.Fail(c, "序列化配置失败", err.Error())
+		apperrors.HandleError(c, apperrors.New(apperrors.ErrInternalServer, "序列化配置失败"))
 		return
 	}
 
 	// 保存到数据库
 	utils.SetValue(h.db, configKey, string(configJSON), "json", true, true)
 
-	response.Success(c, "配置保存成功", nil)
+	apperrors.RespondSuccess(c, nil)
 }
 
 // SystemStatus 系统状态检查接口，检查数据库、缓存、API、存储服务
@@ -270,7 +272,7 @@ func (h *Handlers) SystemStatus(c *gin.Context) {
 	storageStatus = err == nil
 	status["storage"] = storageStatus
 
-	response.Success(c, "系统状态检查完成", status)
+	apperrors.RespondSuccess(c, status)
 }
 
 // DashboardMetrics 获取仪表板指标数据（PV、UV、API调用次数、活跃用户）
@@ -357,5 +359,5 @@ func (h *Handlers) DashboardMetrics(c *gin.Context) {
 		},
 	}
 
-	response.Success(c, "获取仪表板指标成功", metrics)
+	apperrors.RespondSuccess(c, metrics)
 }

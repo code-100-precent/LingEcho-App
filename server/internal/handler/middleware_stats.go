@@ -2,8 +2,8 @@ package handlers
 
 import (
 	"github.com/code-100-precent/LingEcho/pkg/config"
+	apperrors "github.com/code-100-precent/LingEcho/pkg/errors"
 	"github.com/code-100-precent/LingEcho/pkg/middleware"
-	"github.com/code-100-precent/LingEcho/pkg/response"
 	"github.com/gin-gonic/gin"
 )
 
@@ -11,7 +11,7 @@ import (
 func (h *Handlers) handleGetMiddlewareStats(c *gin.Context) {
 	stats := middleware.GetGlobalMiddlewareStats()
 
-	response.Success(c, "Middleware statistics retrieved successfully", gin.H{
+	apperrors.RespondSuccess(c, gin.H{
 		"stats": stats,
 	})
 }
@@ -20,42 +20,42 @@ func (h *Handlers) handleGetMiddlewareStats(c *gin.Context) {
 func (h *Handlers) handleUpdateRateLimitConfig(c *gin.Context) {
 	var cfg config.RateLimiterConfig
 	if err := c.ShouldBindJSON(&cfg); err != nil {
-		response.Fail(c, "Invalid configuration format", err)
+		apperrors.HandleError(c, apperrors.Wrap(err, apperrors.ErrInvalidInput, "Invalid configuration format"))
 		return
 	}
 
 	mgr := middleware.GetGlobalMiddlewareManager()
 	mgr.UpdateRateLimitConfig(cfg)
 
-	response.Success(c, "Rate limit configuration updated successfully", nil)
+	apperrors.RespondSuccess(c, nil)
 }
 
 // handleUpdateTimeoutConfig 更新超时配置
 func (h *Handlers) handleUpdateTimeoutConfig(c *gin.Context) {
 	var cfg config.TimeoutConfig
 	if err := c.ShouldBindJSON(&cfg); err != nil {
-		response.Fail(c, "Invalid configuration format", err)
+		apperrors.HandleError(c, apperrors.Wrap(err, apperrors.ErrInvalidInput, "Invalid configuration format"))
 		return
 	}
 
 	mgr := middleware.GetGlobalMiddlewareManager()
 	mgr.UpdateTimeoutConfig(cfg)
 
-	response.Success(c, "Timeout configuration updated successfully", nil)
+	apperrors.RespondSuccess(c, nil)
 }
 
 // handleUpdateCircuitBreakerConfig 更新熔断器配置
 func (h *Handlers) handleUpdateCircuitBreakerConfig(c *gin.Context) {
 	var cfg config.CircuitBreakerConfig
 	if err := c.ShouldBindJSON(&cfg); err != nil {
-		response.Fail(c, "Invalid configuration format", err)
+		apperrors.HandleError(c, apperrors.Wrap(err, apperrors.ErrInvalidInput, "Invalid configuration format"))
 		return
 	}
 
 	mgr := middleware.GetGlobalMiddlewareManager()
 	mgr.UpdateCircuitBreakerConfig(cfg)
 
-	response.Success(c, "Circuit breaker configuration updated successfully", nil)
+	apperrors.RespondSuccess(c, nil)
 }
 
 // registerMiddlewareRoutes 注册中间件相关路由

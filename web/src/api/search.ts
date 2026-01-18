@@ -1,4 +1,4 @@
-import { post, ApiResponse } from '@/utils/request'
+import { BaseApiService } from './base.service'
 
 // 后端搜索请求接口
 export interface SearchRequest {
@@ -104,18 +104,35 @@ export interface BackendSearchResult {
   }>
 }
 
-// 执行搜索
-export const search = async (request: SearchRequest): Promise<ApiResponse<BackendSearchResult>> => {
-  return post('/search', request)
+class SearchService extends BaseApiService {
+  constructor() {
+    super('/search')
+  }
+
+  // 执行搜索
+  async search(request: SearchRequest): Promise<BackendSearchResult> {
+    const response = await this.post<BackendSearchResult>('', request)
+    return this.handleResponse(response)
+  }
+
+  // 自动补全
+  async autoComplete(keyword: string): Promise<string[]> {
+    const response = await this.post<string[]>('/auto-complete', { keyword })
+    return this.handleResponse(response)
+  }
+
+  // 搜索建议
+  async getSuggestions(keyword: string): Promise<string[]> {
+    const response = await this.post<string[]>('/suggest', { keyword })
+    return this.handleResponse(response)
+  }
 }
 
-// 自动补全
-export const autoComplete = async (keyword: string): Promise<ApiResponse<string[]>> => {
-  return post('/search/auto-complete', { keyword })
-}
+// 导出单例
+export const searchService = new SearchService()
 
-// 搜索建议
-export const getSuggestions = async (keyword: string): Promise<ApiResponse<string[]>> => {
-  return post('/search/suggest', { keyword })
-}
+// 兼容性导出
+export const search = searchService.search.bind(searchService)
+export const autoComplete = searchService.autoComplete.bind(searchService)
+export const getSuggestions = searchService.getSuggestions.bind(searchService)
 

@@ -1,4 +1,4 @@
-import { get, post, put, del, ApiResponse } from '@/utils/request'
+import { BaseApiService } from './base.service'
 
 // 配额类型
 export type QuotaType = 
@@ -74,55 +74,92 @@ export interface UpdateGroupQuotaRequest {
   description?: string
 }
 
-// 获取用户配额列表
-export const getUserQuotas = async (): Promise<ApiResponse<UserQuota[]>> => {
-  return get('/quota/user')
+class QuotaService extends BaseApiService {
+  constructor() {
+    super('/quota')
+  }
+
+  // 获取用户配额列表
+  async getUserQuotas(): Promise<UserQuota[]> {
+    const response = await this.get<UserQuota[]>('/user', {}, { enabled: true, ttl: 60000 })
+    return this.handleResponse(response)
+  }
+
+  // 获取用户配额详情
+  async getUserQuota(type: QuotaType): Promise<UserQuota> {
+    const response = await this.get<UserQuota>(`/user/${type}`, {}, { enabled: true, ttl: 30000 })
+    return this.handleResponse(response)
+  }
+
+  // 创建用户配额
+  async createUserQuota(data: CreateUserQuotaRequest): Promise<UserQuota> {
+    const response = await this.post<UserQuota>('/user', data)
+    this.invalidateCache()
+    return this.handleResponse(response)
+  }
+
+  // 更新用户配额
+  async updateUserQuota(type: QuotaType, data: UpdateUserQuotaRequest): Promise<UserQuota> {
+    const response = await this.put<UserQuota>(`/user/${type}`, data)
+    this.invalidateCache()
+    return this.handleResponse(response)
+  }
+
+  // 删除用户配额
+  async deleteUserQuota(type: QuotaType): Promise<null> {
+    const response = await this.delete<null>(`/user/${type}`)
+    this.invalidateCache()
+    return this.handleResponse(response)
+  }
+
+  // 获取组织配额列表
+  async getGroupQuotas(groupId: number): Promise<GroupQuota[]> {
+    const response = await this.get<GroupQuota[]>(`/group/${groupId}`, {}, { enabled: true, ttl: 60000 })
+    return this.handleResponse(response)
+  }
+
+  // 获取组织配额详情
+  async getGroupQuota(groupId: number, type: QuotaType): Promise<GroupQuota> {
+    const response = await this.get<GroupQuota>(`/group/${groupId}/${type}`, {}, { enabled: true, ttl: 30000 })
+    return this.handleResponse(response)
+  }
+
+  // 创建组织配额
+  async createGroupQuota(groupId: number, data: CreateGroupQuotaRequest): Promise<GroupQuota> {
+    const response = await this.post<GroupQuota>(`/group/${groupId}`, data)
+    this.invalidateCache()
+    return this.handleResponse(response)
+  }
+
+  // 更新组织配额
+  async updateGroupQuota(groupId: number, type: QuotaType, data: UpdateGroupQuotaRequest): Promise<GroupQuota> {
+    const response = await this.put<GroupQuota>(`/group/${groupId}/${type}`, data)
+    this.invalidateCache()
+    return this.handleResponse(response)
+  }
+
+  // 删除组织配额
+  async deleteGroupQuota(groupId: number, type: QuotaType): Promise<null> {
+    const response = await this.delete<null>(`/group/${groupId}/${type}`)
+    this.invalidateCache()
+    return this.handleResponse(response)
+  }
 }
 
-// 获取用户配额详情
-export const getUserQuota = async (type: QuotaType): Promise<ApiResponse<UserQuota>> => {
-  return get(`/quota/user/${type}`)
-}
+// 导出单例
+export const quotaService = new QuotaService()
 
-// 创建用户配额
-export const createUserQuota = async (data: CreateUserQuotaRequest): Promise<ApiResponse<UserQuota>> => {
-  return post('/quota/user', data)
-}
-
-// 更新用户配额
-export const updateUserQuota = async (type: QuotaType, data: UpdateUserQuotaRequest): Promise<ApiResponse<UserQuota>> => {
-  return put(`/quota/user/${type}`, data)
-}
-
-// 删除用户配额
-export const deleteUserQuota = async (type: QuotaType): Promise<ApiResponse<null>> => {
-  return del(`/quota/user/${type}`)
-}
-
-// 获取组织配额列表
-export const getGroupQuotas = async (groupId: number): Promise<ApiResponse<GroupQuota[]>> => {
-  return get(`/quota/group/${groupId}`)
-}
-
-// 获取组织配额详情
-export const getGroupQuota = async (groupId: number, type: QuotaType): Promise<ApiResponse<GroupQuota>> => {
-  return get(`/quota/group/${groupId}/${type}`)
-}
-
-// 创建组织配额
-export const createGroupQuota = async (groupId: number, data: CreateGroupQuotaRequest): Promise<ApiResponse<GroupQuota>> => {
-  return post(`/quota/group/${groupId}`, data)
-}
-
-// 更新组织配额
-export const updateGroupQuota = async (groupId: number, type: QuotaType, data: UpdateGroupQuotaRequest): Promise<ApiResponse<GroupQuota>> => {
-  return put(`/quota/group/${groupId}/${type}`, data)
-}
-
-// 删除组织配额
-export const deleteGroupQuota = async (groupId: number, type: QuotaType): Promise<ApiResponse<null>> => {
-  return del(`/quota/group/${groupId}/${type}`)
-}
+// 兼容性导出
+export const getUserQuotas = quotaService.getUserQuotas.bind(quotaService)
+export const getUserQuota = quotaService.getUserQuota.bind(quotaService)
+export const createUserQuota = quotaService.createUserQuota.bind(quotaService)
+export const updateUserQuota = quotaService.updateUserQuota.bind(quotaService)
+export const deleteUserQuota = quotaService.deleteUserQuota.bind(quotaService)
+export const getGroupQuotas = quotaService.getGroupQuotas.bind(quotaService)
+export const getGroupQuota = quotaService.getGroupQuota.bind(quotaService)
+export const createGroupQuota = quotaService.createGroupQuota.bind(quotaService)
+export const updateGroupQuota = quotaService.updateGroupQuota.bind(quotaService)
+export const deleteGroupQuota = quotaService.deleteGroupQuota.bind(quotaService)
 
 // 获取配额类型标签
 export const getQuotaTypeLabel = (type: QuotaType): string => {

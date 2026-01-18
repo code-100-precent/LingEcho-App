@@ -1,4 +1,4 @@
-import { get, post } from '@/utils/request'
+import { BaseApiService } from './base.service'
 
 // 训练文本相关接口
 export interface TrainingText {
@@ -100,62 +100,100 @@ export interface DeleteVoiceCloneRequest {
   id: number
 }
 
-// 获取训练文本列表
-export const getTrainingTexts = () => {
-  return get<TrainingText>('/voice/training-texts')
+class VoiceTrainingService extends BaseApiService {
+  constructor() {
+    super('/voice')
+  }
+
+  // 获取训练文本列表
+  async getTrainingTexts(): Promise<TrainingText> {
+    const response = await this.get<TrainingText>('/training-texts', {}, { enabled: true, ttl: 300000 })
+    return this.handleResponse(response)
+  }
+
+  // 获取语音克隆列表
+  async getVoiceClones(): Promise<VoiceClone[]> {
+    const response = await this.get<VoiceClone[]>('/clones', {}, { enabled: true, ttl: 60000 })
+    return this.handleResponse(response)
+  }
+
+  // 获取合成历史
+  async getSynthesisHistory(): Promise<SynthesisHistory[]> {
+    const response = await this.get<SynthesisHistory[]>('/synthesis/history', {}, { enabled: true, ttl: 60000 })
+    return this.handleResponse(response)
+  }
+
+  // 创建训练任务
+  async createTrainingTask(data: CreateTaskRequest): Promise<{ task_id: string }> {
+    const response = await this.post<{ task_id: string }>('/training/create', data)
+    this.invalidateCache()
+    return this.handleResponse(response)
+  }
+
+  // 提交音频文件
+  async submitAudio(data: SubmitAudioRequest): Promise<any> {
+    const formData = new FormData()
+    formData.append('task_id', data.task_id)
+    formData.append('text_seg_id', data.text_seg_id.toString())
+    formData.append('audio_file', data.audio_file)
+    
+    const response = await this.post('/training/submit-audio', formData)
+    this.invalidateCache()
+    return this.handleResponse(response)
+  }
+
+  // 查询任务状态
+  async queryTaskStatus(data: QueryTaskRequest): Promise<VoiceClone> {
+    const response = await this.get<VoiceClone>('/training/status', { params: { task_id: data.task_id } })
+    return this.handleResponse(response)
+  }
+
+  // 语音合成
+  async synthesizeVoice(data: SynthesizeRequest): Promise<{ audio_url: string }> {
+    const response = await this.post<{ audio_url: string }>('/synthesize', data)
+    return this.handleResponse(response)
+  }
+
+  // 试听语音克隆
+  async auditionVoiceClone(id: number): Promise<{ audio_url: string }> {
+    const response = await this.get<{ audio_url: string }>(`/clones/${id}/audition`)
+    return this.handleResponse(response)
+  }
+
+  // 更新语音克隆
+  async updateVoiceClone(data: UpdateVoiceCloneRequest): Promise<any> {
+    const response = await this.post('/clones/update', data)
+    this.invalidateCache()
+    return this.handleResponse(response)
+  }
+
+  // 删除语音克隆
+  async deleteVoiceClone(data: DeleteVoiceCloneRequest): Promise<any> {
+    const response = await this.post('/clones/delete', data)
+    this.invalidateCache()
+    return this.handleResponse(response)
+  }
+
+  // 删除合成历史记录
+  async deleteSynthesisRecord(id: number): Promise<any> {
+    const response = await this.post('/synthesis/delete', { id })
+    this.invalidateCache()
+    return this.handleResponse(response)
+  }
 }
 
-// 获取语音克隆列表
-export const getVoiceClones = () => {
-  return get<VoiceClone[]>('/voice/clones')
-}
+// 导出单例
+export const voiceTrainingService = new VoiceTrainingService()
 
-// 获取合成历史
-export const getSynthesisHistory = () => {
-  return get<SynthesisHistory[]>('/voice/synthesis/history')
-}
-
-// 创建训练任务
-export const createTrainingTask = (data: CreateTaskRequest) => {
-  return post<{ task_id: string }>('/voice/training/create', data)
-}
-
-// 提交音频文件
-export const submitAudio = (data: SubmitAudioRequest) => {
-  const formData = new FormData()
-  formData.append('task_id', data.task_id)
-  formData.append('text_seg_id', data.text_seg_id.toString())
-  formData.append('audio_file', data.audio_file)
-  
-  return post('/voice/training/submit-audio', formData)
-}
-
-// 查询任务状态
-export const queryTaskStatus = (data: QueryTaskRequest) => {
-  return get<VoiceClone>(`/voice/training/status?task_id=${data.task_id}`)
-}
-
-// 语音合成
-export const synthesizeVoice = (data: SynthesizeRequest) => {
-  return post<{ audio_url: string }>('/voice/synthesize', data)
-}
-
-// 试听语音克隆
-export const auditionVoiceClone = (id: number) => {
-  return get<{ audio_url: string }>(`/voice/clones/${id}/audition`)
-}
-
-// 更新语音克隆
-export const updateVoiceClone = (data: UpdateVoiceCloneRequest) => {
-  return post('/voice/clones/update', data)
-}
-
-// 删除语音克隆
-export const deleteVoiceClone = (data: DeleteVoiceCloneRequest) => {
-  return post('/voice/clones/delete', data)
-}
-
-// 删除合成历史记录
-export const deleteSynthesisRecord = (id: number) => {
-  return post('/voice/synthesis/delete', { id })
-}
+// 兼容性导出
+export const getTrainingTexts = voiceTrainingService.getTrainingTexts.bind(voiceTrainingService)
+export const getVoiceClones = voiceTrainingService.getVoiceClones.bind(voiceTrainingService)
+export const getSynthesisHistory = voiceTrainingService.getSynthesisHistory.bind(voiceTrainingService)
+export const createTrainingTask = voiceTrainingService.createTrainingTask.bind(voiceTrainingService)
+export const submitAudio = voiceTrainingService.submitAudio.bind(voiceTrainingService)
+export const queryTaskStatus = voiceTrainingService.queryTaskStatus.bind(voiceTrainingService)
+export const synthesizeVoice = voiceTrainingService.synthesizeVoice.bind(voiceTrainingService)
+export const auditionVoiceClone = voiceTrainingService.auditionVoiceClone.bind(voiceTrainingService)
+export const updateVoiceClone = voiceTrainingService.updateVoiceClone.bind(voiceTrainingService)
+export const deleteVoiceClone = voiceTrainingService.deleteVoiceClone.bind(voiceTrainingService)
+export const deleteSynthesisRecord = voiceTrainingService.deleteSynthesisRecord.bind(voiceTrainingService)

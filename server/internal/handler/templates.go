@@ -1,6 +1,9 @@
 package handlers
 
 import (
+	apperrors "github.com/code-100-precent/LingEcho/pkg/errors"
+	"github.com/code-100-precent/LingEcho/pkg/response"
+
 	"context"
 	"fmt"
 	_ "net/http"
@@ -12,7 +15,6 @@ import (
 	"github.com/code-100-precent/LingEcho/pkg/constants"
 	jsPkg "github.com/code-100-precent/LingEcho/pkg/js"
 	"github.com/code-100-precent/LingEcho/pkg/logger"
-	"github.com/code-100-precent/LingEcho/pkg/response"
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
 	"go.uber.org/zap"
@@ -23,13 +25,13 @@ import (
 func (h *Handlers) CreateJSTemplate(c *gin.Context) {
 	user := models.CurrentUser(c)
 	if user == nil {
-		response.Fail(c, "User not logged in", nil)
+		apperrors.HandleError(c, apperrors.New(apperrors.ErrInternalServer, "User not logged in"))
 		return
 	}
 
 	var template models.JSTemplate
 	if err := c.ShouldBindJSON(&template); err != nil {
-		response.Fail(c, "Invalid parameters: "+err.Error(), nil)
+		apperrors.HandleError(c, apperrors.New(apperrors.ErrInvalidInput, "Invalid parameters: "+err.Error()))
 		return
 	}
 
@@ -42,14 +44,14 @@ func (h *Handlers) CreateJSTemplate(c *gin.Context) {
 	if template.GroupID != nil {
 		var group models.Group
 		if err := h.db.Where("id = ?", *template.GroupID).First(&group).Error; err != nil {
-			response.Fail(c, "Organization not found", nil)
+			apperrors.HandleError(c, apperrors.New(apperrors.ErrInternalServer, "Organization not found"))
 			return
 		}
 		// 检查用户是否是组织成员或创建者
 		if group.CreatorID != user.ID {
 			var member models.GroupMember
 			if err := h.db.Where("group_id = ? AND user_id = ?", *template.GroupID, user.ID).First(&member).Error; err != nil {
-				response.Fail(c, "Insufficient permissions", "You are not a member of this organization")
+				apperrors.HandleError(c, apperrors.New(apperrors.ErrInternalServer, "Insufficient permissions"))
 				return
 			}
 		}
@@ -60,9 +62,7 @@ func (h *Handlers) CreateJSTemplate(c *gin.Context) {
 		whitelist := jsPkg.DefaultWhitelist
 		isValid, violations := jsPkg.ValidateAST(template.Content, whitelist)
 		if !isValid {
-			response.Fail(c, "代码不符合安全规范", gin.H{
-				"violations": violations,
-			})
+			apperrors.HandleError(c, apperrors.New(apperrors.ErrInvalidInput, "代码不符合安全规范").WithDetails("violations", violations))
 			return
 		}
 
@@ -82,9 +82,7 @@ func (h *Handlers) CreateJSTemplate(c *gin.Context) {
 
 		isQuotaValid, quotaViolations := jsPkg.CheckResourceQuota(template.Content, maxExecutionTime, maxMemoryMB, maxAPICalls)
 		if !isQuotaValid {
-			response.Fail(c, "代码超出资源配额限制", gin.H{
-				"violations": quotaViolations,
-			})
+			apperrors.HandleError(c, apperrors.New(apperrors.ErrInvalidInput, "代码超出资源配额限制").WithDetails("violations", quotaViolations))
 			return
 		}
 	}
@@ -99,7 +97,7 @@ func (h *Handlers) CreateJSTemplate(c *gin.Context) {
 
 	db := c.MustGet(constants.DbField).(*gorm.DB)
 	if err := models.CreateJSTemplate(db, &template); err != nil {
-		response.Fail(c, "Failed to create template: "+err.Error(), nil)
+		apperrors.HandleError(c, apperrors.Wrap(err, apperrors.ErrInternalServer, "Failed to create template"))
 		return
 	}
 
@@ -120,7 +118,7 @@ func (h *Handlers) CreateJSTemplate(c *gin.Context) {
 		// 不阻止模板创建，只记录警告
 	}
 
-	response.Success(c, "Template created successfully", template)
+	apperrors.RespondSuccess(c, template)
 }
 
 // GetJSTemplate gets a single JS template
@@ -130,38 +128,38 @@ func (h *Handlers) GetJSTemplate(c *gin.Context) {
 
 	user := models.CurrentUser(c)
 	if user == nil {
-		response.Fail(c, "User not logged in", nil)
+		apperrors.HandleError(c, apperrors.New(apperrors.ErrInternalServer, "User not logged in"))
 		return
 	}
 
 	template, err := models.GetJSTemplateByID(db, id)
 	if err != nil {
-		response.Fail(c, "Template not found", nil)
+		apperrors.HandleError(c, apperrors.New(apperrors.ErrInternalServer, "Template not found"))
 		return
 	}
 
 	// 检查权限：用户自己的模板或组织共享的模板（用户是组织成员）
 	if template.UserID != user.ID {
 		if template.GroupID == nil {
-			response.Fail(c, "Insufficient permissions", nil)
+			apperrors.HandleError(c, apperrors.New(apperrors.ErrInternalServer, "Insufficient permissions"))
 			return
 		}
 		// 检查用户是否是组织成员
 		var group models.Group
 		if err := h.db.Where("id = ?", *template.GroupID).First(&group).Error; err != nil {
-			response.Fail(c, "Organization not found", nil)
+			apperrors.HandleError(c, apperrors.New(apperrors.ErrInternalServer, "Organization not found"))
 			return
 		}
 		if group.CreatorID != user.ID {
 			var member models.GroupMember
 			if err := h.db.Where("group_id = ? AND user_id = ?", *template.GroupID, user.ID).First(&member).Error; err != nil {
-				response.Fail(c, "Insufficient permissions", "You are not a member of this organization")
+				apperrors.HandleError(c, apperrors.New(apperrors.ErrInternalServer, "Insufficient permissions"))
 				return
 			}
 		}
 	}
 
-	response.Success(c, "Template retrieved successfully", template)
+	apperrors.RespondSuccess(c, template)
 }
 
 // GetJSTemplateByName gets JS template list by name (because names may be duplicated)
@@ -171,11 +169,11 @@ func (h *Handlers) GetJSTemplateByName(c *gin.Context) {
 
 	templates, err := models.GetJSTemplatesByName(db, name)
 	if err != nil {
-		response.Fail(c, "Template not found", nil)
+		apperrors.HandleError(c, apperrors.New(apperrors.ErrInternalServer, "Template not found"))
 		return
 	}
 
-	response.Success(c, "Templates retrieved successfully", templates)
+	apperrors.RespondSuccess(c, templates)
 }
 
 // ListJSTemplates gets JS template list
@@ -183,7 +181,7 @@ func (h *Handlers) ListJSTemplates(c *gin.Context) {
 	db := c.MustGet(constants.DbField).(*gorm.DB)
 	user := models.CurrentUser(c)
 	if user == nil {
-		response.Fail(c, "User not logged in", nil)
+		apperrors.HandleError(c, apperrors.New(apperrors.ErrInternalServer, "User not logged in"))
 		return
 	}
 	userId := user.ID
@@ -265,13 +263,13 @@ func (h *Handlers) UpdateJSTemplate(c *gin.Context) {
 	// 检查模板是否存在
 	template, err := models.GetJSTemplateByID(db, id)
 	if err != nil {
-		response.Fail(c, "Template not found", nil)
+		apperrors.HandleError(c, apperrors.New(apperrors.ErrInternalServer, "Template not found"))
 		return
 	}
 
 	user := models.CurrentUser(c)
 	if user == nil {
-		response.Fail(c, "User not logged in", nil)
+		apperrors.HandleError(c, apperrors.New(apperrors.ErrInternalServer, "User not logged in"))
 		return
 	}
 	userId := user.ID
@@ -279,19 +277,19 @@ func (h *Handlers) UpdateJSTemplate(c *gin.Context) {
 	// 检查权限：只有创建者或组织管理员可以更新
 	if template.UserID != userId {
 		if template.GroupID == nil {
-			response.Fail(c, "Insufficient permissions", nil)
+			apperrors.HandleError(c, apperrors.New(apperrors.ErrInternalServer, "Insufficient permissions"))
 			return
 		}
 		// 检查用户是否是组织创建者或管理员
 		var group models.Group
 		if err := h.db.Where("id = ?", *template.GroupID).First(&group).Error; err != nil {
-			response.Fail(c, "Organization not found", nil)
+			apperrors.HandleError(c, apperrors.New(apperrors.ErrInternalServer, "Organization not found"))
 			return
 		}
 		if group.CreatorID != userId {
 			var member models.GroupMember
 			if err := h.db.Where("group_id = ? AND user_id = ? AND role = ?", *template.GroupID, userId, models.GroupRoleAdmin).First(&member).Error; err != nil {
-				response.Fail(c, "Insufficient permissions", "Only creator or admin can update organization-shared templates")
+				apperrors.HandleError(c, apperrors.New(apperrors.ErrInternalServer, "Insufficient permissions"))
 				return
 			}
 		}
@@ -344,13 +342,13 @@ func (h *Handlers) UpdateJSTemplate(c *gin.Context) {
 			groupID := uint(groupIDVal.(float64))
 			var group models.Group
 			if err := h.db.Where("id = ?", groupID).First(&group).Error; err != nil {
-				response.Fail(c, "Organization not found", nil)
+				apperrors.HandleError(c, apperrors.New(apperrors.ErrInternalServer, "Organization not found"))
 				return
 			}
 			if group.CreatorID != userId {
 				var member models.GroupMember
 				if err := h.db.Where("group_id = ? AND user_id = ?", groupID, userId).First(&member).Error; err != nil {
-					response.Fail(c, "Insufficient permissions", "You are not a member of this organization")
+					apperrors.HandleError(c, apperrors.New(apperrors.ErrInternalServer, "Insufficient permissions"))
 					return
 				}
 			}
@@ -412,7 +410,7 @@ func (h *Handlers) UpdateJSTemplate(c *gin.Context) {
 	cacheKey2 := fmt.Sprintf("js:template:loader:%s", updatedTemplate.JsSourceID)
 	cacheClient.Delete(ctx, cacheKey2)
 
-	response.Success(c, "Template updated successfully", updatedTemplate)
+	apperrors.RespondSuccess(c, updatedTemplate)
 }
 
 // DeleteJSTemplate deletes JS template
@@ -423,37 +421,37 @@ func (h *Handlers) DeleteJSTemplate(c *gin.Context) {
 	// 检查模板是否存在
 	template, err := models.GetJSTemplateByID(db, id)
 	if err != nil {
-		response.Fail(c, "Template not found", nil)
+		apperrors.HandleError(c, apperrors.New(apperrors.ErrInternalServer, "Template not found"))
 		return
 	}
 
 	user := models.CurrentUser(c)
 	if user == nil {
-		response.Fail(c, "User not logged in", nil)
+		apperrors.HandleError(c, apperrors.New(apperrors.ErrInternalServer, "User not logged in"))
 		return
 	}
 	userId := user.ID
 	if template.Type == "default" {
-		response.Fail(c, "Cannot delete default template", nil)
+		apperrors.HandleError(c, apperrors.New(apperrors.ErrInternalServer, "Cannot delete default template"))
 		return
 	}
 
 	// 检查权限：只有创建者或组织管理员可以删除
 	if template.UserID != userId {
 		if template.GroupID == nil {
-			response.Fail(c, "Insufficient permissions", nil)
+			apperrors.HandleError(c, apperrors.New(apperrors.ErrInternalServer, "Insufficient permissions"))
 			return
 		}
 		// 检查用户是否是组织创建者或管理员
 		var group models.Group
 		if err := h.db.Where("id = ?", *template.GroupID).First(&group).Error; err != nil {
-			response.Fail(c, "Organization not found", nil)
+			apperrors.HandleError(c, apperrors.New(apperrors.ErrInternalServer, "Organization not found"))
 			return
 		}
 		if group.CreatorID != userId {
 			var member models.GroupMember
 			if err := h.db.Where("group_id = ? AND user_id = ? AND role = ?", *template.GroupID, userId, models.GroupRoleAdmin).First(&member).Error; err != nil {
-				response.Fail(c, "Insufficient permissions", "Only creator or admin can delete organization-shared templates")
+				apperrors.HandleError(c, apperrors.New(apperrors.ErrInternalServer, "Insufficient permissions"))
 				return
 			}
 		}
@@ -464,7 +462,7 @@ func (h *Handlers) DeleteJSTemplate(c *gin.Context) {
 		return
 	}
 
-	response.Success(c, "Template deleted successfully", nil)
+	apperrors.RespondSuccess(c, nil)
 }
 
 // ListDefaultJSTemplates gets default template list
@@ -512,7 +510,7 @@ func (h *Handlers) ListCustomJSTemplates(c *gin.Context) {
 	db := c.MustGet(constants.DbField).(*gorm.DB)
 	user := models.CurrentUser(c)
 	if user == nil {
-		response.Fail(c, "User not logged in", nil)
+		apperrors.HandleError(c, apperrors.New(apperrors.ErrInternalServer, "User not logged in"))
 		return
 	}
 	userId := user.ID
@@ -558,7 +556,7 @@ func (h *Handlers) SearchJSTemplates(c *gin.Context) {
 	db := c.MustGet(constants.DbField).(*gorm.DB)
 	user := models.CurrentUser(c)
 	if user == nil {
-		response.Fail(c, "User not logged in", nil)
+		apperrors.HandleError(c, apperrors.New(apperrors.ErrInternalServer, "User not logged in"))
 		return
 	}
 	userId := user.ID
@@ -610,13 +608,13 @@ func (h *Handlers) TriggerJSTemplateWebhook(c *gin.Context) {
 	// 查找模板
 	template, err := models.GetJSTemplateByJsSourceID(db, jsSourceID)
 	if err != nil {
-		response.Fail(c, "Template not found", nil)
+		apperrors.HandleError(c, apperrors.New(apperrors.ErrInternalServer, "Template not found"))
 		return
 	}
 
 	// 检查Webhook是否启用
 	if !template.WebhookEnabled {
-		response.Fail(c, "Webhook is not enabled for this template", nil)
+		apperrors.HandleError(c, apperrors.New(apperrors.ErrInternalServer, "Webhook is not enabled for this template"))
 		return
 	}
 
@@ -627,7 +625,7 @@ func (h *Handlers) TriggerJSTemplateWebhook(c *gin.Context) {
 
 	// 验证签名
 	if err := webhookManager.VerifyWebhookSignature(c, template.WebhookSecret); err != nil {
-		response.Fail(c, "Webhook signature verification failed", err.Error())
+		apperrors.HandleError(c, apperrors.New(apperrors.ErrInternalServer, "Webhook signature verification failed"))
 		return
 	}
 
@@ -638,11 +636,11 @@ func (h *Handlers) TriggerJSTemplateWebhook(c *gin.Context) {
 	}
 	isDuplicate, err := webhookManager.CheckNonceDuplicate(ctx, nonce, template.ID)
 	if err != nil {
-		response.Fail(c, "Failed to check nonce", err.Error())
+		apperrors.HandleError(c, apperrors.New(apperrors.ErrInternalServer, "Failed to check nonce"))
 		return
 	}
 	if isDuplicate {
-		response.Fail(c, "Duplicate request", "This request has already been processed")
+		apperrors.HandleError(c, apperrors.New(apperrors.ErrInternalServer, "Duplicate request"))
 		return
 	}
 
@@ -653,11 +651,11 @@ func (h *Handlers) TriggerJSTemplateWebhook(c *gin.Context) {
 	}
 	cachedResult, isIdempotent, err := webhookManager.CheckIdempotency(ctx, requestID, template.ID)
 	if err != nil {
-		response.Fail(c, "Failed to check idempotency", err.Error())
+		apperrors.HandleError(c, apperrors.New(apperrors.ErrInternalServer, "Failed to check idempotency"))
 		return
 	}
 	if isIdempotent {
-		response.Success(c, "Request processed (idempotent)", cachedResult)
+		apperrors.RespondSuccess(c, cachedResult)
 		return
 	}
 
@@ -695,7 +693,7 @@ func (h *Handlers) TriggerJSTemplateWebhook(c *gin.Context) {
 		}
 	}
 
-	response.Success(c, "Webhook triggered successfully", result)
+	apperrors.RespondSuccess(c, result)
 }
 
 // ========== JS模板版本管理相关 ==========
@@ -707,31 +705,31 @@ func (h *Handlers) ListJSTemplateVersions(c *gin.Context) {
 
 	user := models.CurrentUser(c)
 	if user == nil {
-		response.Fail(c, "User not logged in", nil)
+		apperrors.HandleError(c, apperrors.New(apperrors.ErrInternalServer, "User not logged in"))
 		return
 	}
 
 	// 检查模板权限
 	template, err := models.GetJSTemplateByID(db, templateID)
 	if err != nil {
-		response.Fail(c, "Template not found", nil)
+		apperrors.HandleError(c, apperrors.New(apperrors.ErrInternalServer, "Template not found"))
 		return
 	}
 
 	if template.UserID != user.ID {
 		if template.GroupID == nil {
-			response.Fail(c, "Insufficient permissions", nil)
+			apperrors.HandleError(c, apperrors.New(apperrors.ErrInternalServer, "Insufficient permissions"))
 			return
 		}
 		var group models.Group
 		if err := h.db.Where("id = ?", *template.GroupID).First(&group).Error; err != nil {
-			response.Fail(c, "Organization not found", nil)
+			apperrors.HandleError(c, apperrors.New(apperrors.ErrInternalServer, "Organization not found"))
 			return
 		}
 		if group.CreatorID != user.ID {
 			var member models.GroupMember
 			if err := h.db.Where("group_id = ? AND user_id = ?", *template.GroupID, user.ID).First(&member).Error; err != nil {
-				response.Fail(c, "Insufficient permissions", nil)
+				apperrors.HandleError(c, apperrors.New(apperrors.ErrInternalServer, "Insufficient permissions"))
 				return
 			}
 		}
@@ -781,31 +779,31 @@ func (h *Handlers) GetJSTemplateVersion(c *gin.Context) {
 
 	user := models.CurrentUser(c)
 	if user == nil {
-		response.Fail(c, "User not logged in", nil)
+		apperrors.HandleError(c, apperrors.New(apperrors.ErrInternalServer, "User not logged in"))
 		return
 	}
 
 	// 检查权限
 	template, err := models.GetJSTemplateByID(db, templateID)
 	if err != nil {
-		response.Fail(c, "Template not found", nil)
+		apperrors.HandleError(c, apperrors.New(apperrors.ErrInternalServer, "Template not found"))
 		return
 	}
 
 	if template.UserID != user.ID {
 		if template.GroupID == nil {
-			response.Fail(c, "Insufficient permissions", nil)
+			apperrors.HandleError(c, apperrors.New(apperrors.ErrInternalServer, "Insufficient permissions"))
 			return
 		}
 		var group models.Group
 		if err := h.db.Where("id = ?", *template.GroupID).First(&group).Error; err != nil {
-			response.Fail(c, "Organization not found", nil)
+			apperrors.HandleError(c, apperrors.New(apperrors.ErrInternalServer, "Organization not found"))
 			return
 		}
 		if group.CreatorID != user.ID {
 			var member models.GroupMember
 			if err := h.db.Where("group_id = ? AND user_id = ?", *template.GroupID, user.ID).First(&member).Error; err != nil {
-				response.Fail(c, "Insufficient permissions", nil)
+				apperrors.HandleError(c, apperrors.New(apperrors.ErrInternalServer, "Insufficient permissions"))
 				return
 			}
 		}
@@ -813,11 +811,11 @@ func (h *Handlers) GetJSTemplateVersion(c *gin.Context) {
 
 	version, err := models.GetJSTemplateVersion(db, templateID, versionID)
 	if err != nil {
-		response.Fail(c, "Version not found", nil)
+		apperrors.HandleError(c, apperrors.New(apperrors.ErrInternalServer, "Version not found"))
 		return
 	}
 
-	response.Success(c, "Version retrieved successfully", version)
+	apperrors.RespondSuccess(c, version)
 }
 
 // RollbackJSTemplateVersion 回滚到指定版本
@@ -828,31 +826,31 @@ func (h *Handlers) RollbackJSTemplateVersion(c *gin.Context) {
 
 	user := models.CurrentUser(c)
 	if user == nil {
-		response.Fail(c, "User not logged in", nil)
+		apperrors.HandleError(c, apperrors.New(apperrors.ErrInternalServer, "User not logged in"))
 		return
 	}
 
 	// 检查权限
 	template, err := models.GetJSTemplateByID(db, templateID)
 	if err != nil {
-		response.Fail(c, "Template not found", nil)
+		apperrors.HandleError(c, apperrors.New(apperrors.ErrInternalServer, "Template not found"))
 		return
 	}
 
 	if template.UserID != user.ID {
 		if template.GroupID == nil {
-			response.Fail(c, "Insufficient permissions", nil)
+			apperrors.HandleError(c, apperrors.New(apperrors.ErrInternalServer, "Insufficient permissions"))
 			return
 		}
 		var group models.Group
 		if err := h.db.Where("id = ?", *template.GroupID).First(&group).Error; err != nil {
-			response.Fail(c, "Organization not found", nil)
+			apperrors.HandleError(c, apperrors.New(apperrors.ErrInternalServer, "Organization not found"))
 			return
 		}
 		if group.CreatorID != user.ID {
 			var member models.GroupMember
 			if err := h.db.Where("group_id = ? AND user_id = ? AND role = ?", *template.GroupID, user.ID, models.GroupRoleAdmin).First(&member).Error; err != nil {
-				response.Fail(c, "Insufficient permissions", "Only creator or admin can rollback")
+				apperrors.HandleError(c, apperrors.New(apperrors.ErrInternalServer, "Insufficient permissions"))
 				return
 			}
 		}
@@ -878,7 +876,7 @@ func (h *Handlers) RollbackJSTemplateVersion(c *gin.Context) {
 		return
 	}
 
-	response.Success(c, "Template rolled back successfully", updatedTemplate)
+	apperrors.RespondSuccess(c, updatedTemplate)
 }
 
 // PublishJSTemplateVersion 发布版本（支持灰度）
@@ -889,7 +887,7 @@ func (h *Handlers) PublishJSTemplateVersion(c *gin.Context) {
 
 	user := models.CurrentUser(c)
 	if user == nil {
-		response.Fail(c, "User not logged in", nil)
+		apperrors.HandleError(c, apperrors.New(apperrors.ErrInternalServer, "User not logged in"))
 		return
 	}
 
@@ -901,31 +899,31 @@ func (h *Handlers) PublishJSTemplateVersion(c *gin.Context) {
 	}
 
 	if input.Grayscale < 0 || input.Grayscale > 100 {
-		response.Fail(c, "Invalid grayscale value", "Grayscale must be between 0 and 100")
+		apperrors.HandleError(c, apperrors.New(apperrors.ErrInternalServer, "Invalid grayscale value"))
 		return
 	}
 
 	// 检查权限
 	template, err := models.GetJSTemplateByID(db, templateID)
 	if err != nil {
-		response.Fail(c, "Template not found", nil)
+		apperrors.HandleError(c, apperrors.New(apperrors.ErrInternalServer, "Template not found"))
 		return
 	}
 
 	if template.UserID != user.ID {
 		if template.GroupID == nil {
-			response.Fail(c, "Insufficient permissions", nil)
+			apperrors.HandleError(c, apperrors.New(apperrors.ErrInternalServer, "Insufficient permissions"))
 			return
 		}
 		var group models.Group
 		if err := h.db.Where("id = ?", *template.GroupID).First(&group).Error; err != nil {
-			response.Fail(c, "Organization not found", nil)
+			apperrors.HandleError(c, apperrors.New(apperrors.ErrInternalServer, "Organization not found"))
 			return
 		}
 		if group.CreatorID != user.ID {
 			var member models.GroupMember
 			if err := h.db.Where("group_id = ? AND user_id = ? AND role = ?", *template.GroupID, user.ID, models.GroupRoleAdmin).First(&member).Error; err != nil {
-				response.Fail(c, "Insufficient permissions", "Only creator or admin can publish")
+				apperrors.HandleError(c, apperrors.New(apperrors.ErrInternalServer, "Insufficient permissions"))
 				return
 			}
 		}
@@ -934,7 +932,7 @@ func (h *Handlers) PublishJSTemplateVersion(c *gin.Context) {
 	// 获取版本
 	version, err := models.GetJSTemplateVersion(db, templateID, versionID)
 	if err != nil {
-		response.Fail(c, "Version not found", nil)
+		apperrors.HandleError(c, apperrors.New(apperrors.ErrInternalServer, "Version not found"))
 		return
 	}
 

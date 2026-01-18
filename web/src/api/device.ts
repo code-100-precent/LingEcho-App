@@ -1,4 +1,4 @@
-import { get, post, put, ApiResponse } from '@/utils/request'
+import { BaseApiService } from './base.service'
 
 // 设备信息
 export interface Device {
@@ -40,28 +40,53 @@ export interface ManualAddDeviceRequest {
   macAddress: string
 }
 
-// 绑定设备（激活设备）
-export const bindDevice = async (agentId: string, deviceCode: string): Promise<ApiResponse<null>> => {
-  return post(`/device/bind/${agentId}/${deviceCode}`, {})
+class DeviceService extends BaseApiService {
+  constructor() {
+    super('/device')
+  }
+
+  // 绑定设备（激活设备）
+  async bindDevice(agentId: string, deviceCode: string): Promise<null> {
+    const response = await this.post<null>(`/bind/${agentId}/${deviceCode}`, {})
+    this.invalidateCache()
+    return this.handleResponse(response)
+  }
+
+  // 获取已绑定设备列表
+  async getUserDevices(agentId: string): Promise<Device[]> {
+    const response = await this.get<Device[]>(`/bind/${agentId}`, {}, { enabled: true, ttl: 60000 })
+    return this.handleResponse(response)
+  }
+
+  // 解绑设备
+  async unbindDevice(data: UnbindDeviceRequest): Promise<null> {
+    const response = await this.post<null>('/unbind', data)
+    this.invalidateCache()
+    return this.handleResponse(response)
+  }
+
+  // 更新设备信息
+  async updateDevice(deviceId: string, data: UpdateDeviceRequest): Promise<Device> {
+    const response = await this.put<Device>(`/update/${deviceId}`, data)
+    this.invalidateCache()
+    return this.handleResponse(response)
+  }
+
+  // 手动添加设备
+  async manualAddDevice(data: ManualAddDeviceRequest): Promise<Device> {
+    const response = await this.post<Device>('/manual-add', data)
+    this.invalidateCache()
+    return this.handleResponse(response)
+  }
 }
 
-// 获取已绑定设备列表
-export const getUserDevices = async (agentId: string): Promise<ApiResponse<Device[]>> => {
-  return get(`/device/bind/${agentId}`)
-}
+// 导出单例
+export const deviceService = new DeviceService()
 
-// 解绑设备
-export const unbindDevice = async (data: UnbindDeviceRequest): Promise<ApiResponse<null>> => {
-  return post('/device/unbind', data)
-}
-
-// 更新设备信息
-export const updateDevice = async (deviceId: string, data: UpdateDeviceRequest): Promise<ApiResponse<Device>> => {
-  return put(`/device/update/${deviceId}`, data)
-}
-
-// 手动添加设备
-export const manualAddDevice = async (data: ManualAddDeviceRequest): Promise<ApiResponse<Device>> => {
-  return post('/device/manual-add', data)
-}
+// 兼容性导出
+export const bindDevice = deviceService.bindDevice.bind(deviceService)
+export const getUserDevices = deviceService.getUserDevices.bind(deviceService)
+export const unbindDevice = deviceService.unbindDevice.bind(deviceService)
+export const updateDevice = deviceService.updateDevice.bind(deviceService)
+export const manualAddDevice = deviceService.manualAddDevice.bind(deviceService)
 
