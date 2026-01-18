@@ -135,6 +135,9 @@ func main() {
 	// Initialize global login security manager
 	utils.InitGlobalLoginSecurityManager(logger.Lg)
 
+	// Initialize global intelligent risk control manager
+	utils.InitGlobalIntelligentRiskControl(logger.Lg)
+
 	// 10. Load Prompt System
 	err = prompt.InitPromptSystem(db)
 	if err != nil {

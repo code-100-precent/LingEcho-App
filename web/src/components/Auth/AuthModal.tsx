@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { useNavigate } from 'react-router-dom'
 import { User, Mail, Lock, Eye, EyeOff, Shield, Clock, Globe, AlertTriangle, X } from 'lucide-react'
@@ -13,6 +13,7 @@ import { showAlert } from '@/utils/notification.ts'
 import { sendEmailCode, registerUserByEmail, registerUser, loginWithPassword, loginWithEmailCode } from '@/api/auth.ts'
 import { encryptPasswordToString } from '@/utils/passwordEncrypt.ts'
 import { getSystemInit } from '@/api/system.ts'
+import { BehaviorTracker } from '@/utils/behaviorTracker.ts'
 
 interface AuthModalProps {
   isOpen: boolean
@@ -48,6 +49,10 @@ const AuthModal = ({ isOpen, onClose, initialMode = 'login' }: AuthModalProps) =
   // 系统初始化信息
   const [showMemoryDBWarning, setShowMemoryDBWarning] = useState(false)
   const [emailEnabled, setEmailEnabled] = useState(true) // 默认启用邮箱登录
+
+  // 行为追踪相关
+  const behaviorTrackerRef = useRef<BehaviorTracker | null>(null)
+  const formRef = useRef<HTMLFormElement>(null)
 
   const { login, updateProfile: updateAuthStore } = useAuthStore()
   const navigate = useNavigate()
@@ -89,6 +94,35 @@ const AuthModal = ({ isOpen, onClose, initialMode = 'login' }: AuthModalProps) =
         // 如果获取失败，默认启用邮箱登录
         setEmailEnabled(true)
       })
+    }
+  }, [isOpen])
+
+  // 行为追踪初始化和清理
+  useEffect(() => {
+    if (isOpen) {
+      // 初始化行为追踪器
+      behaviorTrackerRef.current = new BehaviorTracker()
+      
+      // 延迟启动追踪，避免影响模态框打开动画
+      const timer = setTimeout(() => {
+        if (behaviorTrackerRef.current && formRef.current) {
+          behaviorTrackerRef.current.startTracking(formRef.current)
+        }
+      }, 500)
+
+      return () => {
+        clearTimeout(timer)
+        if (behaviorTrackerRef.current) {
+          behaviorTrackerRef.current.stopTracking()
+          behaviorTrackerRef.current = null
+        }
+      }
+    } else {
+      // 模态框关闭时停止追踪
+      if (behaviorTrackerRef.current) {
+        behaviorTrackerRef.current.stopTracking()
+        behaviorTrackerRef.current = null
+      }
     }
   }, [isOpen])
 
@@ -393,6 +427,22 @@ const AuthModal = ({ isOpen, onClose, initialMode = 'login' }: AuthModalProps) =
           return
         }
         
+        // 获取行为数据
+        let behaviorData = null
+        if (behaviorTrackerRef.current) {
+          const formDataForBehavior = {
+            email: formData.email,
+            displayName: formData.displayName,
+            userName: formData.userName
+          }
+          behaviorData = behaviorTrackerRef.current.getBehaviorData(formDataForBehavior)
+          
+          // 检查是否有足够的行为数据
+          if (!behaviorTrackerRef.current.hasEnoughData()) {
+            console.warn('Insufficient behavior data for risk analysis')
+          }
+        }
+        
         // 根据邮件配置状态选择注册方式
         let response
         if (emailEnabled) {
@@ -419,9 +469,13 @@ const AuthModal = ({ isOpen, onClose, initialMode = 'login' }: AuthModalProps) =
             lastName: formData.userName.split(' ')[1] || '',
             locale: 'zh-CN',
             timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
-          source: 'WEB',
-          captchaId,
-          captchaCode
+            source: 'WEB',
+            captchaId,
+            captchaCode,
+            // 智能风控数据
+            mouseTrack: behaviorData ? JSON.stringify(behaviorData.mouseTrack) : '',
+            formFillTime: behaviorData ? behaviorData.formFillTime : 0,
+            keystrokePattern: behaviorData ? behaviorData.keystrokePattern : ''
           })
         } else {
         // 如果没有配置邮箱，使用普通注册
@@ -432,13 +486,17 @@ const AuthModal = ({ isOpen, onClose, initialMode = 'login' }: AuthModalProps) =
             email: formData.email,
             password: encryptedPassword,
             displayName: formData.displayName,
-          captchaId,
-          captchaCode,
+            captchaId,
+            captchaCode,
             firstName: formData.userName?.split(' ')[0] || formData.displayName,
             lastName: formData.userName?.split(' ')[1] || '',
             locale: 'zh-CN',
             timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
-            source: 'WEB'
+            source: 'WEB',
+            // 智能风控数据
+            mouseTrack: behaviorData ? JSON.stringify(behaviorData.mouseTrack) : '',
+            formFillTime: behaviorData ? behaviorData.formFillTime : 0,
+            keystrokePattern: behaviorData ? behaviorData.keystrokePattern : ''
           })
         }
         
@@ -742,7 +800,7 @@ const AuthModal = ({ isOpen, onClose, initialMode = 'login' }: AuthModalProps) =
 
       {/* 正常表单显示 */}
       {!isRegisterSuccess && !isLoginSuccess && (
-        <form onSubmit={handleSubmit} className="space-y-6">
+        <form ref={formRef} onSubmit={handleSubmit} className="space-y-6">
         {/* 登录表单 */}
         {mode === 'login' && (
           <motion.div

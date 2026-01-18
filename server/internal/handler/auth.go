@@ -2,6 +2,7 @@ package handlers
 
 import (
 	"encoding/base64"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"net/http"
@@ -793,7 +794,44 @@ func (h *Handlers) handleUserSignup(c *gin.Context) {
 		}
 	}
 
-	// 2. 图形验证码验证
+	// 2. 智能风控检查
+	if utils.GlobalIntelligentRiskControl != nil {
+		// 解析行为数据
+		var mouseTrack []utils.MouseTrackPoint
+		if form.MouseTrack != "" {
+			if err := json.Unmarshal([]byte(form.MouseTrack), &mouseTrack); err != nil {
+				logger.Warn("Failed to parse mouse track data", zap.Error(err))
+			}
+		}
+
+		// 准备表单数据用于分析
+		formData := map[string]string{
+			"email":       form.Email,
+			"displayName": form.DisplayName,
+			"firstName":   form.FirstName,
+			"lastName":    form.LastName,
+		}
+
+		// 执行智能风控检查
+		if err := utils.GlobalIntelligentRiskControl.CheckRegistrationRisk(
+			mouseTrack,
+			form.FormFillTime,
+			form.KeystrokePattern,
+			formData,
+		); err != nil {
+			if utils.GlobalRegistrationGuard != nil {
+				utils.GlobalRegistrationGuard.RecordRegistrationAttempt(clientIP, form.Email, false, "intelligent risk control blocked")
+			}
+			logger.Warn("Registration blocked by intelligent risk control",
+				zap.String("email", form.Email),
+				zap.String("ip", clientIP),
+				zap.Error(err))
+			LingEcho.AbortWithJSONError(c, http.StatusForbidden, errors.New("registration blocked due to suspicious behavior"))
+			return
+		}
+	}
+
+	// 3. 图形验证码验证
 	if captcha.GlobalCaptchaManager != nil {
 		if form.CaptchaID == "" || form.CaptchaCode == "" {
 			if utils.GlobalRegistrationGuard != nil {
@@ -813,7 +851,7 @@ func (h *Handlers) handleUserSignup(c *gin.Context) {
 		}
 	}
 
-	// 3. 获取并发注册锁
+	// 4. 获取并发注册锁
 	lockAcquired, err := utils.AcquireRegistrationLock(form.Email)
 	if err != nil || !lockAcquired {
 		if utils.GlobalRegistrationGuard != nil {
@@ -824,7 +862,7 @@ func (h *Handlers) handleUserSignup(c *gin.Context) {
 	}
 	defer utils.ReleaseRegistrationLock(form.Email)
 
-	// 4. 注册防护检查
+	// 5. 注册防护检查
 	if utils.GlobalRegistrationGuard != nil {
 		if err := utils.GlobalRegistrationGuard.CheckRegistrationAllowed(clientIP, form.Email, form.Password); err != nil {
 			utils.GlobalRegistrationGuard.RecordRegistrationAttempt(clientIP, form.Email, false, err.Error())
