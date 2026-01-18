@@ -137,6 +137,16 @@ export const assistant: Record<Language, Record<string, string>> = {
     'controlPanel.integration.flutter': 'Flutter应用',
     'controlPanel.integration.flutterDesc': '移动端集成',
     'controlPanel.integration.hint': '💡 点击上方选项查看详细的集成方法和代码示例',
+
+    // Assistant Messages
+    'assistants.messages.fetchFailed': '获取助手列表失败',
+    'assistants.messages.createSuccess': '助手创建成功',
+    'assistants.messages.createFailed': '创建助手失败',
+    'assistants.messages.updateSuccess': '助手更新成功',
+    'assistants.messages.updateFailed': '更新助手失败',
+    'assistants.messages.deleteSuccess': '助手删除成功',
+    'assistants.messages.deleteFailed': '删除助手失败',
+    'assistants.messages.deleteConfirm': '确定要删除这个助手吗？此操作不可恢复。',
   },
   en: {
     // Assistants Page
@@ -201,6 +211,16 @@ export const assistant: Record<Language, Record<string, string>> = {
     'assistantTools.calculator': 'Calculator',
     'assistantTools.clear': 'Clear',
     'assistantTools.validJsonSchema': 'Must be valid JSON Schema format. You can use quick templates to get started quickly.',
+
+    // Assistant Messages
+    'assistants.messages.fetchFailed': 'Failed to fetch assistants',
+    'assistants.messages.createSuccess': 'Assistant created successfully',
+    'assistants.messages.createFailed': 'Failed to create assistant',
+    'assistants.messages.updateSuccess': 'Assistant updated successfully',
+    'assistants.messages.updateFailed': 'Failed to update assistant',
+    'assistants.messages.deleteSuccess': 'Assistant deleted successfully',
+    'assistants.messages.deleteFailed': 'Failed to delete assistant',
+    'assistants.messages.deleteConfirm': 'Are you sure you want to delete this assistant? This action cannot be undone.',
   },
   ja: {
     // アシスタントページ
@@ -220,5 +240,15 @@ export const assistant: Record<Language, Record<string, string>> = {
     'assistants.emptyState.createButton': '最初のアシスタントを作成',
     'assistants.groupShared': '組織共有',
     'assistants.noDescription': '説明なし',
+
+    // アシスタントメッセージ
+    'assistants.messages.fetchFailed': 'アシスタントリストの取得に失敗しました',
+    'assistants.messages.createSuccess': 'アシスタントが正常に作成されました',
+    'assistants.messages.createFailed': 'アシスタントの作成に失敗しました',
+    'assistants.messages.updateSuccess': 'アシスタントが正常に更新されました',
+    'assistants.messages.updateFailed': 'アシスタントの更新に失敗しました',
+    'assistants.messages.deleteSuccess': 'アシスタントが正常に削除されました',
+    'assistants.messages.deleteFailed': 'アシスタントの削除に失敗しました',
+    'assistants.messages.deleteConfirm': 'このアシスタントを削除してもよろしいですか？この操作は元に戻せません。',
   }
 }

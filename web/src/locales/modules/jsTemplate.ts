@@ -45,6 +45,17 @@ export const jsTemplate: Record<Language, Record<string, string>> = {
     'jsTemplate.noMatch': '未找到匹配的模板',
     'jsTemplate.tryOtherKeywords': '请尝试使用其他关键词搜索，或者检查拼写是否正确',
     'jsTemplate.createFirst': '创建第一个模板',
+
+    // JSTemplate Messages
+    'jsTemplate.messages.updateFailed': '更新模板失败',
+    'jsTemplate.messages.createFailed': '创建模板失败',
+    'jsTemplate.messages.invalidId': '无效的模板ID',
+    'jsTemplate.messages.deleteConfirm': '确定要删除这个模板吗？此操作不可恢复。',
+    'jsTemplate.messages.deleteFailed': '删除模板失败',
+    'jsTemplate.messages.deleteSuccess': '模板删除成功',
+    'jsTemplate.messages.createSuccess': '模板创建成功',
+    'jsTemplate.messages.updateSuccess': '模板更新成功',
+    'jsTemplate.messages.fetchFailed': '获取模板列表失败',
   },
   en: {
     // JSTemplateManager Page
@@ -90,6 +101,17 @@ export const jsTemplate: Record<Language, Record<string, string>> = {
     'jsTemplate.noMatch': 'No matching templates found',
     'jsTemplate.tryOtherKeywords': 'Please try searching with other keywords or check if the spelling is correct',
     'jsTemplate.createFirst': 'Create First Template',
+
+    // JSTemplate Messages
+    'jsTemplate.messages.updateFailed': 'Failed to update template',
+    'jsTemplate.messages.createFailed': 'Failed to create template',
+    'jsTemplate.messages.invalidId': 'Invalid template ID',
+    'jsTemplate.messages.deleteConfirm': 'Are you sure you want to delete this template? This action cannot be undone.',
+    'jsTemplate.messages.deleteFailed': 'Failed to delete template',
+    'jsTemplate.messages.deleteSuccess': 'Template deleted successfully',
+    'jsTemplate.messages.createSuccess': 'Template created successfully',
+    'jsTemplate.messages.updateSuccess': 'Template updated successfully',
+    'jsTemplate.messages.fetchFailed': 'Failed to fetch template list',
   },
   ja: {
     // JSテンプレート管理ページ
@@ -135,5 +157,16 @@ export const jsTemplate: Record<Language, Record<string, string>> = {
     'jsTemplate.noMatch': '一致するテンプレートが見つかりません',
     'jsTemplate.tryOtherKeywords': '他のキーワードで検索するか、スペルが正しいか確認してください',
     'jsTemplate.createFirst': '最初のテンプレートを作成',
+
+    // JSテンプレートメッセージ
+    'jsTemplate.messages.updateFailed': 'テンプレートの更新に失敗しました',
+    'jsTemplate.messages.createFailed': 'テンプレートの作成に失敗しました',
+    'jsTemplate.messages.invalidId': '無効なテンプレートID',
+    'jsTemplate.messages.deleteConfirm': 'このテンプレートを削除してもよろしいですか？この操作は元に戻せません。',
+    'jsTemplate.messages.deleteFailed': 'テンプレートの削除に失敗しました',
+    'jsTemplate.messages.deleteSuccess': 'テンプレートが正常に削除されました',
+    'jsTemplate.messages.createSuccess': 'テンプレートが正常に作成されました',
+    'jsTemplate.messages.updateSuccess': 'テンプレートが正常に更新されました',
+    'jsTemplate.messages.fetchFailed': 'テンプレートリストの取得に失敗しました',
   }
 }

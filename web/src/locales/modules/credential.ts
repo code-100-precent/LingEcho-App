@@ -63,6 +63,20 @@ export const credential: Record<Language, Record<string, string>> = {
     'credential.appIdPlaceholder': '应用ID',
     'credential.apiSecretPlaceholder': 'API密钥',
     'credential.cloneProviderPlaceholder': '如：xunfei, baidu（暂时支持文本输入）',
+
+    // Credential Messages
+    'credential.messages.fetchFailed': '获取凭证失败',
+    'credential.messages.loadFailed': '加载失败',
+    'credential.messages.enterName': '请输入凭证名称',
+    'credential.messages.validationFailed': '验证失败',
+    'credential.messages.createSuccess': '凭证创建成功',
+    'credential.messages.createFailed': '创建凭证失败',
+    'credential.messages.operationFailed': '操作失败',
+    'credential.messages.deleteSuccess': '凭证删除成功',
+    'credential.messages.deleteFailed': '删除凭证失败',
+    'credential.messages.updateSuccess': '凭证更新成功',
+    'credential.messages.updateFailed': '更新凭证失败',
+    'credential.messages.deleteConfirm': '确定要删除这个凭证吗？此操作不可恢复。',
   },
   en: {
     // CredentialManager Page
@@ -126,6 +140,20 @@ export const credential: Record<Language, Record<string, string>> = {
     'credential.appIdPlaceholder': 'Application ID',
     'credential.apiSecretPlaceholder': 'API Secret',
     'credential.cloneProviderPlaceholder': 'Such as: xunfei, baidu (currently supports text input)',
+
+    // Credential Messages
+    'credential.messages.fetchFailed': 'Failed to fetch credentials',
+    'credential.messages.loadFailed': 'Load failed',
+    'credential.messages.enterName': 'Please enter credential name',
+    'credential.messages.validationFailed': 'Validation failed',
+    'credential.messages.createSuccess': 'Credential created successfully',
+    'credential.messages.createFailed': 'Failed to create credential',
+    'credential.messages.operationFailed': 'Operation failed',
+    'credential.messages.deleteSuccess': 'Credential deleted successfully',
+    'credential.messages.deleteFailed': 'Failed to delete credential',
+    'credential.messages.updateSuccess': 'Credential updated successfully',
+    'credential.messages.updateFailed': 'Failed to update credential',
+    'credential.messages.deleteConfirm': 'Are you sure you want to delete this credential? This action cannot be undone.',
   },
   ja: {
     // 認証情報管理ページ
@@ -189,5 +217,19 @@ export const credential: Record<Language, Record<string, string>> = {
     'credential.appIdPlaceholder': 'アプリケーションID',
     'credential.apiSecretPlaceholder': 'APIシークレット',
     'credential.cloneProviderPlaceholder': '例：xunfei, baidu（現在テキスト入力をサポート）',
+
+    // 認証情報メッセージ
+    'credential.messages.fetchFailed': '認証情報の取得に失敗しました',
+    'credential.messages.loadFailed': '読み込みに失敗しました',
+    'credential.messages.enterName': '認証情報名を入力してください',
+    'credential.messages.validationFailed': '検証に失敗しました',
+    'credential.messages.createSuccess': '認証情報が正常に作成されました',
+    'credential.messages.createFailed': '認証情報の作成に失敗しました',
+    'credential.messages.operationFailed': '操作に失敗しました',
+    'credential.messages.deleteSuccess': '認証情報が正常に削除されました',
+    'credential.messages.deleteFailed': '認証情報の削除に失敗しました',
+    'credential.messages.updateSuccess': '認証情報が正常に更新されました',
+    'credential.messages.updateFailed': '認証情報の更新に失敗しました',
+    'credential.messages.deleteConfirm': 'この認証情報を削除してもよろしいですか？この操作は元に戻せません。',
   }
 }

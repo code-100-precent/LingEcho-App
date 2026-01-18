@@ -44,6 +44,16 @@ export const notification: Record<Language, Record<string, string>> = {
     'notification.done': '完成',
     'notification.previousPage': '上一页',
     'notification.nextPage': '下一页',
+
+    // Notification Messages
+    'notification.messages.markAllReadSuccess': '所有通知已标记为已读',
+    'notification.messages.deleteSuccess': '通知删除成功',
+    'notification.messages.batchDeleteSuccess': '已删除 {count} 条通知',
+    'notification.messages.batchMarkReadSuccess': '已将 {count} 条通知标记为已读',
+    'notification.messages.markReadSuccess': '通知已标记为已读',
+    'notification.messages.markReadFailed': '标记已读失败',
+    'notification.messages.deleteFailed': '删除通知失败',
+    'notification.messages.fetchFailed': '获取通知失败',
   },
   en: {
     // NotificationCenter Page
@@ -88,6 +98,16 @@ export const notification: Record<Language, Record<string, string>> = {
     'notification.done': 'Done',
     'notification.previousPage': 'Previous Page',
     'notification.nextPage': 'Next Page',
+
+    // Notification Messages
+    'notification.messages.markAllReadSuccess': 'All notifications marked as read',
+    'notification.messages.deleteSuccess': 'Notification deleted successfully',
+    'notification.messages.batchDeleteSuccess': 'Deleted {count} notifications',
+    'notification.messages.batchMarkReadSuccess': 'Marked {count} notifications as read',
+    'notification.messages.markReadSuccess': 'Notification marked as read',
+    'notification.messages.markReadFailed': 'Failed to mark as read',
+    'notification.messages.deleteFailed': 'Failed to delete notification',
+    'notification.messages.fetchFailed': 'Failed to fetch notifications',
   },
   ja: {
     // 通知センターページ
@@ -132,5 +152,15 @@ export const notification: Record<Language, Record<string, string>> = {
     'notification.done': '完了',
     'notification.previousPage': '前のページ',
     'notification.nextPage': '次のページ',
+
+    // 通知メッセージ
+    'notification.messages.markAllReadSuccess': 'すべての通知を既読にしました',
+    'notification.messages.deleteSuccess': '通知が正常に削除されました',
+    'notification.messages.batchDeleteSuccess': '{count} 件の通知を削除しました',
+    'notification.messages.batchMarkReadSuccess': '{count} 件の通知を既読にしました',
+    'notification.messages.markReadSuccess': '通知を既読にしました',
+    'notification.messages.markReadFailed': '既読マークに失敗しました',
+    'notification.messages.deleteFailed': '通知の削除に失敗しました',
+    'notification.messages.fetchFailed': '通知の取得に失敗しました',
   }
 }

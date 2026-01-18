@@ -38,6 +38,22 @@ export const knowledge: Record<Language, Record<string, string>> = {
     'knowledgeBase.askModal.questionPlaceholder': '请输入您的问题',
     'knowledgeBase.askModal.close': '关闭',
     'knowledgeBase.askModal.ask': '提问',
+
+    // KnowledgeBase Messages
+    'knowledgeBase.messages.fetchFailed': '获取知识库失败',
+    'knowledgeBase.messages.deleteSuccess': '知识库删除成功',
+    'knowledgeBase.messages.deleteFailed': '删除知识库失败',
+    'knowledgeBase.messages.deleteError': '删除知识库时发生错误',
+    'knowledgeBase.messages.selectFile': '请选择文件',
+    'knowledgeBase.messages.nameTooLong': '知识库名称不能超过10个字符',
+    'knowledgeBase.messages.createSuccess': '知识库创建成功',
+    'knowledgeBase.messages.createFailed': '创建知识库失败',
+    'knowledgeBase.messages.createError': '创建知识库时发生错误',
+    'knowledgeBase.messages.uploadSuccess': '文档上传成功',
+    'knowledgeBase.messages.uploadFailed': '文档上传失败',
+    'knowledgeBase.messages.uploadError': '上传文档时发生错误',
+    'knowledgeBase.messages.askFailed': '提问失败',
+    'knowledgeBase.messages.askError': '提问时发生错误',
   },
   en: {
     // KnowledgeBase Page
@@ -76,6 +92,22 @@ export const knowledge: Record<Language, Record<string, string>> = {
     'knowledgeBase.askModal.questionPlaceholder': 'Enter your question',
     'knowledgeBase.askModal.close': 'Close',
     'knowledgeBase.askModal.ask': 'Ask',
+
+    // KnowledgeBase Messages
+    'knowledgeBase.messages.fetchFailed': 'Failed to fetch knowledge bases',
+    'knowledgeBase.messages.deleteSuccess': 'Knowledge base deleted successfully',
+    'knowledgeBase.messages.deleteFailed': 'Failed to delete knowledge base',
+    'knowledgeBase.messages.deleteError': 'Error occurred while deleting knowledge base',
+    'knowledgeBase.messages.selectFile': 'Please select a file',
+    'knowledgeBase.messages.nameTooLong': 'Knowledge base name cannot exceed 10 characters',
+    'knowledgeBase.messages.createSuccess': 'Knowledge base created successfully',
+    'knowledgeBase.messages.createFailed': 'Failed to create knowledge base',
+    'knowledgeBase.messages.createError': 'Error occurred while creating knowledge base',
+    'knowledgeBase.messages.uploadSuccess': 'Document uploaded successfully',
+    'knowledgeBase.messages.uploadFailed': 'Failed to upload document',
+    'knowledgeBase.messages.uploadError': 'Error occurred while uploading document',
+    'knowledgeBase.messages.askFailed': 'Failed to ask question',
+    'knowledgeBase.messages.askError': 'Error occurred while asking question',
   },
   ja: {
     // ナレッジベースページ
@@ -114,5 +146,21 @@ export const knowledge: Record<Language, Record<string, string>> = {
     'knowledgeBase.askModal.questionPlaceholder': '質問を入力してください',
     'knowledgeBase.askModal.close': '閉じる',
     'knowledgeBase.askModal.ask': '質問する',
+
+    // ナレッジベースメッセージ
+    'knowledgeBase.messages.fetchFailed': 'ナレッジベースの取得に失敗しました',
+    'knowledgeBase.messages.deleteSuccess': 'ナレッジベースが正常に削除されました',
+    'knowledgeBase.messages.deleteFailed': 'ナレッジベースの削除に失敗しました',
+    'knowledgeBase.messages.deleteError': 'ナレッジベースの削除中にエラーが発生しました',
+    'knowledgeBase.messages.selectFile': 'ファイルを選択してください',
+    'knowledgeBase.messages.nameTooLong': 'ナレッジベース名は10文字以内にしてください',
+    'knowledgeBase.messages.createSuccess': 'ナレッジベースが正常に作成されました',
+    'knowledgeBase.messages.createFailed': 'ナレッジベースの作成に失敗しました',
+    'knowledgeBase.messages.createError': 'ナレッジベースの作成中にエラーが発生しました',
+    'knowledgeBase.messages.uploadSuccess': 'ドキュメントが正常にアップロードされました',
+    'knowledgeBase.messages.uploadFailed': 'ドキュメントのアップロードに失敗しました',
+    'knowledgeBase.messages.uploadError': 'ドキュメントのアップロード中にエラーが発生しました',
+    'knowledgeBase.messages.askFailed': '質問に失敗しました',
+    'knowledgeBase.messages.askError': '質問中にエラーが発生しました',
   }
 }
