@@ -1,12 +1,14 @@
 package handlers
 
 import (
+	apperrors "github.com/code-100-precent/LingEcho/pkg/errors"
+	"github.com/code-100-precent/LingEcho/pkg/response"
+
 	"reflect"
 	"strconv"
 	"time"
 
 	"github.com/code-100-precent/LingEcho/internal/models"
-	"github.com/code-100-precent/LingEcho/pkg/response"
 	"github.com/gin-gonic/gin"
 	"github.com/sirupsen/logrus"
 	"gorm.io/gorm"
@@ -136,13 +138,13 @@ func (h *SipHandler) MakeOutgoingCall(c *gin.Context) {
 
 	// 验证targetURI格式
 	if req.TargetURI == "" {
-		response.Fail(c, "targetUri is required", nil)
+		apperrors.HandleError(c, apperrors.New(apperrors.ErrInternalServer, "targetUri is required"))
 		return
 	}
 
 	// 检查SIP服务器是否可用
 	if h.sipServer == nil {
-		response.Fail(c, "SIP server is not available", nil)
+		apperrors.HandleError(c, apperrors.New(apperrors.ErrInternalServer, "SIP server is not available"))
 		return
 	}
 
@@ -168,7 +170,6 @@ func (h *SipHandler) MakeOutgoingCall(c *gin.Context) {
 
 	if err := models.CreateSipCall(h.db, sipCall); err != nil {
 		logrus.WithError(err).Warn("Failed to create call record")
-		// 不返回错误，因为呼叫已经发起
 	}
 
 	response.Success(c, "Call initiated successfully", MakeOutgoingCallResponse{
@@ -190,13 +191,13 @@ func (h *SipHandler) MakeOutgoingCall(c *gin.Context) {
 func (h *SipHandler) GetOutgoingCallStatus(c *gin.Context) {
 	callID := c.Param("callId")
 	if callID == "" {
-		response.Fail(c, "callId is required", nil)
+		apperrors.HandleError(c, apperrors.New(apperrors.ErrInternalServer, "callId is required"))
 		return
 	}
 
 	// 检查SIP服务器是否可用
 	if h.sipServer == nil {
-		response.Fail(c, "SIP server is not available", nil)
+		apperrors.HandleError(c, apperrors.New(apperrors.ErrInternalServer, "SIP server is not available"))
 		return
 	}
 
@@ -206,18 +207,18 @@ func (h *SipHandler) GetOutgoingCallStatus(c *gin.Context) {
 		// 如果数据库中没有，尝试从SIP服务器获取会话信息
 		sessionInterface, exists := h.sipServer.GetOutgoingSession(callID)
 		if !exists {
-			response.Fail(c, "Call not found", nil)
+			apperrors.HandleError(c, apperrors.New(apperrors.ErrInternalServer, "Call not found"))
 			return
 		}
 
 		// 转换为响应格式
 		resp := convertOutgoingSession(sessionInterface)
 		if resp == nil {
-			response.Fail(c, "Failed to convert session", nil)
+			apperrors.HandleError(c, apperrors.New(apperrors.ErrInternalServer, "Failed to convert session"))
 			return
 		}
 
-		response.Success(c, "Success", resp)
+		apperrors.RespondSuccess(c, resp)
 		return
 	}
 
@@ -251,7 +252,7 @@ func (h *SipHandler) GetOutgoingCallStatus(c *gin.Context) {
 		}
 	}
 
-	response.Success(c, "Success", resp)
+	apperrors.RespondSuccess(c, resp)
 }
 
 // CancelOutgoingCall 取消呼出呼叫
@@ -267,13 +268,13 @@ func (h *SipHandler) GetOutgoingCallStatus(c *gin.Context) {
 func (h *SipHandler) CancelOutgoingCall(c *gin.Context) {
 	callID := c.Param("callId")
 	if callID == "" {
-		response.Fail(c, "callId is required", nil)
+		apperrors.HandleError(c, apperrors.New(apperrors.ErrInternalServer, "callId is required"))
 		return
 	}
 
 	// 检查SIP服务器是否可用
 	if h.sipServer == nil {
-		response.Fail(c, "SIP server is not available", nil)
+		apperrors.HandleError(c, apperrors.New(apperrors.ErrInternalServer, "SIP server is not available"))
 		return
 	}
 
@@ -294,7 +295,7 @@ func (h *SipHandler) CancelOutgoingCall(c *gin.Context) {
 		}
 	}
 
-	response.Success(c, "Call cancelled successfully", nil)
+	apperrors.RespondSuccess(c, nil)
 }
 
 // HangupOutgoingCall 挂断呼出呼叫
@@ -309,22 +310,22 @@ func (h *SipHandler) CancelOutgoingCall(c *gin.Context) {
 // @Router /api/sip/calls/outgoing/{callId}/hangup [post]
 func (h *SipHandler) HangupOutgoingCall(c *gin.Context) {
 	if h.sipServer == nil {
-		response.Fail(c, "SIP server is not initialized", nil)
+		apperrors.HandleError(c, apperrors.New(apperrors.ErrInternalServer, "SIP server is not initialized"))
 		return
 	}
 
 	callID := c.Param("callId")
 	if callID == "" {
-		response.Fail(c, "callId is required", nil)
+		apperrors.HandleError(c, apperrors.New(apperrors.ErrInternalServer, "callId is required"))
 		return
 	}
 
 	err := h.sipServer.HangupOutgoingCall(callID)
 	if err != nil {
 		if err.Error() == "call not found" {
-			response.Fail(c, "Call not found", err.Error())
+			apperrors.HandleError(c, apperrors.New(apperrors.ErrInternalServer, "Call not found"))
 		} else {
-			response.Fail(c, "Failed to hangup call", err.Error())
+			apperrors.HandleError(c, apperrors.New(apperrors.ErrInternalServer, "Failed to hangup call"))
 		}
 		return
 	}
@@ -348,7 +349,7 @@ func (h *SipHandler) HangupOutgoingCall(c *gin.Context) {
 		logrus.WithError(err).Warn("Call record not found for hangup update")
 	}
 
-	response.Success(c, "Call hung up successfully", gin.H{"message": "Call hung up successfully"})
+	apperrors.RespondSuccess(c, gin.H{"message": "Call hung up successfully"})
 }
 
 // GetCallHistory 获取通话历史
@@ -390,7 +391,7 @@ func (h *SipHandler) GetCallHistory(c *gin.Context) {
 		return
 	}
 
-	response.Success(c, "Success", calls)
+	apperrors.RespondSuccess(c, calls)
 }
 
 // GetSipUsers 获取SIP用户列表
@@ -422,5 +423,5 @@ func (h *SipHandler) GetSipUsers(c *gin.Context) {
 		return
 	}
 
-	response.Success(c, "Success", sipUsers)
+	apperrors.RespondSuccess(c, sipUsers)
 }

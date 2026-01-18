@@ -1,4 +1,5 @@
-import { get, put, post, del, ApiResponse } from '@/utils/request'
+import { BaseApiService } from './base.service'
+import { ApiResponse } from '@/utils/http'
 
 // 用户资料更新表单 - 对应后端 UpdateUserRequest
 export interface UpdateProfileForm {
@@ -39,37 +40,6 @@ export interface ChangePasswordForm {
   confirmPassword: string
 }
 
-// 头像上传响应
-export interface AvatarUploadResponse {
-  avatar: string
-  url: string
-}
-
-// 获取用户资料
-export const getProfile = async (): Promise<ApiResponse<any>> => {
-  return get('/auth/info')
-}
-
-// 更新用户资料 - 对应 PUT /auth/update
-export const updateProfile = async (data: UpdateProfileForm): Promise<ApiResponse<null>> => {
-  return put('/auth/update', data)
-}
-
-// 更新用户基本信息 - 对应 POST /auth/update/basic/info
-export const updateBasicInfo = async (data: UpdateBasicInfoForm): Promise<ApiResponse<null>> => {
-  return post('/auth/update/basic/info', data)
-}
-
-// 更新用户偏好设置 - 对应 PUT /auth/update/preferences
-export const updatePreferences = async (data: UpdatePreferencesForm): Promise<ApiResponse<null>> => {
-  return put('/auth/update/preferences', data)
-}
-
-// 修改密码
-export const changePassword = async (data: ChangePasswordForm): Promise<ApiResponse<null>> => {
-  return post('/auth/change-password', data)
-}
-
 // 通过邮箱验证码修改密码
 export interface ChangePasswordByEmailForm {
   emailCode: string
@@ -77,18 +47,11 @@ export interface ChangePasswordByEmailForm {
   confirmPassword: string
 }
 
-export const changePasswordByEmail = async (data: ChangePasswordByEmailForm): Promise<ApiResponse<null>> => {
-  return post('/auth/change-password/email', data)
+// 头像上传响应
+export interface AvatarUploadResponse {
+  avatar: string
+  url: string
 }
-
-// 上传头像
-export const uploadAvatar = async (file: File): Promise<ApiResponse<AvatarUploadResponse>> => {
-  const formData = new FormData()
-  formData.append('avatar', file)
-  return post('/auth/avatar/upload', formData)
-}
-
-// 删除头像
 
 // 两步验证相关接口
 export interface TwoFactorSetupResponse {
@@ -104,26 +67,6 @@ export interface TwoFactorStatusResponse {
 
 export interface TwoFactorCodeRequest {
   code: string
-}
-
-// 设置两步验证（生成密钥和QR码）
-export const setupTwoFactor = async (): Promise<ApiResponse<TwoFactorSetupResponse>> => {
-  return post('/auth/two-factor/setup', {})
-}
-
-// 启用两步验证
-export const enableTwoFactor = async (code: string): Promise<ApiResponse<null>> => {
-  return post('/auth/two-factor/enable', { code })
-}
-
-// 禁用两步验证
-export const disableTwoFactor = async (code: string): Promise<ApiResponse<null>> => {
-  return post('/auth/two-factor/disable', { code })
-}
-
-// 获取两步验证状态
-export const getTwoFactorStatus = async (): Promise<ApiResponse<TwoFactorStatusResponse>> => {
-  return get('/auth/two-factor/status')
 }
 
 // 活动记录相关接口
@@ -151,22 +94,6 @@ export interface ActivityLogResponse {
   }
 }
 
-// 获取用户活动记录
-export const getUserActivity = async (params?: {
-  page?: number
-  limit?: number
-  action?: string
-}): Promise<ApiResponse<ActivityLogResponse>> => {
-  const queryParams = new URLSearchParams()
-  if (params?.page) queryParams.append('page', params.page.toString())
-  if (params?.limit) queryParams.append('limit', params.limit.toString())
-  if (params?.action) queryParams.append('action', params.action)
-  
-  const queryString = queryParams.toString()
-  const url = queryString ? `/auth/activity?${queryString}` : '/auth/activity'
-  return get(url)
-}
-
 // 设备管理相关接口
 export interface UserDevice {
   id: number
@@ -190,22 +117,139 @@ export interface UserDevicesResponse {
   devices: UserDevice[]
 }
 
-// 获取用户设备列表
-export const getUserDevices = async (): Promise<ApiResponse<UserDevicesResponse>> => {
-  return get('/auth/devices')
+// Profile Service 类
+export class ProfileService extends BaseApiService {
+  constructor() {
+    super('/auth')
+  }
+
+  // 获取用户资料
+  async getProfile(): Promise<any> {
+    const response = await this.get<any>('/info')
+    return this.handleResponse(response)
+  }
+
+  // 更新用户资料
+  async updateProfile(data: UpdateProfileForm): Promise<null> {
+    const response = await this.put<null>('/update', data)
+    return this.handleResponse(response)
+  }
+
+  // 更新用户基本信息
+  async updateBasicInfo(data: UpdateBasicInfoForm): Promise<null> {
+    const response = await this.post<null>('/update/basic/info', data)
+    return this.handleResponse(response)
+  }
+
+  // 更新用户偏好设置
+  async updatePreferences(data: UpdatePreferencesForm): Promise<null> {
+    const response = await this.put<null>('/update/preferences', data)
+    return this.handleResponse(response)
+  }
+
+  // 修改密码
+  async changePassword(data: ChangePasswordForm): Promise<null> {
+    const response = await this.post<null>('/change-password', data)
+    return this.handleResponse(response)
+  }
+
+  // 通过邮箱验证码修改密码
+  async changePasswordByEmail(data: ChangePasswordByEmailForm): Promise<null> {
+    const response = await this.post<null>('/change-password/email', data)
+    return this.handleResponse(response)
+  }
+
+  // 上传头像
+  async uploadAvatar(file: File): Promise<AvatarUploadResponse> {
+    const formData = new FormData()
+    formData.append('avatar', file)
+    const response = await this.post<AvatarUploadResponse>('/avatar/upload', formData)
+    return this.handleResponse(response)
+  }
+
+  // 设置两步验证（生成密钥和QR码）
+  async setupTwoFactor(): Promise<TwoFactorSetupResponse> {
+    const response = await this.post<TwoFactorSetupResponse>('/two-factor/setup', {})
+    return this.handleResponse(response)
+  }
+
+  // 启用两步验证
+  async enableTwoFactor(code: string): Promise<null> {
+    const response = await this.post<null>('/two-factor/enable', { code })
+    return this.handleResponse(response)
+  }
+
+  // 禁用两步验证
+  async disableTwoFactor(code: string): Promise<null> {
+    const response = await this.post<null>('/two-factor/disable', { code })
+    return this.handleResponse(response)
+  }
+
+  // 获取两步验证状态
+  async getTwoFactorStatus(): Promise<TwoFactorStatusResponse> {
+    const response = await this.get<TwoFactorStatusResponse>('/two-factor/status')
+    return this.handleResponse(response)
+  }
+
+  // 获取用户活动记录
+  async getUserActivity(params?: {
+    page?: number
+    limit?: number
+    action?: string
+  }): Promise<ActivityLogResponse> {
+    const queryParams = new URLSearchParams()
+    if (params?.page) queryParams.append('page', params.page.toString())
+    if (params?.limit) queryParams.append('limit', params.limit.toString())
+    if (params?.action) queryParams.append('action', params.action)
+    
+    const queryString = queryParams.toString()
+    const url = queryString ? `/activity?${queryString}` : '/activity'
+    const response = await this.get<ActivityLogResponse>(url)
+    return this.handleResponse(response)
+  }
+
+  // 获取用户设备列表
+  async getUserDevices(): Promise<UserDevicesResponse> {
+    const response = await this.get<UserDevicesResponse>('/devices')
+    return this.handleResponse(response)
+  }
+
+  // 删除用户设备
+  async deleteUserDevice(deviceId: string): Promise<null> {
+    const response = await this.delete<null>(`/devices/${deviceId}`)
+    return this.handleResponse(response)
+  }
+
+  // 信任用户设备
+  async trustUserDevice(deviceId: string): Promise<null> {
+    const response = await this.post<null>('/devices/trust', { deviceId })
+    return this.handleResponse(response)
+  }
+
+  // 取消信任用户设备
+  async untrustUserDevice(deviceId: string): Promise<null> {
+    const response = await this.post<null>('/devices/untrust', { deviceId })
+    return this.handleResponse(response)
+  }
 }
 
-// 删除用户设备
-export const deleteUserDevice = async (deviceId: string): Promise<ApiResponse<null>> => {
-  return del(`/auth/devices/${deviceId}`)
-}
+// 导出服务实例
+export const profileService = new ProfileService()
 
-// 信任用户设备
-export const trustUserDevice = async (deviceId: string): Promise<ApiResponse<null>> => {
-  return post('/auth/devices/trust', { deviceId })
-}
-
-// 取消信任用户设备
-export const untrustUserDevice = async (deviceId: string): Promise<ApiResponse<null>> => {
-  return post('/auth/devices/untrust', { deviceId })
-}
+// 兼容性导出（保持向后兼容）
+export const getProfile = () => profileService.getProfile()
+export const updateProfile = (data: UpdateProfileForm) => profileService.updateProfile(data)
+export const updateBasicInfo = (data: UpdateBasicInfoForm) => profileService.updateBasicInfo(data)
+export const updatePreferences = (data: UpdatePreferencesForm) => profileService.updatePreferences(data)
+export const changePassword = (data: ChangePasswordForm) => profileService.changePassword(data)
+export const changePasswordByEmail = (data: ChangePasswordByEmailForm) => profileService.changePasswordByEmail(data)
+export const uploadAvatar = (file: File) => profileService.uploadAvatar(file)
+export const setupTwoFactor = () => profileService.setupTwoFactor()
+export const enableTwoFactor = (code: string) => profileService.enableTwoFactor(code)
+export const disableTwoFactor = (code: string) => profileService.disableTwoFactor(code)
+export const getTwoFactorStatus = () => profileService.getTwoFactorStatus()
+export const getUserActivity = (params?: { page?: number; limit?: number; action?: string }) => profileService.getUserActivity(params)
+export const getUserDevices = () => profileService.getUserDevices()
+export const deleteUserDevice = (deviceId: string) => profileService.deleteUserDevice(deviceId)
+export const trustUserDevice = (deviceId: string) => profileService.trustUserDevice(deviceId)
+export const untrustUserDevice = (deviceId: string) => profileService.untrustUserDevice(deviceId)

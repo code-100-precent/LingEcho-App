@@ -1,6 +1,9 @@
 package handlers
 
 import (
+	apperrors "github.com/code-100-precent/LingEcho/pkg/errors"
+	"github.com/code-100-precent/LingEcho/pkg/response"
+
 	"bytes"
 	"context"
 	"encoding/binary"
@@ -22,7 +25,6 @@ import (
 	"github.com/code-100-precent/LingEcho/pkg/constants"
 	"github.com/code-100-precent/LingEcho/pkg/graph"
 	v2 "github.com/code-100-precent/LingEcho/pkg/llm"
-	"github.com/code-100-precent/LingEcho/pkg/response"
 	"github.com/code-100-precent/LingEcho/pkg/synthesizer"
 	"github.com/code-100-precent/LingEcho/pkg/utils"
 	"github.com/code-100-precent/LingEcho/pkg/voiceclone"
@@ -143,13 +145,13 @@ type UpdateVoiceCloneRequest struct {
 func (h *Handlers) CreateTrainingTask(c *gin.Context) {
 	var req CreateTrainingTaskRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		response.Fail(c, "参数错误", err.Error())
+		apperrors.HandleError(c, apperrors.New(apperrors.ErrInternalServer, "参数错误"))
 		return
 	}
 
 	user := models.CurrentUser(c)
 	if user == nil {
-		response.Fail(c, "未授权", "用户未登录")
+		apperrors.HandleError(c, apperrors.New(apperrors.ErrInternalServer, "未授权"))
 		return
 	}
 
@@ -168,7 +170,7 @@ func (h *Handlers) CreateTrainingTask(c *gin.Context) {
 	factory := voiceclone.NewFactory()
 	service, err := factory.CreateServiceFromEnv(voiceclone.ProviderXunfei)
 	if err != nil {
-		response.Fail(c, "初始化讯飞服务失败", err.Error())
+		apperrors.HandleError(c, apperrors.New(apperrors.ErrInternalServer, "初始化讯飞服务失败"))
 		return
 	}
 
@@ -192,10 +194,10 @@ func (h *Handlers) CreateTrainingTask(c *gin.Context) {
 			strings.Contains(errMsg, "quota") ||
 			strings.Contains(errMsg, "次数") {
 			fmt.Printf("检测到训练次数不足错误\n")
-			response.Fail(c, "训练次数不足", "您的讯飞TTS账户训练次数已用完，请联系管理员或升级账户")
+			apperrors.HandleError(c, apperrors.New(apperrors.ErrInternalServer, "训练次数不足"))
 		} else {
 			fmt.Printf("其他类型错误\n")
-			response.Fail(c, "创建训练任务失败", errMsg)
+			apperrors.HandleError(c, apperrors.New(apperrors.ErrInternalServer, "创建训练任务失败"))
 		}
 		return
 	}
@@ -217,11 +219,11 @@ func (h *Handlers) CreateTrainingTask(c *gin.Context) {
 		TextID:   5001,
 	}
 	if err := h.db.Create(task).Error; err != nil {
-		response.Fail(c, "保存训练任务失败", err.Error())
+		apperrors.HandleError(c, apperrors.New(apperrors.ErrInternalServer, "保存训练任务失败"))
 		return
 	}
 
-	response.Success(c, "创建训练任务成功", task)
+	apperrors.RespondSuccess(c, task)
 }
 
 // saveVoiceCloneConfig 保存音色克隆配置到数据库
@@ -295,20 +297,20 @@ func (h *Handlers) saveVoiceCloneConfig(provider string) {
 func (h *Handlers) SubmitAudio(c *gin.Context) {
 	var req SubmitAudioRequest
 	if err := c.ShouldBind(&req); err != nil {
-		response.Fail(c, "参数错误", err.Error())
+		apperrors.HandleError(c, apperrors.New(apperrors.ErrInternalServer, "参数错误"))
 		return
 	}
 
 	user := models.CurrentUser(c)
 	if user == nil {
-		response.Fail(c, "未授权", "用户未登录")
+		apperrors.HandleError(c, apperrors.New(apperrors.ErrInternalServer, "未授权"))
 		return
 	}
 
 	// 获取上传的音频文件
 	file, err := c.FormFile("audio")
 	if err != nil {
-		response.Fail(c, "获取音频文件失败", err.Error())
+		apperrors.HandleError(c, apperrors.New(apperrors.ErrInternalServer, "获取音频文件失败"))
 		return
 	}
 
@@ -318,7 +320,7 @@ func (h *Handlers) SubmitAudio(c *gin.Context) {
 	// 打开文件
 	src, err := file.Open()
 	if err != nil {
-		response.Fail(c, "打开音频文件失败", err.Error())
+		apperrors.HandleError(c, apperrors.New(apperrors.ErrInternalServer, "打开音频文件失败"))
 		return
 	}
 	defer src.Close()
@@ -326,21 +328,21 @@ func (h *Handlers) SubmitAudio(c *gin.Context) {
 	// 读取音频数据
 	audioData, err := io.ReadAll(src)
 	if err != nil {
-		response.Fail(c, "读取音频文件失败", err.Error())
+		apperrors.HandleError(c, apperrors.New(apperrors.ErrInternalServer, "读取音频文件失败"))
 		return
 	}
 
 	// 调试信息
 	fmt.Printf("音频文件大小: %d bytes\n", len(audioData))
 	if len(audioData) == 0 {
-		response.Fail(c, "音频文件为空", "上传的音频文件没有内容")
+		apperrors.HandleError(c, apperrors.New(apperrors.ErrInternalServer, "音频文件为空"))
 		return
 	}
 
 	// 1) 查找训练任务
 	var task models.VoiceTrainingTask
 	if err := h.db.Where("user_id = ? AND task_id = ?", user.ID, req.TaskID).First(&task).Error; err != nil {
-		response.Fail(c, "训练任务不存在", err.Error())
+		apperrors.HandleError(c, apperrors.New(apperrors.ErrInternalServer, "训练任务不存在"))
 		return
 	}
 
@@ -348,7 +350,7 @@ func (h *Handlers) SubmitAudio(c *gin.Context) {
 	factory := voiceclone.NewFactory()
 	service, err := factory.CreateServiceFromEnv(voiceclone.ProviderXunfei)
 	if err != nil {
-		response.Fail(c, "初始化讯飞服务失败", err.Error())
+		apperrors.HandleError(c, apperrors.New(apperrors.ErrInternalServer, "初始化讯飞服务失败"))
 		return
 	}
 
@@ -360,7 +362,7 @@ func (h *Handlers) SubmitAudio(c *gin.Context) {
 		Language:  task.Language,
 	}
 	if err := service.SubmitAudio(c.Request.Context(), submitReq); err != nil {
-		response.Fail(c, "提交音频失败", err.Error())
+		apperrors.HandleError(c, apperrors.New(apperrors.ErrInternalServer, "提交音频失败"))
 		return
 	}
 
@@ -368,31 +370,31 @@ func (h *Handlers) SubmitAudio(c *gin.Context) {
 	task.Status = models.TrainingStatusInProgress
 	task.TextSegID = req.TextSegID
 	if err := h.db.Save(&task).Error; err != nil {
-		response.Fail(c, "更新任务状态失败", err.Error())
+		apperrors.HandleError(c, apperrors.New(apperrors.ErrInternalServer, "更新任务状态失败"))
 		return
 	}
 
-	response.Success(c, "提交音频成功", nil)
+	apperrors.RespondSuccess(c, nil)
 }
 
 // QueryTaskStatus 查询任务状态
 func (h *Handlers) QueryTaskStatus(c *gin.Context) {
 	var req QueryTaskStatusRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		response.Fail(c, "参数错误", err.Error())
+		apperrors.HandleError(c, apperrors.New(apperrors.ErrInternalServer, "参数错误"))
 		return
 	}
 
 	user := models.CurrentUser(c)
 	if user == nil {
-		response.Fail(c, "未授权", "用户未登录")
+		apperrors.HandleError(c, apperrors.New(apperrors.ErrInternalServer, "未授权"))
 		return
 	}
 
 	// 1) 查找训练任务
 	var task models.VoiceTrainingTask
 	if err := h.db.Where("user_id = ? AND task_id = ?", user.ID, req.TaskID).First(&task).Error; err != nil {
-		response.Fail(c, "训练任务不存在", err.Error())
+		apperrors.HandleError(c, apperrors.New(apperrors.ErrInternalServer, "训练任务不存在"))
 		return
 	}
 
@@ -400,13 +402,13 @@ func (h *Handlers) QueryTaskStatus(c *gin.Context) {
 	factory := voiceclone.NewFactory()
 	service, err := factory.CreateServiceFromEnv(voiceclone.ProviderXunfei)
 	if err != nil {
-		response.Fail(c, "初始化讯飞服务失败", err.Error())
+		apperrors.HandleError(c, apperrors.New(apperrors.ErrInternalServer, "初始化讯飞服务失败"))
 		return
 	}
 
 	status, err := service.QueryTaskStatus(c.Request.Context(), task.TaskID)
 	if err != nil {
-		response.Fail(c, "查询任务状态失败", err.Error())
+		apperrors.HandleError(c, apperrors.New(apperrors.ErrInternalServer, "查询任务状态失败"))
 		return
 	}
 
@@ -431,26 +433,26 @@ func (h *Handlers) QueryTaskStatus(c *gin.Context) {
 	task.AssetID = status.AssetID // xunfei 返回的音色ID
 	task.FailedReason = status.FailedDesc
 	if err := h.db.Save(&task).Error; err != nil {
-		response.Fail(c, "更新任务状态失败", err.Error())
+		apperrors.HandleError(c, apperrors.New(apperrors.ErrInternalServer, "更新任务状态失败"))
 		return
 	}
 
 	// 4) 如果训练成功，落表VoiceClone
 	if trainStatus == models.TrainingStatusSuccess && status.AssetID != "" {
 		if err := h.upsertVoiceClone(c.Request.Context(), user.ID, &task, status.AssetID, status.TrainVID, "xunfei"); err != nil {
-			response.Fail(c, "创建音色记录失败", err.Error())
+			apperrors.HandleError(c, apperrors.New(apperrors.ErrInternalServer, "创建音色记录失败"))
 			return
 		}
 	}
 
-	response.Success(c, "查询任务状态成功", task)
+	apperrors.RespondSuccess(c, task)
 }
 
 // GetUserVoiceClones 获取用户的音色列表
 func (h *Handlers) GetUserVoiceClones(c *gin.Context) {
 	user := models.CurrentUser(c)
 	if user == nil {
-		response.Fail(c, "未授权", "用户未登录")
+		apperrors.HandleError(c, apperrors.New(apperrors.ErrInternalServer, "未授权"))
 		return
 	}
 
@@ -464,17 +466,17 @@ func (h *Handlers) GetUserVoiceClones(c *gin.Context) {
 
 	if err := query.Order("created_at DESC").
 		Find(&clones).Error; err != nil {
-		response.Fail(c, "获取音色列表失败", err.Error())
+		apperrors.HandleError(c, apperrors.New(apperrors.ErrInternalServer, "获取音色列表失败"))
 		return
 	}
-	response.Success(c, "获取音色列表成功", clones)
+	apperrors.RespondSuccess(c, clones)
 }
 
 // GetVoiceClone 获取指定音色
 func (h *Handlers) GetVoiceClone(c *gin.Context) {
 	user := models.CurrentUser(c)
 	if user == nil {
-		response.Fail(c, "未授权", "用户未登录")
+		apperrors.HandleError(c, apperrors.New(apperrors.ErrInternalServer, "未授权"))
 		return
 	}
 
@@ -482,30 +484,30 @@ func (h *Handlers) GetVoiceClone(c *gin.Context) {
 	cloneIDStr := c.Param("id")
 	cloneID, err := strconv.ParseUint(cloneIDStr, 10, 32)
 	if err != nil {
-		response.Fail(c, "音色ID格式错误", err.Error())
+		apperrors.HandleError(c, apperrors.New(apperrors.ErrInternalServer, "音色ID格式错误"))
 		return
 	}
 
 	var clone models.VoiceClone
 	if err := h.db.Where("user_id = ? AND id = ? AND is_active = ?", user.ID, uint(cloneID), true).
 		First(&clone).Error; err != nil {
-		response.Fail(c, "音色不存在", err.Error())
+		apperrors.HandleError(c, apperrors.New(apperrors.ErrInternalServer, "音色不存在"))
 		return
 	}
-	response.Success(c, "获取音色信息成功", clone)
+	apperrors.RespondSuccess(c, clone)
 }
 
 // SynthesizeWithVoice 使用音色合成语音
 func (h *Handlers) SynthesizeWithVoice(c *gin.Context) {
 	var req SynthesizeRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		response.Fail(c, "参数错误", err.Error())
+		apperrors.HandleError(c, apperrors.New(apperrors.ErrInternalServer, "参数错误"))
 		return
 	}
 
 	user := models.CurrentUser(c)
 	if user == nil {
-		response.Fail(c, "未授权", "用户未登录")
+		apperrors.HandleError(c, apperrors.New(apperrors.ErrInternalServer, "未授权"))
 		return
 	}
 
@@ -523,13 +525,13 @@ func (h *Handlers) SynthesizeWithVoice(c *gin.Context) {
 	var clone models.VoiceClone
 	if err := h.db.Where("user_id = ? AND id = ? AND is_active = ?", user.ID, req.VoiceCloneID, true).
 		First(&clone).Error; err != nil {
-		response.Fail(c, "音色不存在", err.Error())
+		apperrors.HandleError(c, apperrors.New(apperrors.ErrInternalServer, "音色不存在"))
 		return
 	}
 
 	// 验证 AssetID 是否存在
 	if clone.AssetID == "" {
-		response.Fail(c, "音色未训练完成", "该音色尚未训练完成，无法使用")
+		apperrors.HandleError(c, apperrors.New(apperrors.ErrInternalServer, "音色未训练完成"))
 		return
 	}
 
@@ -537,7 +539,7 @@ func (h *Handlers) SynthesizeWithVoice(c *gin.Context) {
 	factory := voiceclone.NewFactory()
 	service, err := factory.CreateServiceFromEnv(voiceclone.ProviderXunfei)
 	if err != nil {
-		response.Fail(c, "初始化讯飞服务失败", err.Error())
+		apperrors.HandleError(c, apperrors.New(apperrors.ErrInternalServer, "初始化讯飞服务失败"))
 		return
 	}
 
@@ -553,7 +555,7 @@ func (h *Handlers) SynthesizeWithVoice(c *gin.Context) {
 		req.VoiceCloneID, clone.AssetID, clone.VoiceName)
 	audioURL, err := service.SynthesizeToStorage(c.Request.Context(), synthesizeReq, req.StorageKey)
 	if err != nil {
-		response.Fail(c, "语音合成失败", err.Error())
+		apperrors.HandleError(c, apperrors.New(apperrors.ErrInternalServer, "语音合成失败"))
 		return
 	}
 	audioSize := int64(0)
@@ -591,7 +593,7 @@ func (h *Handlers) SynthesizeWithVoice(c *gin.Context) {
 		Status:        "success",
 	}
 	if err := h.db.Create(synthesis).Error; err != nil {
-		response.Fail(c, "保存合成记录失败", err.Error())
+		apperrors.HandleError(c, apperrors.New(apperrors.ErrInternalServer, "保存合成记录失败"))
 		return
 	}
 
@@ -601,7 +603,7 @@ func (h *Handlers) SynthesizeWithVoice(c *gin.Context) {
 		fmt.Printf("更新音色使用统计失败: %v\n", err)
 	}
 
-	response.Success(c, "语音合成成功", synthesis)
+	apperrors.RespondSuccess(c, synthesis)
 }
 
 // SynthesisHistoryItem 合成历史项（只返回必要字段）
@@ -620,7 +622,7 @@ type SynthesisHistoryItem struct {
 func (h *Handlers) GetSynthesisHistory(c *gin.Context) {
 	user := models.CurrentUser(c)
 	if user == nil {
-		response.Fail(c, "未授权", "用户未登录")
+		apperrors.HandleError(c, apperrors.New(apperrors.ErrInternalServer, "未授权"))
 		return
 	}
 
@@ -650,7 +652,7 @@ func (h *Handlers) GetSynthesisHistory(c *gin.Context) {
 	}
 
 	if err := query.Find(&history).Error; err != nil {
-		response.Fail(c, "获取合成历史失败", err.Error())
+		apperrors.HandleError(c, apperrors.New(apperrors.ErrInternalServer, "获取合成历史失败"))
 		return
 	}
 
@@ -688,7 +690,7 @@ func (h *Handlers) GetSynthesisHistory(c *gin.Context) {
 		})
 	}
 
-	response.Success(c, "获取合成历史成功", result)
+	apperrors.RespondSuccess(c, result)
 }
 
 // DeleteSynthesisRecord 删除合成历史记录
@@ -697,44 +699,44 @@ func (h *Handlers) DeleteSynthesisRecord(c *gin.Context) {
 		ID uint `json:"id" binding:"required"`
 	}
 	if err := c.ShouldBindJSON(&req); err != nil {
-		response.Fail(c, "参数错误", err.Error())
+		apperrors.HandleError(c, apperrors.New(apperrors.ErrInternalServer, "参数错误"))
 		return
 	}
 
 	user := models.CurrentUser(c)
 	if user == nil {
-		response.Fail(c, "未授权", "用户未登录")
+		apperrors.HandleError(c, apperrors.New(apperrors.ErrInternalServer, "未授权"))
 		return
 	}
 
 	// 检查记录是否存在且属于当前用户
 	var record models.VoiceSynthesis
 	if err := h.db.Where("user_id = ? AND id = ?", user.ID, req.ID).First(&record).Error; err != nil {
-		response.Fail(c, "合成记录不存在", err.Error())
+		apperrors.HandleError(c, apperrors.New(apperrors.ErrInternalServer, "合成记录不存在"))
 		return
 	}
 
 	// 删除记录
 	if err := h.db.Where("user_id = ? AND id = ?", user.ID, req.ID).
 		Delete(&models.VoiceSynthesis{}).Error; err != nil {
-		response.Fail(c, "删除合成记录失败", err.Error())
+		apperrors.HandleError(c, apperrors.New(apperrors.ErrInternalServer, "删除合成记录失败"))
 		return
 	}
 
-	response.Success(c, "删除合成记录成功", nil)
+	apperrors.RespondSuccess(c, nil)
 }
 
 // UpdateVoiceClone 更新音色信息
 func (h *Handlers) UpdateVoiceClone(c *gin.Context) {
 	var req UpdateVoiceCloneRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		response.Fail(c, "参数错误", err.Error())
+		apperrors.HandleError(c, apperrors.New(apperrors.ErrInternalServer, "参数错误"))
 		return
 	}
 
 	user := models.CurrentUser(c)
 	if user == nil {
-		response.Fail(c, "未授权", "用户未登录")
+		apperrors.HandleError(c, apperrors.New(apperrors.ErrInternalServer, "未授权"))
 		return
 	}
 
@@ -745,10 +747,10 @@ func (h *Handlers) UpdateVoiceClone(c *gin.Context) {
 			"voice_description": req.VoiceDescription,
 			"updated_at":        time.Now(),
 		}).Error; err != nil {
-		response.Fail(c, "更新音色信息失败", err.Error())
+		apperrors.HandleError(c, apperrors.New(apperrors.ErrInternalServer, "更新音色信息失败"))
 		return
 	}
-	response.Success(c, "更新音色信息成功", nil)
+	apperrors.RespondSuccess(c, nil)
 }
 
 // VoiceOption 音色选项结构
@@ -776,7 +778,7 @@ type LanguageOption struct {
 func (h *Handlers) GetVoiceOptions(c *gin.Context) {
 	provider := c.Query("provider")
 	if provider == "" {
-		response.Fail(c, "缺少provider参数", nil)
+		apperrors.HandleError(c, apperrors.New(apperrors.ErrInternalServer, "缺少provider参数"))
 		return
 	}
 
@@ -879,7 +881,7 @@ func getVoiceJSONPath(provider string) string {
 func (h *Handlers) GetLanguageOptions(c *gin.Context) {
 	provider := c.Query("provider")
 	if provider == "" {
-		response.Fail(c, "缺少provider参数", nil)
+		apperrors.HandleError(c, apperrors.New(apperrors.ErrInternalServer, "缺少provider参数"))
 		return
 	}
 
@@ -1029,22 +1031,22 @@ func (h *Handlers) DeleteVoiceClone(c *gin.Context) {
 		ID uint `json:"id" binding:"required"`
 	}
 	if err := c.ShouldBindJSON(&req); err != nil {
-		response.Fail(c, "参数错误", err.Error())
+		apperrors.HandleError(c, apperrors.New(apperrors.ErrInternalServer, "参数错误"))
 		return
 	}
 
 	user := models.CurrentUser(c)
 	if user == nil {
-		response.Fail(c, "未授权", "用户未登录")
+		apperrors.HandleError(c, apperrors.New(apperrors.ErrInternalServer, "未授权"))
 		return
 	}
 
 	if err := h.db.Where("user_id = ? AND id = ?", user.ID, req.ID).
 		Delete(&models.VoiceClone{}).Error; err != nil {
-		response.Fail(c, "删除音色失败", err.Error())
+		apperrors.HandleError(c, apperrors.New(apperrors.ErrInternalServer, "删除音色失败"))
 		return
 	}
-	response.Success(c, "删除音色成功", nil)
+	apperrors.RespondSuccess(c, nil)
 }
 
 // GetTrainingTexts 获取训练文本
@@ -1053,7 +1055,7 @@ func (h *Handlers) GetTrainingTexts(c *gin.Context) {
 	textIDStr := c.DefaultQuery("textId", "5001")
 	textID, err := strconv.ParseInt(textIDStr, 10, 64)
 	if err != nil {
-		response.Fail(c, "文本ID格式错误", err.Error())
+		apperrors.HandleError(c, apperrors.New(apperrors.ErrInternalServer, "文本ID格式错误"))
 		return
 	}
 
@@ -1065,7 +1067,7 @@ func (h *Handlers) GetTrainingTexts(c *gin.Context) {
 		var segments []models.VoiceTrainingTextSegment
 		h.db.Where("text_id = ?", text.ID).Find(&segments)
 		text.TextSegments = segments
-		response.Success(c, "获取训练文本成功", text)
+		apperrors.RespondSuccess(c, text)
 		return
 	}
 
@@ -1073,13 +1075,13 @@ func (h *Handlers) GetTrainingTexts(c *gin.Context) {
 	factory := voiceclone.NewFactory()
 	service, err := factory.CreateServiceFromEnv(voiceclone.ProviderXunfei)
 	if err != nil {
-		response.Fail(c, "初始化讯飞服务失败", err.Error())
+		apperrors.HandleError(c, apperrors.New(apperrors.ErrInternalServer, "初始化讯飞服务失败"))
 		return
 	}
 
 	xfText, err := service.GetTrainingTexts(c.Request.Context(), textID)
 	if err != nil {
-		response.Fail(c, "获取训练文本失败", err.Error())
+		apperrors.HandleError(c, apperrors.New(apperrors.ErrInternalServer, "获取训练文本失败"))
 		return
 	}
 
@@ -1091,7 +1093,7 @@ func (h *Handlers) GetTrainingTexts(c *gin.Context) {
 		IsActive: true,
 	}
 	if err := h.db.Create(&text).Error; err != nil {
-		response.Fail(c, "保存训练文本失败", err.Error())
+		apperrors.HandleError(c, apperrors.New(apperrors.ErrInternalServer, "保存训练文本失败"))
 		return
 	}
 
@@ -1103,21 +1105,21 @@ func (h *Handlers) GetTrainingTexts(c *gin.Context) {
 			SegText: seg.SegText,
 		}
 		if err := h.db.Create(&segRow).Error; err != nil {
-			response.Fail(c, "保存文本段落失败", err.Error())
+			apperrors.HandleError(c, apperrors.New(apperrors.ErrInternalServer, "保存文本段落失败"))
 			return
 		}
 	}
 
 	// 5) 重新加载返回
 	if err := h.db.First(&text, text.ID).Error; err != nil {
-		response.Fail(c, "加载训练文本失败", err.Error())
+		apperrors.HandleError(c, apperrors.New(apperrors.ErrInternalServer, "加载训练文本失败"))
 		return
 	}
 	// 加载关联的段落
 	var segments []models.VoiceTrainingTextSegment
 	h.db.Where("text_id = ?", text.ID).Find(&segments)
 	text.TextSegments = segments
-	response.Success(c, "获取训练文本成功", text)
+	apperrors.RespondSuccess(c, text)
 }
 
 // upsertVoiceClone 如果不存在则创建，存在则更新
@@ -1146,7 +1148,7 @@ func (h *Handlers) upsertVoiceClone(ctx context.Context, userID uint, task *mode
 func (h *Handlers) GetAudioStatus(c *gin.Context) {
 	requestID := c.Query("requestId")
 	if requestID == "" {
-		response.Fail(c, "缺少requestId参数", nil)
+		apperrors.HandleError(c, apperrors.New(apperrors.ErrInternalServer, "缺少requestId参数"))
 		return
 	}
 
@@ -1197,25 +1199,25 @@ type OneShotTextRequest struct {
 func (h *Handlers) OneShotText(c *gin.Context) {
 	var req OneShotTextRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		response.Fail(c, "参数错误", err.Error())
+		apperrors.HandleError(c, apperrors.New(apperrors.ErrInternalServer, "参数错误"))
 		return
 	}
 
 	// 1. 查询用户凭证配置
 	credential, err := models.GetUserCredentialByApiSecretAndApiKey(h.db, req.APIKey, req.APISecret)
 	if err != nil {
-		response.Fail(c, "查询凭证失败", err.Error())
+		apperrors.HandleError(c, apperrors.New(apperrors.ErrInternalServer, "查询凭证失败"))
 		return
 	}
 	if credential == nil {
-		response.Fail(c, "凭证不存在", "无效的 apiKey 或 apiSecret")
+		apperrors.HandleError(c, apperrors.New(apperrors.ErrInternalServer, "凭证不存在"))
 		return
 	}
 
 	// 获取用户信息
 	var user models.User
 	if err := h.db.First(&user, credential.UserID).Error; err != nil {
-		response.Fail(c, "用户不存在", err.Error())
+		apperrors.HandleError(c, apperrors.New(apperrors.ErrInternalServer, "用户不存在"))
 		return
 	}
 
@@ -1389,9 +1391,9 @@ func (h *Handlers) OneShotText(c *gin.Context) {
 
 			// 检查是否是模型不可用的错误
 			if strings.Contains(errMsg, "no available channels") || strings.Contains(errMsg, "model") {
-				response.Fail(c, "模型不可用", fmt.Sprintf("模型 %s 当前不可用，请检查模型配置或尝试其他模型。错误详情：%s", llmModel, errMsg))
+				apperrors.HandleError(c, apperrors.New(apperrors.ErrInternalServer, "模型不可用"))
 			} else {
-				response.Fail(c, "LLM处理失败", errMsg)
+				apperrors.HandleError(c, apperrors.New(apperrors.ErrInternalServer, "LLM处理失败"))
 			}
 			return
 		}
@@ -1419,38 +1421,38 @@ func (h *Handlers) OneShotText(c *gin.Context) {
 func (h *Handlers) PlainText(c *gin.Context) {
 	var req OneShotTextRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		response.Fail(c, "参数错误", err.Error())
+		apperrors.HandleError(c, apperrors.New(apperrors.ErrInternalServer, "参数错误"))
 		return
 	}
 
 	// 1. 检查助手是否存在
 	var assistant models.Assistant
 	if err := h.db.First(&assistant, req.AssistantID).Error; err != nil {
-		response.Fail(c, "助手不存在", "请检查助手ID是否正确")
+		apperrors.HandleError(c, apperrors.New(apperrors.ErrInternalServer, "助手不存在"))
 		return
 	}
 
 	// 2. 查询用户凭证配置
 	credential, err := models.GetUserCredentialByApiSecretAndApiKey(h.db, req.APIKey, req.APISecret)
 	if err != nil {
-		response.Fail(c, "查询凭证失败", err.Error())
+		apperrors.HandleError(c, apperrors.New(apperrors.ErrInternalServer, "查询凭证失败"))
 		return
 	}
 	if credential == nil {
-		response.Fail(c, "凭证不存在", "无效的 apiKey 或 apiSecret")
+		apperrors.HandleError(c, apperrors.New(apperrors.ErrInternalServer, "凭证不存在"))
 		return
 	}
 
 	// 3. 获取用户信息
 	var user models.User
 	if err := h.db.First(&user, credential.UserID).Error; err != nil {
-		response.Fail(c, "用户不存在", err.Error())
+		apperrors.HandleError(c, apperrors.New(apperrors.ErrInternalServer, "用户不存在"))
 		return
 	}
 
 	// 4. 判断是否是该用户的助手
 	if assistant.UserID != user.ID {
-		response.Fail(c, "无权限", "请检查助手ID是否正确")
+		apperrors.HandleError(c, apperrors.New(apperrors.ErrInternalServer, "无权限"))
 		return
 	}
 
@@ -1600,9 +1602,9 @@ func (h *Handlers) PlainText(c *gin.Context) {
 
 			// 检查是否是模型不可用的错误
 			if strings.Contains(errMsg, "no available channels") || strings.Contains(errMsg, "model") {
-				response.Fail(c, "模型不可用", fmt.Sprintf("模型 %s 当前不可用，请检查模型配置或尝试其他模型。错误详情：%s", llmModel, errMsg))
+				apperrors.HandleError(c, apperrors.New(apperrors.ErrInternalServer, "模型不可用"))
 			} else {
-				response.Fail(c, "LLM处理失败", errMsg)
+				apperrors.HandleError(c, apperrors.New(apperrors.ErrInternalServer, "LLM处理失败"))
 			}
 			return
 		}

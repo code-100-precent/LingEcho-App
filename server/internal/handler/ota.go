@@ -7,6 +7,7 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
+	apperrors "github.com/code-100-precent/LingEcho/pkg/errors"
 	"math/rand"
 	"net/http"
 	"regexp"
@@ -18,7 +19,6 @@ import (
 	"github.com/code-100-precent/LingEcho/pkg/config"
 	"github.com/code-100-precent/LingEcho/pkg/constants"
 	"github.com/code-100-precent/LingEcho/pkg/logger"
-	"github.com/code-100-precent/LingEcho/pkg/response"
 	"github.com/code-100-precent/LingEcho/pkg/utils"
 	"github.com/gin-gonic/gin"
 	"go.uber.org/zap"
@@ -41,7 +41,7 @@ func (h *Handlers) HandleOTACheck(c *gin.Context) {
 	logger.Info("clientID", zap.String("clientID", clientID))
 
 	if deviceID == "" {
-		response.Fail(c, "Device ID is required", nil)
+		apperrors.HandleError(c, apperrors.New(apperrors.ErrInternalServer, "Device ID is required"))
 		return
 	}
 
@@ -52,7 +52,7 @@ func (h *Handlers) HandleOTACheck(c *gin.Context) {
 	// Validate MAC address format
 	if !isMacAddressValid(deviceID) {
 		logger.Error("Invalid MAC address", zap.String("deviceID", deviceID))
-		response.Fail(c, "Invalid device ID", nil)
+		apperrors.HandleError(c, apperrors.New(apperrors.ErrInternalServer, "Invalid device ID"))
 		return
 	}
 

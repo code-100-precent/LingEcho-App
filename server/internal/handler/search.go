@@ -1,11 +1,13 @@
 package handlers
 
 import (
+	apperrors "github.com/code-100-precent/LingEcho/pkg/errors"
+	"github.com/code-100-precent/LingEcho/pkg/response"
+
 	"strconv"
 
 	"github.com/code-100-precent/LingEcho/internal/models"
 	"github.com/code-100-precent/LingEcho/pkg/constants"
-	"github.com/code-100-precent/LingEcho/pkg/response"
 	"github.com/code-100-precent/LingEcho/pkg/utils"
 	"github.com/gin-gonic/gin"
 )
@@ -29,13 +31,13 @@ func (h *Handlers) GetSearchStatus(c *gin.Context) {
 func (h *Handlers) UpdateSearchConfig(c *gin.Context) {
 	user := models.CurrentUser(c)
 	if user == nil {
-		response.Fail(c, "unauthorized", "User not logged in")
+		apperrors.HandleError(c, apperrors.New(apperrors.ErrInternalServer, "unauthorized"))
 		return
 	}
 
 	// Only administrators can modify search configuration
 	if !user.HasPermission(models.PermissionSearchConfig) {
-		response.Fail(c, "forbidden", "Insufficient permissions")
+		apperrors.HandleError(c, apperrors.New(apperrors.ErrInternalServer, "forbidden"))
 		return
 	}
 
@@ -47,7 +49,7 @@ func (h *Handlers) UpdateSearchConfig(c *gin.Context) {
 	}
 
 	if err := c.ShouldBindJSON(&input); err != nil {
-		response.Fail(c, "invalid request", "Invalid parameters")
+		apperrors.HandleError(c, apperrors.New(apperrors.ErrInternalServer, "invalid request"))
 		return
 	}
 
@@ -70,45 +72,45 @@ func (h *Handlers) UpdateSearchConfig(c *gin.Context) {
 	// Reload configuration
 	utils.LoadAutoloads(h.db)
 
-	response.Success(c, "Update successful", nil)
+	apperrors.RespondSuccess(c, nil)
 }
 
 // EnableSearch enables search function
 func (h *Handlers) EnableSearch(c *gin.Context) {
 	user := models.CurrentUser(c)
 	if user == nil {
-		response.Fail(c, "unauthorized", "User not logged in")
+		apperrors.HandleError(c, apperrors.New(apperrors.ErrInternalServer, "unauthorized"))
 		return
 	}
 
 	// Only administrators can enable search
 	if !user.HasPermission(models.PermissionSearchConfig) {
-		response.Fail(c, "forbidden", "Insufficient permissions")
+		apperrors.HandleError(c, apperrors.New(apperrors.ErrInternalServer, "forbidden"))
 		return
 	}
 
 	utils.SetValue(h.db, constants.KEY_SEARCH_ENABLED, "true", "bool", true, true)
 	utils.LoadAutoloads(h.db)
 
-	response.Success(c, "Search function enabled", nil)
+	apperrors.RespondSuccess(c, nil)
 }
 
 // DisableSearch disables search function
 func (h *Handlers) DisableSearch(c *gin.Context) {
 	user := models.CurrentUser(c)
 	if user == nil {
-		response.Fail(c, "unauthorized", "User not logged in")
+		apperrors.HandleError(c, apperrors.New(apperrors.ErrInternalServer, "unauthorized"))
 		return
 	}
 
 	// Only administrators can disable search
 	if !user.HasPermission(models.PermissionSearchConfig) {
-		response.Fail(c, "forbidden", "Insufficient permissions")
+		apperrors.HandleError(c, apperrors.New(apperrors.ErrInternalServer, "forbidden"))
 		return
 	}
 
 	utils.SetValue(h.db, constants.KEY_SEARCH_ENABLED, "false", "bool", true, true)
 	utils.LoadAutoloads(h.db)
 
-	response.Success(c, "Search function disabled", nil)
+	apperrors.RespondSuccess(c, nil)
 }

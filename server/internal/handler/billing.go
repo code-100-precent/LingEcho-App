@@ -1,6 +1,9 @@
 package handlers
 
 import (
+	apperrors "github.com/code-100-precent/LingEcho/pkg/errors"
+	"github.com/code-100-precent/LingEcho/pkg/response"
+
 	"encoding/csv"
 	"fmt"
 	"net/http"
@@ -11,7 +14,6 @@ import (
 
 	"github.com/code-100-precent/LingEcho/internal/models"
 	"github.com/code-100-precent/LingEcho/pkg/config"
-	"github.com/code-100-precent/LingEcho/pkg/response"
 	"github.com/gin-gonic/gin"
 )
 
@@ -19,7 +21,7 @@ import (
 func (h *Handlers) GetUsageStatistics(c *gin.Context) {
 	user := models.CurrentUser(c)
 	if user == nil {
-		response.Fail(c, "User is not logged in.", nil)
+		apperrors.HandleError(c, apperrors.New(apperrors.ErrInternalServer, "User is not logged in."))
 		return
 	}
 
@@ -40,7 +42,7 @@ func (h *Handlers) GetUsageStatistics(c *gin.Context) {
 		var err error
 		startTime, err = time.Parse("2006-01-02", startTimeStr)
 		if err != nil {
-			response.Fail(c, "Invalid startTime format. Use YYYY-MM-DD", nil)
+			apperrors.HandleError(c, apperrors.New(apperrors.ErrInternalServer, "Invalid startTime format. Use YYYY-MM-DD"))
 			return
 		}
 	}
@@ -51,7 +53,7 @@ func (h *Handlers) GetUsageStatistics(c *gin.Context) {
 		var err error
 		endTime, err = time.Parse("2006-01-02", endTimeStr)
 		if err != nil {
-			response.Fail(c, "Invalid endTime format. Use YYYY-MM-DD", nil)
+			apperrors.HandleError(c, apperrors.New(apperrors.ErrInternalServer, "Invalid endTime format. Use YYYY-MM-DD"))
 			return
 		}
 		// 设置为当天的23:59:59
@@ -74,14 +76,14 @@ func (h *Handlers) GetUsageStatistics(c *gin.Context) {
 			// 验证用户是否有权限访问该组织
 			var group models.Group
 			if err := h.db.Where("id = ?", uid).First(&group).Error; err != nil {
-				response.Fail(c, "organization not found", nil)
+				apperrors.HandleError(c, apperrors.New(apperrors.ErrInternalServer, "organization not found"))
 				return
 			}
 			// 检查用户是否是组织成员或创建者
 			if group.CreatorID != user.ID {
 				var member models.GroupMember
 				if err := h.db.Where("group_id = ? AND user_id = ?", uid, user.ID).First(&member).Error; err != nil {
-					response.Fail(c, "insufficient permissions", "You are not a member of this organization")
+					apperrors.HandleError(c, apperrors.New(apperrors.ErrInternalServer, "insufficient permissions"))
 					return
 				}
 			}
@@ -95,14 +97,14 @@ func (h *Handlers) GetUsageStatistics(c *gin.Context) {
 		return
 	}
 
-	response.Success(c, "success", stats)
+	apperrors.RespondSuccess(c, stats)
 }
 
 // GetDailyUsageData gets usage data grouped by date
 func (h *Handlers) GetDailyUsageData(c *gin.Context) {
 	user := models.CurrentUser(c)
 	if user == nil {
-		response.Fail(c, "User is not logged in.", nil)
+		apperrors.HandleError(c, apperrors.New(apperrors.ErrInternalServer, "User is not logged in."))
 		return
 	}
 
@@ -121,7 +123,7 @@ func (h *Handlers) GetDailyUsageData(c *gin.Context) {
 		var err error
 		startTime, err = time.Parse("2006-01-02", startTimeStr)
 		if err != nil {
-			response.Fail(c, "Invalid startTime format. Use YYYY-MM-DD", nil)
+			apperrors.HandleError(c, apperrors.New(apperrors.ErrInternalServer, "Invalid startTime format. Use YYYY-MM-DD"))
 			return
 		}
 	}
@@ -132,7 +134,7 @@ func (h *Handlers) GetDailyUsageData(c *gin.Context) {
 		var err error
 		endTime, err = time.Parse("2006-01-02", endTimeStr)
 		if err != nil {
-			response.Fail(c, "Invalid endTime format. Use YYYY-MM-DD", nil)
+			apperrors.HandleError(c, apperrors.New(apperrors.ErrInternalServer, "Invalid endTime format. Use YYYY-MM-DD"))
 			return
 		}
 		// 设置为当天的23:59:59
@@ -155,14 +157,14 @@ func (h *Handlers) GetDailyUsageData(c *gin.Context) {
 			// 验证用户是否有权限访问该组织
 			var group models.Group
 			if err := h.db.Where("id = ?", uid).First(&group).Error; err != nil {
-				response.Fail(c, "organization not found", nil)
+				apperrors.HandleError(c, apperrors.New(apperrors.ErrInternalServer, "organization not found"))
 				return
 			}
 			// 检查用户是否是组织成员或创建者
 			if group.CreatorID != user.ID {
 				var member models.GroupMember
 				if err := h.db.Where("group_id = ? AND user_id = ?", uid, user.ID).First(&member).Error; err != nil {
-					response.Fail(c, "insufficient permissions", "You are not a member of this organization")
+					apperrors.HandleError(c, apperrors.New(apperrors.ErrInternalServer, "insufficient permissions"))
 					return
 				}
 			}
@@ -176,14 +178,14 @@ func (h *Handlers) GetDailyUsageData(c *gin.Context) {
 		return
 	}
 
-	response.Success(c, "success", dailyData)
+	apperrors.RespondSuccess(c, dailyData)
 }
 
 // GetUsageRecords gets usage record list
 func (h *Handlers) GetUsageRecords(c *gin.Context) {
 	user := models.CurrentUser(c)
 	if user == nil {
-		response.Fail(c, "User is not logged in.", nil)
+		apperrors.HandleError(c, apperrors.New(apperrors.ErrInternalServer, "User is not logged in."))
 		return
 	}
 
@@ -198,14 +200,14 @@ func (h *Handlers) GetUsageRecords(c *gin.Context) {
 			// 验证用户是否有权限访问该组织
 			var group models.Group
 			if err := h.db.Where("id = ?", uid).First(&group).Error; err != nil {
-				response.Fail(c, "organization not found", nil)
+				apperrors.HandleError(c, apperrors.New(apperrors.ErrInternalServer, "organization not found"))
 				return
 			}
 			// 检查用户是否是组织成员或创建者
 			if group.CreatorID != user.ID {
 				var member models.GroupMember
 				if err := h.db.Where("group_id = ? AND user_id = ?", uid, user.ID).First(&member).Error; err != nil {
-					response.Fail(c, "insufficient permissions", "You are not a member of this organization")
+					apperrors.HandleError(c, apperrors.New(apperrors.ErrInternalServer, "insufficient permissions"))
 					return
 				}
 			}
@@ -275,7 +277,7 @@ func (h *Handlers) GetUsageRecords(c *gin.Context) {
 func (h *Handlers) ExportUsageRecords(c *gin.Context) {
 	user := models.CurrentUser(c)
 	if user == nil {
-		response.Fail(c, "User is not logged in.", nil)
+		apperrors.HandleError(c, apperrors.New(apperrors.ErrInternalServer, "User is not logged in."))
 		return
 	}
 
@@ -290,14 +292,14 @@ func (h *Handlers) ExportUsageRecords(c *gin.Context) {
 			// 验证用户是否有权限访问该组织
 			var group models.Group
 			if err := h.db.Where("id = ?", uid).First(&group).Error; err != nil {
-				response.Fail(c, "organization not found", nil)
+				apperrors.HandleError(c, apperrors.New(apperrors.ErrInternalServer, "organization not found"))
 				return
 			}
 			// 检查用户是否是组织成员或创建者
 			if group.CreatorID != user.ID {
 				var member models.GroupMember
 				if err := h.db.Where("group_id = ? AND user_id = ?", uid, user.ID).First(&member).Error; err != nil {
-					response.Fail(c, "insufficient permissions", "You are not a member of this organization")
+					apperrors.HandleError(c, apperrors.New(apperrors.ErrInternalServer, "insufficient permissions"))
 					return
 				}
 			}
@@ -363,7 +365,7 @@ func (h *Handlers) ExportUsageRecords(c *gin.Context) {
 
 	// Check if file exists
 	if _, err := os.Stat(filePath); os.IsNotExist(err) {
-		response.Fail(c, "Export file does not exist", nil)
+		apperrors.HandleError(c, apperrors.New(apperrors.ErrInternalServer, "Export file does not exist"))
 		return
 	}
 
@@ -387,7 +389,7 @@ func (h *Handlers) ExportUsageRecords(c *gin.Context) {
 func (h *Handlers) GenerateBill(c *gin.Context) {
 	user := models.CurrentUser(c)
 	if user == nil {
-		response.Fail(c, "User is not logged in.", nil)
+		apperrors.HandleError(c, apperrors.New(apperrors.ErrInternalServer, "User is not logged in."))
 		return
 	}
 
@@ -400,7 +402,7 @@ func (h *Handlers) GenerateBill(c *gin.Context) {
 	}
 
 	if err := c.ShouldBindJSON(&req); err != nil {
-		response.Fail(c, "Invalid request format", err)
+		apperrors.HandleError(c, apperrors.New(apperrors.ErrInternalServer, "Invalid request format"))
 		return
 	}
 
@@ -408,14 +410,14 @@ func (h *Handlers) GenerateBill(c *gin.Context) {
 	if req.GroupID != nil && *req.GroupID > 0 {
 		var group models.Group
 		if err := h.db.Where("id = ?", *req.GroupID).First(&group).Error; err != nil {
-			response.Fail(c, "organization not found", nil)
+			apperrors.HandleError(c, apperrors.New(apperrors.ErrInternalServer, "organization not found"))
 			return
 		}
 		// 检查用户是否是组织成员或创建者
 		if group.CreatorID != user.ID {
 			var member models.GroupMember
 			if err := h.db.Where("group_id = ? AND user_id = ?", *req.GroupID, user.ID).First(&member).Error; err != nil {
-				response.Fail(c, "insufficient permissions", "You are not a member of this organization")
+				apperrors.HandleError(c, apperrors.New(apperrors.ErrInternalServer, "insufficient permissions"))
 				return
 			}
 		}
@@ -424,13 +426,13 @@ func (h *Handlers) GenerateBill(c *gin.Context) {
 	// Parse time
 	startTime, err := time.Parse("2006-01-02", req.StartTime)
 	if err != nil {
-		response.Fail(c, "Invalid startTime format. Use YYYY-MM-DD", nil)
+		apperrors.HandleError(c, apperrors.New(apperrors.ErrInternalServer, "Invalid startTime format. Use YYYY-MM-DD"))
 		return
 	}
 
 	endTime, err := time.Parse("2006-01-02", req.EndTime)
 	if err != nil {
-		response.Fail(c, "Invalid endTime format. Use YYYY-MM-DD", nil)
+		apperrors.HandleError(c, apperrors.New(apperrors.ErrInternalServer, "Invalid endTime format. Use YYYY-MM-DD"))
 		return
 	}
 	endTime = time.Date(endTime.Year(), endTime.Month(), endTime.Day(), 23, 59, 59, 0, endTime.Location())
@@ -448,14 +450,14 @@ func (h *Handlers) GenerateBill(c *gin.Context) {
 		return
 	}
 
-	response.Success(c, "Bill generated successfully", bill)
+	apperrors.RespondSuccess(c, bill)
 }
 
 // GetBills gets bill list
 func (h *Handlers) GetBills(c *gin.Context) {
 	user := models.CurrentUser(c)
 	if user == nil {
-		response.Fail(c, "User is not logged in.", nil)
+		apperrors.HandleError(c, apperrors.New(apperrors.ErrInternalServer, "User is not logged in."))
 		return
 	}
 
@@ -470,14 +472,14 @@ func (h *Handlers) GetBills(c *gin.Context) {
 			// 验证用户是否有权限访问该组织
 			var group models.Group
 			if err := h.db.Where("id = ?", uid).First(&group).Error; err != nil {
-				response.Fail(c, "organization not found", nil)
+				apperrors.HandleError(c, apperrors.New(apperrors.ErrInternalServer, "organization not found"))
 				return
 			}
 			// 检查用户是否是组织成员或创建者
 			if group.CreatorID != user.ID {
 				var member models.GroupMember
 				if err := h.db.Where("group_id = ? AND user_id = ?", uid, user.ID).First(&member).Error; err != nil {
-					response.Fail(c, "insufficient permissions", "You are not a member of this organization")
+					apperrors.HandleError(c, apperrors.New(apperrors.ErrInternalServer, "insufficient permissions"))
 					return
 				}
 			}
@@ -538,14 +540,14 @@ func (h *Handlers) GetBills(c *gin.Context) {
 func (h *Handlers) GetBill(c *gin.Context) {
 	user := models.CurrentUser(c)
 	if user == nil {
-		response.Fail(c, "User is not logged in.", nil)
+		apperrors.HandleError(c, apperrors.New(apperrors.ErrInternalServer, "User is not logged in."))
 		return
 	}
 
 	billIDStr := c.Param("id")
 	billID, err := strconv.ParseUint(billIDStr, 10, 32)
 	if err != nil {
-		response.Fail(c, "Invalid bill ID", nil)
+		apperrors.HandleError(c, apperrors.New(apperrors.ErrInternalServer, "Invalid bill ID"))
 		return
 	}
 
@@ -555,21 +557,21 @@ func (h *Handlers) GetBill(c *gin.Context) {
 		return
 	}
 
-	response.Success(c, "success", bill)
+	apperrors.RespondSuccess(c, bill)
 }
 
 // ExportBill exports bill
 func (h *Handlers) ExportBill(c *gin.Context) {
 	user := models.CurrentUser(c)
 	if user == nil {
-		response.Fail(c, "User is not logged in.", nil)
+		apperrors.HandleError(c, apperrors.New(apperrors.ErrInternalServer, "User is not logged in."))
 		return
 	}
 
 	billIDStr := c.Param("id")
 	billID, err := strconv.ParseUint(billIDStr, 10, 32)
 	if err != nil {
-		response.Fail(c, "Invalid bill ID", nil)
+		apperrors.HandleError(c, apperrors.New(apperrors.ErrInternalServer, "Invalid bill ID"))
 		return
 	}
 
@@ -606,7 +608,7 @@ func (h *Handlers) ExportBill(c *gin.Context) {
 
 	// 检查文件是否存在
 	if _, err := os.Stat(filePath); os.IsNotExist(err) {
-		response.Fail(c, "导出文件不存在", nil)
+		apperrors.HandleError(c, apperrors.New(apperrors.ErrInternalServer, "导出文件不存在"))
 		return
 	}
 
@@ -865,14 +867,14 @@ func (h *Handlers) formatUintPtr(ptr *uint) string {
 func (h *Handlers) UpdateBill(c *gin.Context) {
 	user := models.CurrentUser(c)
 	if user == nil {
-		response.Fail(c, "User is not logged in.", nil)
+		apperrors.HandleError(c, apperrors.New(apperrors.ErrInternalServer, "User is not logged in."))
 		return
 	}
 
 	billIDStr := c.Param("id")
 	billID, err := strconv.ParseUint(billIDStr, 10, 32)
 	if err != nil {
-		response.Fail(c, "Invalid bill ID", nil)
+		apperrors.HandleError(c, apperrors.New(apperrors.ErrInternalServer, "Invalid bill ID"))
 		return
 	}
 
@@ -889,7 +891,7 @@ func (h *Handlers) UpdateBill(c *gin.Context) {
 	}
 
 	if err := c.ShouldBindJSON(&req); err != nil {
-		response.Fail(c, "Invalid request format", err)
+		apperrors.HandleError(c, apperrors.New(apperrors.ErrInternalServer, "Invalid request format"))
 		return
 	}
 
@@ -906,21 +908,21 @@ func (h *Handlers) UpdateBill(c *gin.Context) {
 		return
 	}
 
-	response.Success(c, "Bill updated successfully", bill)
+	apperrors.RespondSuccess(c, bill)
 }
 
 // DeleteBill 删除账单
 func (h *Handlers) DeleteBill(c *gin.Context) {
 	user := models.CurrentUser(c)
 	if user == nil {
-		response.Fail(c, "User is not logged in.", nil)
+		apperrors.HandleError(c, apperrors.New(apperrors.ErrInternalServer, "User is not logged in."))
 		return
 	}
 
 	billIDStr := c.Param("id")
 	billID, err := strconv.ParseUint(billIDStr, 10, 32)
 	if err != nil {
-		response.Fail(c, "Invalid bill ID", nil)
+		apperrors.HandleError(c, apperrors.New(apperrors.ErrInternalServer, "Invalid bill ID"))
 		return
 	}
 
@@ -937,21 +939,21 @@ func (h *Handlers) DeleteBill(c *gin.Context) {
 		return
 	}
 
-	response.Success(c, "Bill deleted successfully", nil)
+	apperrors.RespondSuccess(c, nil)
 }
 
 // ArchiveBill 归档账单
 func (h *Handlers) ArchiveBill(c *gin.Context) {
 	user := models.CurrentUser(c)
 	if user == nil {
-		response.Fail(c, "User is not logged in.", nil)
+		apperrors.HandleError(c, apperrors.New(apperrors.ErrInternalServer, "User is not logged in."))
 		return
 	}
 
 	billIDStr := c.Param("id")
 	billID, err := strconv.ParseUint(billIDStr, 10, 32)
 	if err != nil {
-		response.Fail(c, "Invalid bill ID", nil)
+		apperrors.HandleError(c, apperrors.New(apperrors.ErrInternalServer, "Invalid bill ID"))
 		return
 	}
 
@@ -969,21 +971,21 @@ func (h *Handlers) ArchiveBill(c *gin.Context) {
 		return
 	}
 
-	response.Success(c, "Bill archived successfully", bill)
+	apperrors.RespondSuccess(c, bill)
 }
 
 // UpdateBillNotes 更新账单备注
 func (h *Handlers) UpdateBillNotes(c *gin.Context) {
 	user := models.CurrentUser(c)
 	if user == nil {
-		response.Fail(c, "User is not logged in.", nil)
+		apperrors.HandleError(c, apperrors.New(apperrors.ErrInternalServer, "User is not logged in."))
 		return
 	}
 
 	billIDStr := c.Param("id")
 	billID, err := strconv.ParseUint(billIDStr, 10, 32)
 	if err != nil {
-		response.Fail(c, "Invalid bill ID", nil)
+		apperrors.HandleError(c, apperrors.New(apperrors.ErrInternalServer, "Invalid bill ID"))
 		return
 	}
 
@@ -999,7 +1001,7 @@ func (h *Handlers) UpdateBillNotes(c *gin.Context) {
 	}
 
 	if err := c.ShouldBindJSON(&req); err != nil {
-		response.Fail(c, "Invalid request format", err)
+		apperrors.HandleError(c, apperrors.New(apperrors.ErrInternalServer, "Invalid request format"))
 		return
 	}
 
@@ -1010,5 +1012,5 @@ func (h *Handlers) UpdateBillNotes(c *gin.Context) {
 		return
 	}
 
-	response.Success(c, "Bill notes updated successfully", bill)
+	apperrors.RespondSuccess(c, bill)
 }

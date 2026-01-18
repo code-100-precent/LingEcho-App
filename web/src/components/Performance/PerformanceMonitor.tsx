@@ -1,205 +1,312 @@
-import { useEffect, useState, useRef } from 'react'
-import { motion } from 'framer-motion'
-import { cn } from '@/utils/cn.ts'
+import React, { useState, useEffect, useRef } from 'react'
+import { motion, AnimatePresence } from 'framer-motion'
 
 interface PerformanceMetrics {
-  fcp: number // First Contentful Paint
-  lcp: number // Largest Contentful Paint
-  fid: number // First Input Delay
-  cls: number // Cumulative Layout Shift
-  ttfb: number // Time to First Byte
-  fmp: number // First Meaningful Paint
-  tti: number // Time to Interactive
+  fps: number
+  memory: {
+    used: number
+    total: number
+    percentage: number
+  }
+  timing: {
+    domContentLoaded: number
+    loadComplete: number
+    firstPaint: number
+    firstContentfulPaint: number
+  }
+  network: {
+    effectiveType: string
+    downlink: number
+    rtt: number
+  }
+  renderTime: number
+  componentCount: number
 }
 
 interface PerformanceMonitorProps {
-  onMetricsUpdate?: (metrics: PerformanceMetrics) => void
-  className?: string
-  showMetrics?: boolean
-  threshold?: {
-    fcp: number
-    lcp: number
-    fid: number
-    cls: number
-  }
+  visible: boolean
+  onToggle: () => void
+  position?: 'top-left' | 'top-right' | 'bottom-left' | 'bottom-right'
 }
 
-const PerformanceMonitor = ({
-  onMetricsUpdate,
-  className = "",
-  showMetrics = false,
-}: PerformanceMonitorProps) => {
+export const PerformanceMonitor: React.FC<PerformanceMonitorProps> = ({
+  visible,
+  onToggle,
+  position = 'top-left'
+}) => {
   const [metrics, setMetrics] = useState<PerformanceMetrics>({
-    fcp: 0,
-    lcp: 0,
-    fid: 0,
-    cls: 0,
-    ttfb: 0,
-    fmp: 0,
-    tti: 0
+    fps: 0,
+    memory: { used: 0, total: 0, percentage: 0 },
+    timing: { domContentLoaded: 0, loadComplete: 0, firstPaint: 0, firstContentfulPaint: 0 },
+    network: { effectiveType: 'unknown', downlink: 0, rtt: 0 },
+    renderTime: 0,
+    componentCount: 0
   })
-  const [isVisible, setIsVisible] = useState(showMetrics)
-  const observerRef = useRef<PerformanceObserver | null>(null)
 
-  // 获取性能指标
-  const getPerformanceMetrics = () => {
-    const navigation = performance.getEntriesByType('navigation')[0] as PerformanceNavigationTiming
-    const paintEntries = performance.getEntriesByType('paint')
-    
-    // FCP (First Contentful Paint)
-    const fcpEntry = paintEntries.find(entry => entry.name === 'first-contentful-paint')
-    const fcp = fcpEntry ? fcpEntry.startTime : 0
+  const frameCountRef = useRef(0)
+  const lastTimeRef = useRef(performance.now())
+  const renderStartRef = useRef(0)
 
-    // LCP (Largest Contentful Paint)
-    const lcpEntries = performance.getEntriesByType('largest-contentful-paint')
-    const lcp = lcpEntries.length > 0 ? lcpEntries[lcpEntries.length - 1].startTime : 0
-
-    // TTFB (Time to First Byte)
-    const ttfb = navigation ? navigation.responseStart - navigation.requestStart : 0
-
-    // FMP (First Meaningful Paint) - 近似值
-    const fmp = fcp * 1.2
-
-    // TTI (Time to Interactive) - 近似值
-    const tti = lcp + 1000
-
-    return {
-      fcp,
-      lcp,
-      fid: 0, // 需要用户交互才能测量
-      cls: 0, // 需要布局变化才能测量
-      ttfb,
-      fmp,
-      tti
-    }
-  }
-
-  // 设置性能观察器
+  // FPS 计算
   useEffect(() => {
-    if (typeof window === 'undefined') return
+    let animationId: number
 
-    // 观察 LCP
-    if ('PerformanceObserver' in window) {
-      try {
-        observerRef.current = new PerformanceObserver((list) => {
-          const entries = list.getEntries()
-          const lastEntry = entries[entries.length - 1] as PerformanceEntry
-          
-          setMetrics(prev => ({
-            ...prev,
-            lcp: lastEntry.startTime
-          }))
-        })
+    const calculateFPS = () => {
+      frameCountRef.current++
+      const currentTime = performance.now()
+      
+      if (currentTime - lastTimeRef.current >= 1000) {
+        const fps = Math.round((frameCountRef.current * 1000) / (currentTime - lastTimeRef.current))
         
-        observerRef.current.observe({ entryTypes: ['largest-contentful-paint'] })
-      } catch (error) {
-        console.warn('PerformanceObserver not supported:', error)
+        setMetrics(prev => ({
+          ...prev,
+          fps: fps
+        }))
+        
+        frameCountRef.current = 0
+        lastTimeRef.current = currentTime
       }
+      
+      animationId = requestAnimationFrame(calculateFPS)
     }
 
-    // 初始指标
-    const initialMetrics = getPerformanceMetrics()
-    setMetrics(initialMetrics)
-    onMetricsUpdate?.(initialMetrics)
-
-    // 定期更新指标
-    const interval = setInterval(() => {
-      const currentMetrics = getPerformanceMetrics()
-      setMetrics(currentMetrics)
-      onMetricsUpdate?.(currentMetrics)
-    }, 1000)
+    if (visible) {
+      animationId = requestAnimationFrame(calculateFPS)
+    }
 
     return () => {
-      if (observerRef.current) {
-        observerRef.current.disconnect()
+      if (animationId) {
+        cancelAnimationFrame(animationId)
       }
-      clearInterval(interval)
     }
-  }, [onMetricsUpdate])
+  }, [visible])
 
-  // 获取性能等级
-  const getPerformanceGrade = (metric: keyof PerformanceMetrics, value: number) => {
-    const thresholds = {
-      fcp: { good: 1800, poor: 3000 },
-      lcp: { good: 2500, poor: 4000 },
-      fid: { good: 100, poor: 300 },
-      cls: { good: 0.1, poor: 0.25 },
-      ttfb: { good: 800, poor: 1800 },
-      fmp: { good: 2000, poor: 3000 },
-      tti: { good: 3800, poor: 7300 }
+  // 内存和性能指标更新
+  useEffect(() => {
+    if (!visible) return
+
+    const updateMetrics = () => {
+      // 内存使用情况
+      if ('memory' in performance) {
+        const memory = (performance as any).memory
+        setMetrics(prev => ({
+          ...prev,
+          memory: {
+            used: Math.round(memory.usedJSHeapSize / 1024 / 1024),
+            total: Math.round(memory.totalJSHeapSize / 1024 / 1024),
+            percentage: Math.round((memory.usedJSHeapSize / memory.totalJSHeapSize) * 100)
+          }
+        }))
+      }
+
+      // 页面加载时间
+      const navigation = performance.getEntriesByType('navigation')[0] as PerformanceNavigationTiming
+      if (navigation) {
+        setMetrics(prev => ({
+          ...prev,
+          timing: {
+            domContentLoaded: Math.round(navigation.domContentLoadedEventEnd - navigation.navigationStart),
+            loadComplete: Math.round(navigation.loadEventEnd - navigation.navigationStart),
+            firstPaint: 0, // 需要通过 PerformanceObserver 获取
+            firstContentfulPaint: 0
+          }
+        }))
+      }
+
+      // 网络信息
+      if ('connection' in navigator) {
+        const connection = (navigator as any).connection
+        setMetrics(prev => ({
+          ...prev,
+          network: {
+            effectiveType: connection.effectiveType || 'unknown',
+            downlink: connection.downlink || 0,
+            rtt: connection.rtt || 0
+          }
+        }))
+      }
+
+      // 组件渲染时间
+      const renderTime = performance.now() - renderStartRef.current
+      setMetrics(prev => ({
+        ...prev,
+        renderTime: Math.round(renderTime * 100) / 100,
+        componentCount: document.querySelectorAll('[data-react-component]').length
+      }))
     }
 
-    const threshold = thresholds[metric]
-    if (!threshold) return 'unknown'
+    renderStartRef.current = performance.now()
+    updateMetrics()
 
-    if (value <= threshold.good) return 'good'
-    if (value <= threshold.poor) return 'needs-improvement'
-    return 'poor'
+    const interval = setInterval(updateMetrics, 1000)
+    return () => clearInterval(interval)
+  }, [visible])
+
+  // Paint Timing API
+  useEffect(() => {
+    if (!visible) return
+
+    const observer = new PerformanceObserver((list) => {
+      const entries = list.getEntries()
+      entries.forEach((entry) => {
+        if (entry.name === 'first-paint') {
+          setMetrics(prev => ({
+            ...prev,
+            timing: {
+              ...prev.timing,
+              firstPaint: Math.round(entry.startTime)
+            }
+          }))
+        } else if (entry.name === 'first-contentful-paint') {
+          setMetrics(prev => ({
+            ...prev,
+            timing: {
+              ...prev.timing,
+              firstContentfulPaint: Math.round(entry.startTime)
+            }
+          }))
+        }
+      })
+    })
+
+    observer.observe({ entryTypes: ['paint'] })
+    return () => observer.disconnect()
+  }, [visible])
+
+  const getPositionClasses = () => {
+    switch (position) {
+      case 'top-right':
+        return 'top-4 right-4'
+      case 'bottom-left':
+        return 'bottom-4 left-4'
+      case 'bottom-right':
+        return 'bottom-4 right-4'
+      default:
+        return 'top-4 left-4'
+    }
   }
 
-  // 获取性能等级颜色
-  const getGradeColor = (grade: string) => {
-    switch (grade) {
-      case 'good': return 'text-green-600'
-      case 'needs-improvement': return 'text-yellow-600'
-      case 'poor': return 'text-red-600'
-      default: return 'text-gray-600'
-    }
+  const getFPSColor = (fps: number) => {
+    if (fps >= 55) return 'text-green-400'
+    if (fps >= 30) return 'text-yellow-400'
+    return 'text-red-400'
   }
 
-  // 格式化数值
-  const formatValue = (value: number, unit: string = 'ms') => {
-    if (value === 0) return 'N/A'
-    return `${Math.round(value)}${unit}`
+  const getMemoryColor = (percentage: number) => {
+    if (percentage < 70) return 'text-green-400'
+    if (percentage < 85) return 'text-yellow-400'
+    return 'text-red-400'
   }
-
-  if (!isVisible) return null
 
   return (
-    <motion.div
-      className={cn(
-        'fixed bottom-4 right-4 bg-white border border-gray-200 rounded-lg shadow-lg p-4 z-50 max-w-sm',
-        className
-      )}
-      initial={{ opacity: 0, y: 20 }}
-      animate={{ opacity: 1, y: 0 }}
-      transition={{ duration: 0.3 }}
-    >
-      <div className="flex items-center justify-between mb-3">
-        <h3 className="text-sm font-semibold text-gray-900">性能监控</h3>
-        <button
-          onClick={() => setIsVisible(false)}
-          className="text-gray-400 hover:text-gray-600"
-        >
-          ✕
-        </button>
-      </div>
+    <>
+      {/* 切换按钮 */}
+      <button
+        onClick={onToggle}
+        className={`fixed ${getPositionClasses()} z-50 bg-black/80 text-white px-2 py-1 rounded text-xs font-mono hover:bg-black/90 transition-colors`}
+        title="Toggle Performance Monitor"
+      >
+        PERF
+      </button>
 
-      <div className="space-y-2 text-xs">
-        {Object.entries(metrics).map(([key, value]) => {
-          const grade = getPerformanceGrade(key as keyof PerformanceMetrics, value)
-          const color = getGradeColor(grade)
-          const unit = key === 'cls' ? '' : 'ms'
-          
-          return (
-            <div key={key} className="flex justify-between items-center">
-              <span className="text-gray-600 uppercase">{key}:</span>
-              <span className={cn('font-mono', color)}>
-                {formatValue(value, unit)}
-              </span>
+      {/* 性能监控面板 */}
+      <AnimatePresence>
+        {visible && (
+          <motion.div
+            initial={{ opacity: 0, scale: 0.9 }}
+            animate={{ opacity: 1, scale: 1 }}
+            exit={{ opacity: 0, scale: 0.9 }}
+            className={`fixed ${getPositionClasses()} z-40 w-80 bg-black/95 backdrop-blur-sm rounded-lg p-4 text-white font-mono text-xs border border-gray-700`}
+            style={{ marginTop: visible ? '32px' : '0' }}
+          >
+            <div className="space-y-3">
+              {/* FPS */}
+              <div className="flex justify-between items-center">
+                <span className="text-gray-300">FPS:</span>
+                <span className={`font-bold ${getFPSColor(metrics.fps)}`}>
+                  {metrics.fps}
+                </span>
+              </div>
+
+              {/* 内存使用 */}
+              <div className="space-y-1">
+                <div className="flex justify-between items-center">
+                  <span className="text-gray-300">Memory:</span>
+                  <span className={`font-bold ${getMemoryColor(metrics.memory.percentage)}`}>
+                    {metrics.memory.used}MB / {metrics.memory.total}MB
+                  </span>
+                </div>
+                <div className="w-full bg-gray-700 rounded-full h-1">
+                  <div
+                    className={`h-1 rounded-full transition-all duration-300 ${
+                      metrics.memory.percentage < 70 ? 'bg-green-400' :
+                      metrics.memory.percentage < 85 ? 'bg-yellow-400' : 'bg-red-400'
+                    }`}
+                    style={{ width: `${metrics.memory.percentage}%` }}
+                  />
+                </div>
+              </div>
+
+              {/* 页面加载时间 */}
+              <div className="space-y-1">
+                <div className="text-gray-300 text-xs">Page Timing:</div>
+                <div className="grid grid-cols-2 gap-2 text-xs">
+                  <div className="flex justify-between">
+                    <span className="text-gray-400">DOM:</span>
+                    <span className="text-blue-400">{metrics.timing.domContentLoaded}ms</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-gray-400">Load:</span>
+                    <span className="text-blue-400">{metrics.timing.loadComplete}ms</span>
+                  </div>
+                  {metrics.timing.firstPaint > 0 && (
+                    <div className="flex justify-between">
+                      <span className="text-gray-400">FP:</span>
+                      <span className="text-blue-400">{metrics.timing.firstPaint}ms</span>
+                    </div>
+                  )}
+                  {metrics.timing.firstContentfulPaint > 0 && (
+                    <div className="flex justify-between">
+                      <span className="text-gray-400">FCP:</span>
+                      <span className="text-blue-400">{metrics.timing.firstContentfulPaint}ms</span>
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              {/* 网络信息 */}
+              {metrics.network.effectiveType !== 'unknown' && (
+                <div className="space-y-1">
+                  <div className="text-gray-300 text-xs">Network:</div>
+                  <div className="grid grid-cols-2 gap-2 text-xs">
+                    <div className="flex justify-between">
+                      <span className="text-gray-400">Type:</span>
+                      <span className="text-purple-400">{metrics.network.effectiveType}</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-gray-400">RTT:</span>
+                      <span className="text-purple-400">{metrics.network.rtt}ms</span>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* 渲染信息 */}
+              <div className="flex justify-between items-center">
+                <span className="text-gray-300">Render:</span>
+                <span className="text-cyan-400">{metrics.renderTime}ms</span>
+              </div>
+
+              {/* 组件数量 */}
+              <div className="flex justify-between items-center">
+                <span className="text-gray-300">Components:</span>
+                <span className="text-cyan-400">{metrics.componentCount}</span>
+              </div>
             </div>
-          )
-        })}
-      </div>
-
-      <div className="mt-3 pt-3 border-t border-gray-200">
-        <div className="text-xs text-gray-500">
-          <div>FCP: 首次内容绘制</div>
-          <div>LCP: 最大内容绘制</div>
-          <div>TTFB: 首字节时间</div>
-        </div>
-      </div>
-    </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+    </>
   )
 }
 

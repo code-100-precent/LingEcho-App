@@ -1,4 +1,4 @@
-import { get, post, ApiResponse } from '@/utils/request'
+import { BaseApiService } from './base.service'
 
 // 聊天请求参数
 export interface ChatRequest {
@@ -102,48 +102,61 @@ export interface ChatSessionLogListResponse {
   assistantId?: number
 }
 
-// 开始聊天会话
-export const startChatSession = async (data: ChatRequest): Promise<ApiResponse<ChatResponse>> => {
-  return post('/chat/start', data)
+class ChatService extends BaseApiService {
+  constructor() {
+    super('/chat')
+  }
+
+  // 开始聊天会话
+  async startChatSession(data: ChatRequest): Promise<ChatResponse> {
+    const response = await this.post<ChatResponse>('/start', data)
+    return this.handleResponse(response)
+  }
+
+  // 停止聊天会话
+  async stopChatSession(sessionId: string): Promise<{ message: string }> {
+    const response = await this.post<{ message: string }>('/stop', { sessionId })
+    return this.handleResponse(response)
+  }
+
+  // 获取聊天会话日志列表
+  async getChatSessionLogs(params: {
+    pageSize?: number
+    cursor?: string
+  }): Promise<ChatSessionLogListResponse> {
+    const response = await this.get<ChatSessionLogListResponse>('/chat-session-log', { params })
+    return this.handleResponse(response)
+  }
+
+  // 获取聊天会话日志详情
+  async getChatSessionLogDetail(id: number): Promise<ChatSessionLogDetail> {
+    const response = await this.get<ChatSessionLogDetail>(`/chat-session-log/${id}`, {}, { enabled: true, ttl: 300000 })
+    return this.handleResponse(response)
+  }
+
+  // 获取指定会话的所有聊天记录
+  async getChatSessionLogsBySession(sessionId: string): Promise<ChatSessionLogDetail[]> {
+    const response = await this.get<ChatSessionLogDetail[]>(`/chat-session-log/by-session/${sessionId}`, {}, { enabled: true, ttl: 60000 })
+    return this.handleResponse(response)
+  }
+
+  // 获取指定助手的聊天会话日志
+  async getChatSessionLogsByAssistant(assistantId: number, params: {
+    pageSize?: number
+    cursor?: string
+  }): Promise<ChatSessionLogListResponse> {
+    const response = await this.get<ChatSessionLogListResponse>(`/chat-session-log/by-assistant/${assistantId}`, { params })
+    return this.handleResponse(response)
+  }
 }
 
-// 停止聊天会话
-export const stopChatSession = async (sessionId: string): Promise<ApiResponse<{ message: string }>> => {
-  return post('/chat/stop', { sessionId })
-}
+// 导出单例
+export const chatService = new ChatService()
 
-// 获取聊天会话日志列表
-export const getChatSessionLogs = async (params: {
-  pageSize?: number
-  cursor?: string
-}): Promise<ApiResponse<ChatSessionLogListResponse>> => {
-  const queryParams = new URLSearchParams()
-  if (params.pageSize) queryParams.append('pageSize', params.pageSize.toString())
-  if (params.cursor) queryParams.append('cursor', params.cursor)
-  
-  const queryString = queryParams.toString()
-  return get(`/chat/chat-session-log${queryString ? `?${queryString}` : ''}`)
-}
-
-// 获取聊天会话日志详情
-export const getChatSessionLogDetail = async (id: number): Promise<ApiResponse<ChatSessionLogDetail>> => {
-  return get(`/chat/chat-session-log/${id}`)
-}
-
-// 获取指定会话的所有聊天记录
-export const getChatSessionLogsBySession = async (sessionId: string): Promise<ApiResponse<ChatSessionLogDetail[]>> => {
-  return get(`/chat/chat-session-log/by-session/${sessionId}`)
-}
-
-// 获取指定助手的聊天会话日志
-export const getChatSessionLogsByAssistant = async (assistantId: number, params: {
-  pageSize?: number
-  cursor?: string
-}): Promise<ApiResponse<ChatSessionLogListResponse>> => {
-  const queryParams = new URLSearchParams()
-  if (params.pageSize) queryParams.append('pageSize', params.pageSize.toString())
-  if (params.cursor) queryParams.append('cursor', params.cursor)
-  
-  const queryString = queryParams.toString()
-  return get(`/chat/chat-session-log/by-assistant/${assistantId}${queryString ? `?${queryString}` : ''}`)
-}
+// 兼容性导出
+export const startChatSession = chatService.startChatSession.bind(chatService)
+export const stopChatSession = chatService.stopChatSession.bind(chatService)
+export const getChatSessionLogs = chatService.getChatSessionLogs.bind(chatService)
+export const getChatSessionLogDetail = chatService.getChatSessionLogDetail.bind(chatService)
+export const getChatSessionLogsBySession = chatService.getChatSessionLogsBySession.bind(chatService)
+export const getChatSessionLogsByAssistant = chatService.getChatSessionLogsByAssistant.bind(chatService)

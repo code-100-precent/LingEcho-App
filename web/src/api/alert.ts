@@ -1,4 +1,4 @@
-import { get, post, put, del, ApiResponse } from '@/utils/request'
+import { BaseApiService } from './base.service'
 
 // 告警类型
 export type AlertType = 'system_error' | 'quota_exceeded' | 'service_error' | 'custom'
@@ -111,59 +111,96 @@ export interface AlertListResponse {
   pageSize: number
 }
 
-// 创建告警规则
-export const createAlertRule = async (data: CreateAlertRuleRequest): Promise<ApiResponse<AlertRule>> => {
-  return post('/alert/rules', data)
+class AlertService extends BaseApiService {
+  constructor() {
+    super('/alert')
+  }
+
+  // 创建告警规则
+  async createAlertRule(data: CreateAlertRuleRequest): Promise<AlertRule> {
+    const response = await this.post<AlertRule>('/rules', data)
+    this.invalidateCache()
+    return this.handleResponse(response)
+  }
+
+  // 获取告警规则列表
+  async getAlertRules(params?: {
+    alertType?: AlertType
+    enabled?: boolean
+  }): Promise<AlertRule[]> {
+    const response = await this.get<AlertRule[]>('/rules', { params }, { enabled: true, ttl: 60000 })
+    return this.handleResponse(response)
+  }
+
+  // 获取告警规则详情
+  async getAlertRule(id: number): Promise<AlertRule> {
+    const response = await this.get<AlertRule>(`/rules/${id}`, {}, { enabled: true, ttl: 300000 })
+    return this.handleResponse(response)
+  }
+
+  // 更新告警规则
+  async updateAlertRule(id: number, data: UpdateAlertRuleRequest): Promise<AlertRule> {
+    const response = await this.put<AlertRule>(`/rules/${id}`, data)
+    this.invalidateCache()
+    return this.handleResponse(response)
+  }
+
+  // 删除告警规则
+  async deleteAlertRule(id: number): Promise<null> {
+    const response = await this.delete<null>(`/rules/${id}`)
+    this.invalidateCache()
+    return this.handleResponse(response)
+  }
+
+  // 获取告警列表
+  async getAlerts(params?: {
+    status?: AlertStatus
+    alertType?: AlertType
+    page?: number
+    pageSize?: number
+  }): Promise<AlertListResponse> {
+    const response = await this.get<AlertListResponse>('', { params })
+    return this.handleResponse(response)
+  }
+
+  // 获取告警详情
+  async getAlert(id: number): Promise<{
+    alert: Alert
+    notifications: AlertNotification[]
+  }> {
+    const response = await this.get<{
+      alert: Alert
+      notifications: AlertNotification[]
+    }>(`/${id}`, {}, { enabled: true, ttl: 30000 })
+    return this.handleResponse(response)
+  }
+
+  // 解决告警
+  async resolveAlert(id: number): Promise<Alert> {
+    const response = await this.post<Alert>(`/${id}/resolve`)
+    this.invalidateCache()
+    return this.handleResponse(response)
+  }
+
+  // 静音告警
+  async muteAlert(id: number): Promise<Alert> {
+    const response = await this.post<Alert>(`/${id}/mute`)
+    this.invalidateCache()
+    return this.handleResponse(response)
+  }
 }
 
-// 获取告警规则列表
-export const getAlertRules = async (params?: {
-  alertType?: AlertType
-  enabled?: boolean
-}): Promise<ApiResponse<AlertRule[]>> => {
-  return get('/alert/rules', { params })
-}
+// 导出单例
+export const alertService = new AlertService()
 
-// 获取告警规则详情
-export const getAlertRule = async (id: number): Promise<ApiResponse<AlertRule>> => {
-  return get(`/alert/rules/${id}`)
-}
-
-// 更新告警规则
-export const updateAlertRule = async (id: number, data: UpdateAlertRuleRequest): Promise<ApiResponse<AlertRule>> => {
-  return put(`/alert/rules/${id}`, data)
-}
-
-// 删除告警规则
-export const deleteAlertRule = async (id: number): Promise<ApiResponse<null>> => {
-  return del(`/alert/rules/${id}`)
-}
-
-// 获取告警列表
-export const getAlerts = async (params?: {
-  status?: AlertStatus
-  alertType?: AlertType
-  page?: number
-  pageSize?: number
-}): Promise<ApiResponse<AlertListResponse>> => {
-  return get('/alert', { params })
-}
-
-// 获取告警详情
-export const getAlert = async (id: number): Promise<ApiResponse<{
-  alert: Alert
-  notifications: AlertNotification[]
-}>> => {
-  return get(`/alert/${id}`)
-}
-
-// 解决告警
-export const resolveAlert = async (id: number): Promise<ApiResponse<Alert>> => {
-  return post(`/alert/${id}/resolve`)
-}
-
-// 静音告警
-export const muteAlert = async (id: number): Promise<ApiResponse<Alert>> => {
-  return post(`/alert/${id}/mute`)
-}
+// 兼容性导出
+export const createAlertRule = alertService.createAlertRule.bind(alertService)
+export const getAlertRules = alertService.getAlertRules.bind(alertService)
+export const getAlertRule = alertService.getAlertRule.bind(alertService)
+export const updateAlertRule = alertService.updateAlertRule.bind(alertService)
+export const deleteAlertRule = alertService.deleteAlertRule.bind(alertService)
+export const getAlerts = alertService.getAlerts.bind(alertService)
+export const getAlert = alertService.getAlert.bind(alertService)
+export const resolveAlert = alertService.resolveAlert.bind(alertService)
+export const muteAlert = alertService.muteAlert.bind(alertService)
 

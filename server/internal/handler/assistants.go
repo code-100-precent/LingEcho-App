@@ -1,6 +1,9 @@
 package handlers
 
 import (
+	apperrors "github.com/code-100-precent/LingEcho/pkg/errors"
+	"github.com/code-100-precent/LingEcho/pkg/response"
+
 	"bytes"
 	"crypto/sha256"
 	"encoding/hex"
@@ -20,7 +23,6 @@ import (
 	"github.com/code-100-precent/LingEcho/pkg/constants"
 	"github.com/code-100-precent/LingEcho/pkg/graph"
 	"github.com/code-100-precent/LingEcho/pkg/logger"
-	"github.com/code-100-precent/LingEcho/pkg/response"
 	"github.com/code-100-precent/LingEcho/pkg/utils"
 	"github.com/gin-gonic/gin"
 	"go.uber.org/zap"
@@ -44,7 +46,7 @@ func (h *Handlers) CreateAssistant(c *gin.Context) {
 		GroupID     *uint  `json:"groupId,omitempty"` // Organization ID, if set, creates a shared assistant for the organization
 	}
 	if err := c.ShouldBindJSON(&input); err != nil {
-		response.Fail(c, "Parameter error", nil)
+		apperrors.HandleError(c, apperrors.New(apperrors.ErrInternalServer, "Parameter error"))
 		return
 	}
 
@@ -54,14 +56,14 @@ func (h *Handlers) CreateAssistant(c *gin.Context) {
 	if input.GroupID != nil {
 		var group models.Group
 		if err := h.db.First(&group, *input.GroupID).Error; err != nil {
-			response.Fail(c, "Organization does not exist", nil)
+			apperrors.HandleError(c, apperrors.New(apperrors.ErrInternalServer, "Organization does not exist"))
 			return
 		}
 		// Check if the user is the creator or administrator of the organization
 		if group.CreatorID != user.ID {
 			var member models.GroupMember
 			if err := h.db.Where("group_id = ? AND user_id = ? AND role = ?", *input.GroupID, user.ID, models.GroupRoleAdmin).First(&member).Error; err != nil {
-				response.Fail(c, "Insufficient permissions", "Only creators or administrators can create organization-shared assistants")
+				apperrors.HandleError(c, apperrors.New(apperrors.ErrInternalServer, "Insufficient permissions"))
 				return
 			}
 		}
@@ -85,18 +87,18 @@ func (h *Handlers) CreateAssistant(c *gin.Context) {
 	}
 
 	if err := h.db.Create(&assistant).Error; err != nil {
-		response.Fail(c, fmt.Sprintf("Failed to create assistant %s", assistant.Name), nil)
+		apperrors.HandleError(c, apperrors.Wrap(err, apperrors.ErrInternalServer, fmt.Sprintf("Failed to create assistant %s", assistant.Name)))
 		return
 	}
 	utils.Sig().Emit(constants.AssistantCreate, user, h.db, assistant)
-	response.Success(c, fmt.Sprintf("Successfully created assistant %s", assistant.Name), assistant)
+	apperrors.RespondSuccess(c, assistant)
 }
 
 // ListAssistants Query all assistants of the current user, including organization-shared assistants
 func (h *Handlers) ListAssistants(c *gin.Context) {
 	user := models.CurrentUser(c)
 	if user == nil {
-		response.Fail(c, "unauthorized", "User not logged in")
+		apperrors.HandleError(c, apperrors.New(apperrors.ErrInternalServer, "unauthorized"))
 		return
 	}
 	var list []models.Assistant
@@ -119,11 +121,11 @@ func (h *Handlers) ListAssistants(c *gin.Context) {
 	}
 
 	if err := query.Order("created_at desc").Find(&list).Error; err != nil {
-		response.Fail(c, "select assistants failed", nil)
+		apperrors.HandleError(c, apperrors.New(apperrors.ErrInternalServer, "select assistants failed"))
 		return
 	}
 
-	response.Success(c, "select assistants successful", list)
+	apperrors.RespondSuccess(c, list)
 }
 
 // GetAssistant Query a single assistant
@@ -132,21 +134,21 @@ func (h *Handlers) GetAssistant(c *gin.Context) {
 	id, _ := strconv.ParseInt(c.Param("id"), 10, 64)
 	var assistant models.Assistant
 	if err := h.db.First(&assistant, id).Error; err != nil {
-		response.Fail(c, "not found", "this assistant is not exist")
+		apperrors.HandleError(c, apperrors.New(apperrors.ErrInternalServer, "not found"))
 		return
 	}
 	if user.ID != assistant.UserID {
-		response.Fail(c, "permission denied", "you are not allowed to access this assistant")
+		apperrors.HandleError(c, apperrors.New(apperrors.ErrInternalServer, "permission denied"))
 		return
 	}
-	response.Success(c, "select assistant successful", assistant)
+	apperrors.RespondSuccess(c, assistant)
 }
 
 // UpdateAssistant Update assistant
 func (h *Handlers) UpdateAssistant(c *gin.Context) {
 	user := models.CurrentUser(c)
 	if user == nil {
-		response.Fail(c, "unauthorized", "User not logged in")
+		apperrors.HandleError(c, apperrors.New(apperrors.ErrInternalServer, "unauthorized"))
 		return
 	}
 
@@ -174,18 +176,18 @@ func (h *Handlers) UpdateAssistant(c *gin.Context) {
 		VADConsecutiveFrames *int     `json:"vadConsecutiveFrames"` // VAD连续帧数
 	}
 	if err := c.ShouldBindJSON(&input); err != nil {
-		response.Fail(c, "invalid request", "parameter error")
+		apperrors.HandleError(c, apperrors.New(apperrors.ErrInternalServer, "invalid request"))
 		return
 	}
 
 	var assistant models.Assistant
 	if err := h.db.First(&assistant, id).Error; err != nil {
-		response.Fail(c, "not found", "Assistant does not exist.")
+		apperrors.HandleError(c, apperrors.New(apperrors.ErrInternalServer, "not found"))
 		return
 	}
 
 	if assistant.UserID != user.ID {
-		response.Fail(c, "forbidden", "No permission to operate this assistant.")
+		apperrors.HandleError(c, apperrors.New(apperrors.ErrInternalServer, "forbidden"))
 		return
 	}
 
@@ -254,24 +256,24 @@ func (h *Handlers) UpdateAssistant(c *gin.Context) {
 	}
 
 	if err := h.db.Model(&assistant).Where("id = ?", id).Updates(updateData).Error; err != nil {
-		response.Fail(c, "update failed", "Update failed")
+		apperrors.HandleError(c, apperrors.New(apperrors.ErrInternalServer, "update failed"))
 		return
 	}
 
 	// Re-query the updated data
 	if err := h.db.First(&assistant, id).Error; err != nil {
-		response.Fail(c, "update failed", "Failed to query updated data")
+		apperrors.HandleError(c, apperrors.New(apperrors.ErrInternalServer, "update failed"))
 		return
 	}
 
-	response.Success(c, "Update successful", assistant)
+	apperrors.RespondSuccess(c, assistant)
 }
 
 // UpdateAssistantJS Update assistant JS template
 func (h *Handlers) UpdateAssistantJS(c *gin.Context) {
 	user := models.CurrentUser(c)
 	if user == nil {
-		response.Fail(c, "unauthorized", "User not logged in")
+		apperrors.HandleError(c, apperrors.New(apperrors.ErrInternalServer, "unauthorized"))
 		return
 	}
 
@@ -281,18 +283,18 @@ func (h *Handlers) UpdateAssistantJS(c *gin.Context) {
 		JsSourceId string `json:"jsSourceId"`
 	}
 	if err := c.ShouldBindJSON(&input); err != nil {
-		response.Fail(c, "Parameter error", nil)
+		apperrors.HandleError(c, apperrors.New(apperrors.ErrInternalServer, "Parameter error"))
 		return
 	}
 
 	var assistant models.Assistant
 	if err := h.db.First(&assistant, id).Error; err != nil {
-		response.Fail(c, "not found", "Assistant does not exist")
+		apperrors.HandleError(c, apperrors.New(apperrors.ErrInternalServer, "not found"))
 		return
 	}
 
 	if assistant.UserID != user.ID {
-		response.Fail(c, "forbidden", "No permission to modify this assistant")
+		apperrors.HandleError(c, apperrors.New(apperrors.ErrInternalServer, "forbidden"))
 		return
 	}
 
@@ -300,56 +302,56 @@ func (h *Handlers) UpdateAssistantJS(c *gin.Context) {
 	if input.JsSourceId != "" {
 		_, err := models.GetJSTemplateByJsSourceID(h.db, input.JsSourceId)
 		if err != nil {
-			response.Fail(c, "Specified JS template does not exist", nil)
+			apperrors.HandleError(c, apperrors.New(apperrors.ErrInternalServer, "Specified JS template does not exist"))
 			return
 		}
 	}
 
 	// Update JS template ID
 	if err := h.db.Model(&assistant).Update("js_source_id", input.JsSourceId).Error; err != nil {
-		response.Fail(c, "Update failed", nil)
+		apperrors.HandleError(c, apperrors.New(apperrors.ErrInternalServer, "Update failed"))
 		return
 	}
 
-	response.Success(c, "Update successful", nil)
+	apperrors.RespondSuccess(c, nil)
 }
 
 // GetAssistantGraphData 获取助手在图数据库中的图数据
 func (h *Handlers) GetAssistantGraphData(c *gin.Context) {
 	user := models.CurrentUser(c)
 	if user == nil {
-		response.Fail(c, "unauthorized", "User not logged in")
+		apperrors.HandleError(c, apperrors.New(apperrors.ErrInternalServer, "unauthorized"))
 		return
 	}
 
 	id, _ := strconv.ParseInt(c.Param("id"), 10, 64)
 	var assistant models.Assistant
 	if err := h.db.First(&assistant, id).Error; err != nil {
-		response.Fail(c, "not found", "Assistant does not exist")
+		apperrors.HandleError(c, apperrors.New(apperrors.ErrInternalServer, "not found"))
 		return
 	}
 
 	if assistant.UserID != user.ID {
-		response.Fail(c, "forbidden", "No permission to access this assistant")
+		apperrors.HandleError(c, apperrors.New(apperrors.ErrInternalServer, "forbidden"))
 		return
 	}
 
 	// 检查是否启用了 Neo4j
 	if !config.GlobalConfig.Neo4jEnabled {
-		response.Fail(c, "Neo4j not enabled", "Neo4j is not enabled in the system")
+		apperrors.HandleError(c, apperrors.New(apperrors.ErrInternalServer, "Neo4j not enabled"))
 		return
 	}
 
 	// 检查助手是否启用了图记忆
 	if !assistant.EnableGraphMemory {
-		response.Fail(c, "Graph memory not enabled", "Graph memory is not enabled for this assistant")
+		apperrors.HandleError(c, apperrors.New(apperrors.ErrInternalServer, "Graph memory not enabled"))
 		return
 	}
 
 	// 获取图数据
 	store := graph.GetDefaultStore()
 	if store == nil {
-		response.Fail(c, "Graph store not available", "Graph store is not initialized")
+		apperrors.HandleError(c, apperrors.New(apperrors.ErrInternalServer, "Graph store not available"))
 		return
 	}
 
@@ -357,18 +359,18 @@ func (h *Handlers) GetAssistantGraphData(c *gin.Context) {
 	graphData, err := store.GetAssistantGraphData(ctx, id)
 	if err != nil {
 		logger.Error("Failed to get assistant graph data", zap.Error(err), zap.Int64("assistantID", id))
-		response.Fail(c, "Failed to get graph data", err.Error())
+		apperrors.HandleError(c, apperrors.New(apperrors.ErrInternalServer, "Failed to get graph data"))
 		return
 	}
 
-	response.Success(c, "Graph data retrieved successfully", graphData)
+	apperrors.RespondSuccess(c, graphData)
 }
 
 // DeleteAssistant Delete assistant
 func (h *Handlers) DeleteAssistant(c *gin.Context) {
 	user := models.CurrentUser(c)
 	if user == nil {
-		response.Fail(c, "unauthorized", "User not logged in")
+		apperrors.HandleError(c, apperrors.New(apperrors.ErrInternalServer, "unauthorized"))
 		return
 	}
 
@@ -376,21 +378,21 @@ func (h *Handlers) DeleteAssistant(c *gin.Context) {
 
 	var assistant models.Assistant
 	if err := h.db.First(&assistant, id).Error; err != nil {
-		response.Fail(c, "not found", "Assistant does not exist")
+		apperrors.HandleError(c, apperrors.New(apperrors.ErrInternalServer, "not found"))
 		return
 	}
 
 	if assistant.UserID != user.ID {
-		response.Fail(c, "forbidden", "No permission to delete this assistant")
+		apperrors.HandleError(c, apperrors.New(apperrors.ErrInternalServer, "forbidden"))
 		return
 	}
 
 	if err := h.db.Delete(&assistant, id).Error; err != nil {
-		response.Fail(c, "delete failed", "Delete failed")
+		apperrors.HandleError(c, apperrors.New(apperrors.ErrInternalServer, "delete failed"))
 		return
 	}
 
-	response.Success(c, "Delete successful", nil)
+	apperrors.RespondSuccess(c, nil)
 }
 
 func (h *Handlers) ServeVoiceSculptorLoaderJS(c *gin.Context) {
@@ -565,7 +567,7 @@ func (h *Handlers) ServeVoiceSculptorLoaderJS(c *gin.Context) {
 func (h *Handlers) ListAssistantTools(c *gin.Context) {
 	user := models.CurrentUser(c)
 	if user == nil {
-		response.Fail(c, "unauthorized", "User not logged in")
+		apperrors.HandleError(c, apperrors.New(apperrors.ErrInternalServer, "unauthorized"))
 		return
 	}
 
@@ -574,12 +576,12 @@ func (h *Handlers) ListAssistantTools(c *gin.Context) {
 	// Verify that the assistant exists and belongs to the current user
 	var assistant models.Assistant
 	if err := h.db.First(&assistant, assistantID).Error; err != nil {
-		response.Fail(c, "not found", "Assistant does not exist")
+		apperrors.HandleError(c, apperrors.New(apperrors.ErrInternalServer, "not found"))
 		return
 	}
 
 	if assistant.UserID != user.ID {
-		response.Fail(c, "forbidden", "No permission to access tools for this assistant")
+		apperrors.HandleError(c, apperrors.New(apperrors.ErrInternalServer, "forbidden"))
 		return
 	}
 
@@ -588,18 +590,18 @@ func (h *Handlers) ListAssistantTools(c *gin.Context) {
 	if err := h.db.Where("assistant_id = ?", assistantID).
 		Order("created_at ASC").
 		Find(&tools).Error; err != nil {
-		response.Fail(c, "查询失败", "获取工具列表失败")
+		apperrors.HandleError(c, apperrors.New(apperrors.ErrInternalServer, "查询失败"))
 		return
 	}
 
-	response.Success(c, "Successfully retrieved tool list", tools)
+	apperrors.RespondSuccess(c, tools)
 }
 
 // CreateAssistantTool Create a new tool
 func (h *Handlers) CreateAssistantTool(c *gin.Context) {
 	user := models.CurrentUser(c)
 	if user == nil {
-		response.Fail(c, "unauthorized", "User not logged in")
+		apperrors.HandleError(c, apperrors.New(apperrors.ErrInternalServer, "unauthorized"))
 		return
 	}
 
@@ -608,12 +610,12 @@ func (h *Handlers) CreateAssistantTool(c *gin.Context) {
 	// Verify that the assistant exists and belongs to the current user
 	var assistant models.Assistant
 	if err := h.db.First(&assistant, assistantID).Error; err != nil {
-		response.Fail(c, "not found", "Assistant does not exist")
+		apperrors.HandleError(c, apperrors.New(apperrors.ErrInternalServer, "not found"))
 		return
 	}
 
 	if assistant.UserID != user.ID {
-		response.Fail(c, "forbidden", "No permission to add tools for this assistant")
+		apperrors.HandleError(c, apperrors.New(apperrors.ErrInternalServer, "forbidden"))
 		return
 	}
 
@@ -626,47 +628,47 @@ func (h *Handlers) CreateAssistantTool(c *gin.Context) {
 		Enabled     bool   `json:"enabled"`
 	}
 	if err := c.ShouldBindJSON(&input); err != nil {
-		response.Fail(c, "Parameter error", err.Error())
+		apperrors.HandleError(c, apperrors.New(apperrors.ErrInternalServer, "Parameter error"))
 		return
 	}
 
 	// Verify that name and description are not just whitespace
 	if strings.TrimSpace(input.Name) == "" {
-		response.Fail(c, "Parameter error", "Tool name cannot be empty")
+		apperrors.HandleError(c, apperrors.New(apperrors.ErrInternalServer, "Parameter error"))
 		return
 	}
 	if strings.TrimSpace(input.Description) == "" {
-		response.Fail(c, "Parameter error", "Tool description cannot be empty")
+		apperrors.HandleError(c, apperrors.New(apperrors.ErrInternalServer, "Parameter error"))
 		return
 	}
 
 	// 验证name格式（只允许字母、数字、下划线、连字符）
 	if matched, _ := regexp.MatchString(`^[a-zA-Z0-9_-]+$`, input.Name); !matched {
-		response.Fail(c, "参数错误", "工具名称只能包含字母、数字、下划线和连字符")
+		apperrors.HandleError(c, apperrors.New(apperrors.ErrInternalServer, "参数错误"))
 		return
 	}
 
 	// Verify that Parameters is valid JSON Schema
 	var paramsSchema map[string]interface{}
 	if err := json.Unmarshal([]byte(input.Parameters), &paramsSchema); err != nil {
-		response.Fail(c, "Parameter error", "Parameters must be valid JSON format")
+		apperrors.HandleError(c, apperrors.New(apperrors.ErrInternalServer, "Parameter error"))
 		return
 	}
 
 	// Verify JSON Schema basic structure
 	if schemaType, ok := paramsSchema["type"].(string); !ok || schemaType != "object" {
-		response.Fail(c, "Parameter error", "Parameters must be JSON Schema format, type must be 'object'")
+		apperrors.HandleError(c, apperrors.New(apperrors.ErrInternalServer, "Parameter error"))
 		return
 	}
 
 	// Verify properties field (if exists)
 	if properties, ok := paramsSchema["properties"].(map[string]interface{}); ok {
 		// properties can be empty, but if it has values, they should be validated
-		for key, prop := range properties {
+		for _, prop := range properties {
 			if propMap, ok := prop.(map[string]interface{}); ok {
 				// Verify that each property has a type field
 				if _, hasType := propMap["type"]; !hasType {
-					response.Fail(c, "Parameter error", fmt.Sprintf("Property '%s' is missing type field", key))
+					apperrors.HandleError(c, apperrors.New(apperrors.ErrInternalServer, "Parameter error"))
 					return
 				}
 			}
@@ -678,7 +680,7 @@ func (h *Handlers) CreateAssistantTool(c *gin.Context) {
 		// Verify that values in required are strings
 		for _, req := range required {
 			if _, ok := req.(string); !ok {
-				response.Fail(c, "Parameter error", "Values in required array must be strings")
+				apperrors.HandleError(c, apperrors.New(apperrors.ErrInternalServer, "Parameter error"))
 				return
 			}
 		}
@@ -687,12 +689,12 @@ func (h *Handlers) CreateAssistantTool(c *gin.Context) {
 	// Verify: If webhook_url is provided, code should be empty or "webhook"
 	if input.WebhookURL != "" {
 		if input.Code != "" && input.Code != "webhook" {
-			response.Fail(c, "Parameter error", "When using webhook, code should be empty or set to 'webhook'")
+			apperrors.HandleError(c, apperrors.New(apperrors.ErrInternalServer, "Parameter error"))
 			return
 		}
 		// Verify webhook URL format
 		if !isValidURL(input.WebhookURL) {
-			response.Fail(c, "Parameter error", "webhookUrl must be a valid HTTP/HTTPS URL")
+			apperrors.HandleError(c, apperrors.New(apperrors.ErrInternalServer, "Parameter error"))
 			return
 		}
 	}
@@ -710,18 +712,18 @@ func (h *Handlers) CreateAssistantTool(c *gin.Context) {
 	}
 
 	if err := models.CreateAssistantTool(h.db, &tool); err != nil {
-		response.Fail(c, "Creation failed", err.Error())
+		apperrors.HandleError(c, apperrors.New(apperrors.ErrInternalServer, "Creation failed"))
 		return
 	}
 
-	response.Success(c, "Tool created successfully", tool)
+	apperrors.RespondSuccess(c, tool)
 }
 
 // UpdateAssistantTool Update tool
 func (h *Handlers) UpdateAssistantTool(c *gin.Context) {
 	user := models.CurrentUser(c)
 	if user == nil {
-		response.Fail(c, "unauthorized", "User not logged in")
+		apperrors.HandleError(c, apperrors.New(apperrors.ErrInternalServer, "unauthorized"))
 		return
 	}
 
@@ -731,17 +733,17 @@ func (h *Handlers) UpdateAssistantTool(c *gin.Context) {
 	// Verify that the assistant exists and belongs to the current user
 	var assistant models.Assistant
 	if err := h.db.First(&assistant, assistantID).Error; err != nil {
-		response.Fail(c, "not found", "Assistant does not exist")
+		apperrors.HandleError(c, apperrors.New(apperrors.ErrInternalServer, "not found"))
 		return
 	}
 	if assistant.UserID != user.ID {
-		response.Fail(c, "forbidden", "No permission to modify tools for this assistant")
+		apperrors.HandleError(c, apperrors.New(apperrors.ErrInternalServer, "forbidden"))
 		return
 	}
 
 	// Verify that the tool exists and belongs to the assistant
 	if exists, err := models.IsAssistantToolOwner(h.db, toolID, assistantID); err != nil || !exists {
-		response.Fail(c, "not found", "Tool does not exist")
+		apperrors.HandleError(c, apperrors.New(apperrors.ErrInternalServer, "not found"))
 		return
 	}
 
@@ -754,7 +756,7 @@ func (h *Handlers) UpdateAssistantTool(c *gin.Context) {
 		Enabled     *bool  `json:"enabled"`
 	}
 	if err := c.ShouldBindJSON(&input); err != nil {
-		response.Fail(c, "Parameter error", err.Error())
+		apperrors.HandleError(c, apperrors.New(apperrors.ErrInternalServer, "Parameter error"))
 		return
 	}
 
@@ -762,12 +764,12 @@ func (h *Handlers) UpdateAssistantTool(c *gin.Context) {
 	if input.Name != "" {
 		// Verify that name is not just whitespace
 		if strings.TrimSpace(input.Name) == "" {
-			response.Fail(c, "Parameter error", "Tool name cannot be empty")
+			apperrors.HandleError(c, apperrors.New(apperrors.ErrInternalServer, "Parameter error"))
 			return
 		}
 		// Verify name format
 		if matched, _ := regexp.MatchString(`^[a-zA-Z0-9_-]+$`, input.Name); !matched {
-			response.Fail(c, "Parameter error", "Tool name can only contain letters, numbers, underscores, and hyphens")
+			apperrors.HandleError(c, apperrors.New(apperrors.ErrInternalServer, "Parameter error"))
 			return
 		}
 		updates["name"] = input.Name
@@ -775,7 +777,7 @@ func (h *Handlers) UpdateAssistantTool(c *gin.Context) {
 	if input.Description != "" {
 		// Verify that description is not just whitespace
 		if strings.TrimSpace(input.Description) == "" {
-			response.Fail(c, "Parameter error", "Tool description cannot be empty")
+			apperrors.HandleError(c, apperrors.New(apperrors.ErrInternalServer, "Parameter error"))
 			return
 		}
 		updates["description"] = input.Description
@@ -784,22 +786,22 @@ func (h *Handlers) UpdateAssistantTool(c *gin.Context) {
 		// Verify that Parameters is valid JSON Schema
 		var paramsJSON map[string]interface{}
 		if err := json.Unmarshal([]byte(input.Parameters), &paramsJSON); err != nil {
-			response.Fail(c, "Parameter error", "Parameters must be valid JSON format")
+			apperrors.HandleError(c, apperrors.New(apperrors.ErrInternalServer, "Parameter error"))
 			return
 		}
 
 		// Verify JSON Schema basic structure
 		if schemaType, ok := paramsJSON["type"].(string); !ok || schemaType != "object" {
-			response.Fail(c, "Parameter error", "Parameters must be JSON Schema format, type must be 'object'")
+			apperrors.HandleError(c, apperrors.New(apperrors.ErrInternalServer, "Parameter error"))
 			return
 		}
 
 		// Verify properties field (if exists)
 		if properties, ok := paramsJSON["properties"].(map[string]interface{}); ok {
-			for key, prop := range properties {
+			for _, prop := range properties {
 				if propMap, ok := prop.(map[string]interface{}); ok {
 					if _, hasType := propMap["type"]; !hasType {
-						response.Fail(c, "Parameter error", fmt.Sprintf("Property '%s' is missing type field", key))
+						apperrors.HandleError(c, apperrors.New(apperrors.ErrInternalServer, "Parameter error"))
 						return
 					}
 				}
@@ -810,7 +812,7 @@ func (h *Handlers) UpdateAssistantTool(c *gin.Context) {
 		if required, ok := paramsJSON["required"].([]interface{}); ok {
 			for _, req := range required {
 				if _, ok := req.(string); !ok {
-					response.Fail(c, "Parameter error", "Values in required array must be strings")
+					apperrors.HandleError(c, apperrors.New(apperrors.ErrInternalServer, "Parameter error"))
 					return
 				}
 			}
@@ -824,12 +826,12 @@ func (h *Handlers) UpdateAssistantTool(c *gin.Context) {
 	if input.WebhookURL != "" {
 		// Verify webhook URL format
 		if !isValidURL(input.WebhookURL) {
-			response.Fail(c, "Parameter error", "webhookUrl must be a valid HTTP/HTTPS URL")
+			apperrors.HandleError(c, apperrors.New(apperrors.ErrInternalServer, "Parameter error"))
 			return
 		}
 		// If webhook_url is provided, code should be empty or "webhook"
 		if input.Code != "" && input.Code != "webhook" {
-			response.Fail(c, "Parameter error", "When using webhook, code should be empty or set to 'webhook'")
+			apperrors.HandleError(c, apperrors.New(apperrors.ErrInternalServer, "Parameter error"))
 			return
 		}
 		updates["webhook_url"] = input.WebhookURL
@@ -839,30 +841,30 @@ func (h *Handlers) UpdateAssistantTool(c *gin.Context) {
 	}
 
 	if len(updates) == 0 {
-		response.Fail(c, "Parameter error", "No fields to update")
+		apperrors.HandleError(c, apperrors.New(apperrors.ErrInternalServer, "Parameter error"))
 		return
 	}
 
 	if err := models.UpdateAssistantTool(h.db, toolID, assistantID, updates); err != nil {
-		response.Fail(c, "Update failed", err.Error())
+		apperrors.HandleError(c, apperrors.New(apperrors.ErrInternalServer, "Update failed"))
 		return
 	}
 
 	// Get the updated tool
 	tool, err := models.GetAssistantToolByID(h.db, toolID, assistantID)
 	if err != nil {
-		response.Fail(c, "Query failed", "Failed to get updated tool")
+		apperrors.HandleError(c, apperrors.New(apperrors.ErrInternalServer, "Query failed"))
 		return
 	}
 
-	response.Success(c, "Tool updated successfully", tool)
+	apperrors.RespondSuccess(c, tool)
 }
 
 // DeleteAssistantTool Delete tool
 func (h *Handlers) DeleteAssistantTool(c *gin.Context) {
 	user := models.CurrentUser(c)
 	if user == nil {
-		response.Fail(c, "unauthorized", "User not logged in")
+		apperrors.HandleError(c, apperrors.New(apperrors.ErrInternalServer, "unauthorized"))
 		return
 	}
 
@@ -872,33 +874,33 @@ func (h *Handlers) DeleteAssistantTool(c *gin.Context) {
 	// Verify that the assistant exists and belongs to the current user
 	var assistant models.Assistant
 	if err := h.db.First(&assistant, assistantID).Error; err != nil {
-		response.Fail(c, "not found", "Assistant does not exist")
+		apperrors.HandleError(c, apperrors.New(apperrors.ErrInternalServer, "not found"))
 		return
 	}
 	if assistant.UserID != user.ID {
-		response.Fail(c, "forbidden", "No permission to delete tools for this assistant")
+		apperrors.HandleError(c, apperrors.New(apperrors.ErrInternalServer, "forbidden"))
 		return
 	}
 
 	// Verify that the tool exists and belongs to the assistant
 	if exists, err := models.IsAssistantToolOwner(h.db, toolID, assistantID); err != nil || !exists {
-		response.Fail(c, "not found", "Tool does not exist")
+		apperrors.HandleError(c, apperrors.New(apperrors.ErrInternalServer, "not found"))
 		return
 	}
 
 	if err := models.DeleteAssistantTool(h.db, toolID, assistantID); err != nil {
-		response.Fail(c, "Deletion failed", err.Error())
+		apperrors.HandleError(c, apperrors.New(apperrors.ErrInternalServer, "Deletion failed"))
 		return
 	}
 
-	response.Success(c, "Tool deleted successfully", nil)
+	apperrors.RespondSuccess(c, nil)
 }
 
 // TestAssistantTool Test tool execution
 func (h *Handlers) TestAssistantTool(c *gin.Context) {
 	user := models.CurrentUser(c)
 	if user == nil {
-		response.Fail(c, "unauthorized", "User not logged in")
+		apperrors.HandleError(c, apperrors.New(apperrors.ErrInternalServer, "unauthorized"))
 		return
 	}
 
@@ -908,18 +910,18 @@ func (h *Handlers) TestAssistantTool(c *gin.Context) {
 	// Verify that the assistant exists and belongs to the current user
 	var assistant models.Assistant
 	if err := h.db.First(&assistant, assistantID).Error; err != nil {
-		response.Fail(c, "not found", "Assistant does not exist")
+		apperrors.HandleError(c, apperrors.New(apperrors.ErrInternalServer, "not found"))
 		return
 	}
 	if assistant.UserID != user.ID {
-		response.Fail(c, "forbidden", "No permission to test tools for this assistant")
+		apperrors.HandleError(c, apperrors.New(apperrors.ErrInternalServer, "forbidden"))
 		return
 	}
 
 	// Verify that the tool exists and belongs to the assistant
 	tool, err := models.GetAssistantToolByID(h.db, toolID, assistantID)
 	if err != nil {
-		response.Fail(c, "not found", "Tool does not exist")
+		apperrors.HandleError(c, apperrors.New(apperrors.ErrInternalServer, "not found"))
 		return
 	}
 
@@ -927,14 +929,14 @@ func (h *Handlers) TestAssistantTool(c *gin.Context) {
 		Args map[string]interface{} `json:"args" binding:"required"`
 	}
 	if err := c.ShouldBindJSON(&input); err != nil {
-		response.Fail(c, "Parameter error", err.Error())
+		apperrors.HandleError(c, apperrors.New(apperrors.ErrInternalServer, "Parameter error"))
 		return
 	}
 
 	// Directly call the execution logic in assistant_tools.go to test the tool
 	testResult, err := h.executeToolForTest(tool, input.Args)
 	if err != nil {
-		response.Fail(c, "Tool execution failed", err.Error())
+		apperrors.HandleError(c, apperrors.New(apperrors.ErrInternalServer, "Tool execution failed"))
 		return
 	}
 
