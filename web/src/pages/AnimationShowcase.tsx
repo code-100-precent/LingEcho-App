@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { motion } from 'framer-motion'
+import { Rocket, Lightbulb, Target, Palette } from 'lucide-react'
 import Card from '../components/UI/Card'
 import Button from '../components/UI/Button'
 import {
@@ -126,7 +127,7 @@ const AnimationShowcase = () => {
                 intensity={0.5}
                 className="flex flex-col items-center gap-3 p-8 h-auto min-h-[140px]"
               >
-                <div className="text-4xl">🚀</div>
+                <Rocket className="w-10 h-10 text-blue-600" />
                 <div className="text-center">
                   <div className="font-semibold text-lg">磁性按钮</div>
                   <div className="text-sm opacity-80 mt-1">鼠标跟随效果</div>
@@ -248,8 +249,9 @@ const AnimationShowcase = () => {
           >
             <div className="text-center space-y-4">
               <div className="mb-6 p-4 bg-blue-50 dark:bg-blue-900/20 rounded-lg">
-                <p className="text-sm text-blue-700 dark:text-blue-300">
-                  💡 点击下面的按钮体验引导功能，页面会自动滚动到相关元素位置
+                <p className="text-sm text-blue-700 dark:text-blue-300 flex items-center gap-2">
+                  <Lightbulb className="w-4 h-4" />
+                  点击下面的按钮体验引导功能，页面会自动滚动到相关元素位置
                 </p>
               </div>
               <div className="flex flex-col sm:flex-row gap-4 justify-center">
@@ -328,7 +330,8 @@ const AnimationShowcase = () => {
                     enableRipple={true}
                     enableGlow={true}
                   >
-                    🎯 3D 效果
+                    <Target className="w-4 h-4 mr-2" />
+                    3D 效果
                   </EnhancedMagneticButton>
                 </div>
               </div>
@@ -365,7 +368,8 @@ const AnimationShowcase = () => {
                       enableRipple={true}
                       enableGlow={true}
                     >
-                      🎨 组合动画效果
+                      <Palette className="w-4 h-4 mr-2" />
+                      组合动画效果
                     </EnhancedMagneticButton>
                   </WaterRipple>
                 </GlitchEffect>
@@ -390,7 +394,7 @@ const AnimationShowcase = () => {
                     key={i}
                     className="p-4 bg-gradient-to-br from-blue-50 to-purple-50 dark:from-blue-900/20 dark:to-purple-900/20 rounded-lg text-center"
                   >
-                    <div className="text-2xl mb-2">🎯</div>
+                    <Target className="w-8 h-8 text-blue-600 mb-2" />
                     <div className="text-sm font-medium">测试项 {i + 1}</div>
                   </div>
                 ))}
@@ -473,7 +477,8 @@ const AnimationShowcase = () => {
           },
           {
             id: 'get-started',
-            title: '🚀 开始使用',
+            title: '开始使用',
+            icon: <Rocket className="w-5 h-5" />,
             description: '现在您已经了解了所有功能，点击下方按钮开始您的创作之旅！',
             target: '.get-started-card',
             position: 'center',

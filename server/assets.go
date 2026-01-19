@@ -48,6 +48,9 @@ var PasswordResetHTML string
 //go:embed templates/email/device_verification.html
 var DeviceVerificationHTML string
 
+//go:embed templates/email/new_device_login.html
+var NewDeviceLoginHTML string
+
 //go:embed static/js/client.js
 var AssistantJsModule string
 

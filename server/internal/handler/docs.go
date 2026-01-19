@@ -47,6 +47,25 @@ func (h *Handlers) RegisterAdmin(router *gin.RouterGroup) {
 	iconChatSessionLog, _ := LingEcho.EmbedStaticAssets.ReadFile("static/img/icon_chat_log.svg")
 	admins := []models.AdminObject{
 		{
+			Group:       "System",
+			Desc:        "SysUser",
+			Model:       models.User{},
+			Name:        "SysUser",
+			Filterables: []string{"UpdatedAt", "CreatedAt"},
+			Editables:   []string{"Email", "Phone", "FirstName", "LastName", "DisplayName", "Role", "Permissions", "Enabled"},
+			Searchables: []string{},
+			Orderables:  []string{"UpdatedAt"},
+			GetDB: func(c *gin.Context, isCreate bool) *gorm.DB {
+				if isCreate {
+					return h.db
+				}
+				return h.db.Where("deleted_at", nil)
+			},
+			BeforeCreate: func(db *gorm.DB, ctx *gin.Context, vptr any) error {
+				return nil
+			},
+		},
+		{
 			Model:       &notification.InternalNotification{},
 			Group:       "System",
 			Name:        "InternalNotification",

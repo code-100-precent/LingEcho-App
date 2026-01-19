@@ -282,3 +282,48 @@ func (m *MailNotification) SendGroupInvitationEmail(to, inviteeName, inviterName
 
 	return smtp.SendMail(addr, auth, m.Config.From, []string{to}, []byte(msg))
 }
+
+// SendNewDeviceLoginAlert 发送新设备登录警告邮件
+func (m *MailNotification) SendNewDeviceLoginAlert(to, username, loginTime, ipAddress, location, deviceType, os, browser string, isSuspicious bool, securityURL, changePasswordURL string) error {
+	// 使用嵌入的模板
+	tmpl, err := template.New("new_device_login").Parse(LingEcho.NewDeviceLoginHTML)
+	if err != nil {
+		return fmt.Errorf("failed to parse new device login template: %w", err)
+	}
+
+	data := struct {
+		Username          string
+		LoginTime         string
+		IPAddress         string
+		Location          string
+		DeviceType        string
+		OS                string
+		Browser           string
+		IsSuspicious      bool
+		SecurityURL       string
+		ChangePasswordURL string
+	}{
+		Username:          username,
+		LoginTime:         loginTime,
+		IPAddress:         ipAddress,
+		Location:          location,
+		DeviceType:        deviceType,
+		OS:                os,
+		Browser:           browser,
+		IsSuspicious:      isSuspicious,
+		SecurityURL:       securityURL,
+		ChangePasswordURL: changePasswordURL,
+	}
+
+	var body bytes.Buffer
+	if err := tmpl.Execute(&body, data); err != nil {
+		return fmt.Errorf("failed to render new device login body: %w", err)
+	}
+
+	subject := "新设备登录提醒"
+	if isSuspicious {
+		subject = "⚠️ 可疑登录警告"
+	}
+
+	return m.SendHTML(to, subject, body.String())
+}

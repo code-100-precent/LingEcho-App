@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
+import { Smartphone, Zap, Bell, Download, X } from 'lucide-react'
 import { cn } from '@/utils/cn.ts'
 
 interface BeforeInstallPromptEvent extends Event {
@@ -154,8 +155,8 @@ const PWAInstaller = ({
                 <div className="bg-gradient-to-r from-blue-500 to-purple-600 p-4">
                   <div className="flex items-center justify-between">
                     <div className="flex items-center gap-3">
-                      <div className="w-10 h-10 rounded-lg flex items-center justify-center">
-                        <span className="text-2xl">📱</span>
+                      <div className="w-10 h-10 bg-white/20 rounded-lg flex items-center justify-center">
+                        <Smartphone className="w-6 h-6" />
                       </div>
                       <div>
                         <h3 className="font-bold text-sm">安装应用</h3>
@@ -166,7 +167,7 @@ const PWAInstaller = ({
                         onClick={handleClose}
                         className="text-white/60 hover:text-white transition-colors p-1"
                     >
-                      ✕
+                      <X className="w-4 h-4" />
                     </button>
                   </div>
                 </div>
@@ -176,7 +177,7 @@ const PWAInstaller = ({
                   <div className="space-y-3">
                     <div className="flex items-start gap-3">
                       <div className="w-8 h-8 bg-green-100 rounded-full flex items-center justify-center flex-shrink-0 mt-0.5">
-                        <span className="text-green-600 text-sm">⚡</span>
+                        <Zap className="w-4 h-4 text-green-600" />
                       </div>
                       <div>
                         <h4 className="font-semibold text-sm text-gray-900">更快访问</h4>
@@ -186,7 +187,7 @@ const PWAInstaller = ({
 
                     <div className="flex items-start gap-3">
                       <div className="w-8 h-8 bg-blue-100 rounded-full flex items-center justify-center flex-shrink-0 mt-0.5">
-                        <span className="text-blue-600 text-sm">🔔</span>
+                        <Bell className="w-4 h-4 text-blue-600" />
                       </div>
                       <div>
                         <h4 className="font-semibold text-sm text-gray-900">离线使用</h4>
@@ -196,7 +197,7 @@ const PWAInstaller = ({
 
                     <div className="flex items-start gap-3">
                       <div className="w-8 h-8 bg-purple-100 rounded-full flex items-center justify-center flex-shrink-0 mt-0.5">
-                        <span className="text-purple-600 text-sm">📲</span>
+                        <Download className="w-4 h-4 text-purple-600" />
                       </div>
                       <div>
                         <h4 className="font-semibold text-sm text-gray-900">原生体验</h4>

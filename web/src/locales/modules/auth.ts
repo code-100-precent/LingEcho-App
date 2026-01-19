@@ -99,6 +99,23 @@ export const auth: Record<Language, Record<string, string>> = {
     'profile.messages.fileTooLarge': '文件过大',
     'profile.messages.uploadFailed': '上传失败',
     'profile.messages.avatarUploadSuccess': '头像上传成功',
+
+    // 忘记密码
+    'forgotPassword.title': '忘记密码',
+    'forgotPassword.subtitle': '重置您的密码',
+    'forgotPassword.description': '输入您的邮箱地址，我们将向您发送重置密码的链接',
+    'forgotPassword.emailLabel': '邮箱',
+    'forgotPassword.emailPlaceholder': '请输入您的邮箱地址',
+    'forgotPassword.sendButton': '发送重置邮件',
+    'forgotPassword.successTitle': '重置邮件已发送！',
+    'forgotPassword.successMessage': '我们已向 {email} 发送了重置密码的邮件。',
+    'forgotPassword.successNote': '请查收邮件并按照说明重置您的密码。',
+    'forgotPassword.emailDelay': '邮件可能需要几分钟才能到达',
+    'forgotPassword.linkExpiry': '重置链接将在24小时后过期',
+    'forgotPassword.resendButton': '重新发送',
+    'forgotPassword.backToLogin': '返回登录',
+    'forgotPassword.rememberPassword': '想起密码了？',
+    'forgotPassword.createAccount': '注册新账号',
   },
   en: {
     // Profile Page
@@ -198,6 +215,23 @@ export const auth: Record<Language, Record<string, string>> = {
     'profile.messages.fileTooLarge': 'File too large',
     'profile.messages.uploadFailed': 'Upload failed',
     'profile.messages.avatarUploadSuccess': 'Avatar uploaded successfully',
+
+    // Forgot Password
+    'forgotPassword.title': 'Forgot Password',
+    'forgotPassword.subtitle': 'Reset Your Password',
+    'forgotPassword.description': 'Enter your email address and we will send you a link to reset your password',
+    'forgotPassword.emailLabel': 'Email',
+    'forgotPassword.emailPlaceholder': 'Enter your email address',
+    'forgotPassword.sendButton': 'Send Reset Email',
+    'forgotPassword.successTitle': 'Reset Email Sent!',
+    'forgotPassword.successMessage': 'We have sent a password reset email to {email}.',
+    'forgotPassword.successNote': 'Please check your email and follow the instructions to reset your password.',
+    'forgotPassword.emailDelay': 'Email may take a few minutes to arrive',
+    'forgotPassword.linkExpiry': 'Reset link will expire in 24 hours',
+    'forgotPassword.resendButton': 'Resend',
+    'forgotPassword.backToLogin': 'Back to Login',
+    'forgotPassword.rememberPassword': 'Remember your password?',
+    'forgotPassword.createAccount': 'Create New Account',
   },
   ja: {
     // プロフィールページ
@@ -297,5 +331,22 @@ export const auth: Record<Language, Record<string, string>> = {
     'profile.messages.fileTooLarge': 'ファイルが大きすぎます',
     'profile.messages.uploadFailed': 'アップロードに失敗しました',
     'profile.messages.avatarUploadSuccess': 'アバターが正常にアップロードされました',
+
+    // パスワードを忘れた場合
+    'forgotPassword.title': 'パスワードを忘れた場合',
+    'forgotPassword.subtitle': 'パスワードをリセット',
+    'forgotPassword.description': 'メールアドレスを入力してください。パスワードリセット用のリンクをお送りします',
+    'forgotPassword.emailLabel': 'メール',
+    'forgotPassword.emailPlaceholder': 'メールアドレスを入力してください',
+    'forgotPassword.sendButton': 'リセットメールを送信',
+    'forgotPassword.successTitle': 'リセットメールを送信しました！',
+    'forgotPassword.successMessage': '{email} にパスワードリセットメールを送信しました。',
+    'forgotPassword.successNote': 'メールをご確認の上、指示に従ってパスワードをリセットしてください。',
+    'forgotPassword.emailDelay': 'メールの到着まで数分かかる場合があります',
+    'forgotPassword.linkExpiry': 'リセットリンクは24時間後に期限切れになります',
+    'forgotPassword.resendButton': '再送信',
+    'forgotPassword.backToLogin': 'ログインに戻る',
+    'forgotPassword.rememberPassword': 'パスワードを思い出しましたか？',
+    'forgotPassword.createAccount': '新しいアカウントを作成',
   }
 }

@@ -13,6 +13,7 @@ import {
   X,
   ChevronRight,
   AlertCircle,
+  Lightbulb,
   Zap,
   Globe,
   Calendar,
@@ -2011,7 +2012,10 @@ const TriggerConfigPanel: React.FC<TriggerConfigPanelProps> = ({
                 placeholder="描述此工作流的用途、适用场景和调用时机，帮助智能体决定何时调用此工作流。&#10;&#10;示例：&#10;• 处理用户订单：当用户需要下单、查询订单状态或取消订单时调用&#10;• 发送邮件通知：当需要向用户发送邮件通知时调用&#10;• 数据分析和报告：当用户需要生成数据报告或进行数据分析时调用"
               />
               <div className="mt-2 p-3 bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-md">
-                <p className="text-xs font-medium text-blue-900 dark:text-blue-300 mb-1">💡 工作原理：</p>
+                <p className="text-xs font-medium text-blue-900 dark:text-blue-300 mb-1 flex items-center gap-1">
+                  <Lightbulb className="w-3 h-3" />
+                  工作原理：
+                </p>
                 <ul className="text-xs text-blue-800 dark:text-blue-400 space-y-1 list-disc list-inside">
                   <li>启用后，此工作流会被注册为智能体的工具（类似天气查询、计算器等）</li>
                   <li>智能体在对话中会根据用户意图和此描述，自动决定是否调用此工作流</li>

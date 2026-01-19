@@ -18,6 +18,7 @@ import Profile from "@/pages/Profile.tsx";
 import AnimationShowcase from "@/pages/AnimationShowcase.tsx";
 import Layout from "@/components/Layout/Layout.tsx";
 import KnowledgeBase from "@/pages/KnowledgeBase.tsx";
+import ResetPassword from "@/pages/ResetPassword.tsx";
 import CredentialManager from "@/pages/CredentialManager.tsx";
 import ProtectedRoute from "@/components/Auth/ProtectedRoute.tsx";
 import JSTemplateManager from "@/pages/JSTemplateManager.tsx";
@@ -55,6 +56,9 @@ function App() {
                         
                         {/* 文档页面 - 不需要登录 */}
                         <Route path="/docs" element={<Documentation />} />
+                        
+                        {/* 重置密码页面 - 不需要登录 */}
+                        <Route path="/reset-password" element={<ResetPassword />} />
                         
                         {/* 需要登录的页面 */}
                         <Route path="/overview" element={
