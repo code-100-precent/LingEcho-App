@@ -1,11 +1,18 @@
 import { motion } from 'framer-motion'
-import {
-  Target,
-  Eye,
-  Users,
-  Award,
-  CheckCircle,
-  Heart
+import { 
+  Target, 
+  Eye, 
+  Users, 
+  Award, 
+  CheckCircle, 
+  Heart,
+  Rocket,
+  Building2,
+  Zap,
+  Building,
+  Link,
+  FlaskConical,
+  PartyPopper
 } from 'lucide-react'
 import Card, { CardContent, CardDescription, CardHeader, CardTitle } from '../components/UI/Card'
 import FadeIn from '../components/Animations/FadeIn'
@@ -42,49 +49,49 @@ const About = () => {
       day: 'Day 1',
       title: t('about.timeline.day1.title'),
       description: t('about.timeline.day1.desc'),
-      icon: '🚀',
+      icon: <Rocket className="w-6 h-6" />,
       color: 'from-blue-500 to-cyan-500'
     },
     {
       day: 'Day 2',
       title: t('about.timeline.day2.title'),
       description: t('about.timeline.day2.desc'),
-      icon: '🏗️',
+      icon: <Building2 className="w-6 h-6" />,
       color: 'from-purple-500 to-pink-500'
     },
     {
       day: 'Day 3',
       title: t('about.timeline.day3.title'),
       description: t('about.timeline.day3.desc'),
-      icon: '⚡',
+      icon: <Zap className="w-6 h-6" />,
       color: 'from-green-500 to-emerald-500'
     },
     {
       day: 'Day 4',
       title: t('about.timeline.day4.title'),
       description: t('about.timeline.day4.desc'),
-      icon: '🏢',
+      icon: <Building className="w-6 h-6" />,
       color: 'from-orange-500 to-red-500'
     },
     {
       day: 'Day 5',
       title: t('about.timeline.day5.title'),
       description: t('about.timeline.day5.desc'),
-      icon: '🔗',
+      icon: <Link className="w-6 h-6" />,
       color: 'from-indigo-500 to-purple-500'
     },
     {
       day: 'Day 6',
       title: t('about.timeline.day6.title'),
       description: t('about.timeline.day6.desc'),
-      icon: '🧪',
+      icon: <FlaskConical className="w-6 h-6" />,
       color: 'from-pink-500 to-rose-500'
     },
     {
       day: 'Day 7',
       title: t('about.timeline.day7.title'),
       description: t('about.timeline.day7.desc'),
-      icon: '🎉',
+      icon: <PartyPopper className="w-6 h-6" />,
       color: 'from-yellow-500 to-orange-500'
     },
   ]
@@ -227,10 +234,10 @@ const About = () => {
                         <motion.div
                             whileHover={{ scale: 1.2, rotate: 360 }}
                             transition={{ duration: 0.6 }}
-                            className={`w-16 h-16 bg-accent ${milestone.color} rounded-full flex items-center justify-center text-white font-bold text-lg shadow-2xl relative overflow-hidden`}
+                            className={`w-16 h-16 bg-accent ${milestone.color} rounded-full flex items-center justify-center font-bold text-lg shadow-2xl relative overflow-hidden`}
                         >
                           <div className="absolute inset-0 bg-accent from-white/20 to-transparent rounded-full"></div>
-                          <span className="relative z-10 text-2xl">{milestone.icon}</span>
+                          <span className="relative z-10">{milestone.icon}</span>
                         </motion.div>
                       </div>
 

@@ -244,3 +244,13 @@ export const getCaptcha = async (): Promise<ApiResponse<CaptchaResponse>> => {
 export const verifyCaptcha = async (id: string, code: string): Promise<ApiResponse<{ valid: boolean }>> => {
   return post<{ valid: boolean }>('/auth/captcha/verify', { id, code })
 }
+
+// 忘记密码 - 发送重置密码邮件
+export const forgotPassword = async (email: string): Promise<ApiResponse<null>> => {
+  return post<null>('/auth/reset-password', { email })
+}
+
+// 重置密码确认
+export const resetPasswordConfirm = async (token: string, password: string): Promise<ApiResponse<null>> => {
+  return post<null>('/auth/reset-password/confirm', { token, password })
+}

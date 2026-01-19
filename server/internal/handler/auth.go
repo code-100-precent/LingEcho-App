@@ -269,7 +269,61 @@ func (h *Handlers) handleUserSigninByEmail(c *gin.Context) {
 		logger.Warn("Failed to record login history", zap.Error(err))
 	}
 
-	// 13. 清除失败登录计数
+	// 13. 发送新设备登录警告邮件（异步）
+	if !isTrusted || isSuspicious {
+		go func() {
+			displayName := user.DisplayName
+			if displayName == "" {
+				displayName = user.Email
+			}
+
+			loginTime := time.Now().Format("2006-01-02 15:04:05")
+			securityURL := ""       // 可以设置为安全设置页面的URL
+			changePasswordURL := "" // 可以设置为修改密码页面的URL
+
+			err := notification.NewMailNotification(config.GlobalConfig.Mail).SendNewDeviceLoginAlert(
+				user.Email,
+				displayName,
+				loginTime,
+				clientIP,
+				location,
+				deviceType,
+				os,
+				browser,
+				isSuspicious,
+				securityURL,
+				changePasswordURL,
+			)
+			if err != nil {
+				logger.Error("Failed to send new device login alert email",
+					zap.Error(err),
+					zap.String("email", user.Email),
+					zap.String("deviceID", deviceID))
+			} else {
+				logger.Info("New device login alert email sent",
+					zap.String("email", user.Email),
+					zap.String("deviceID", deviceID),
+					zap.Bool("isSuspicious", isSuspicious))
+			}
+		}()
+	}
+
+	// 14. 邮箱验证码登录成功后，重置密码登录限制
+	// 删除最近的密码登录记录，允许用户重新使用密码登录
+	if utils.GlobalLoginSecurityManager != nil {
+		// 删除最近7天的密码登录记录，给用户一个重新开始的机会
+		if err := db.Where("user_id = ? AND login_type = ? AND created_at > ?",
+			user.ID, "password", time.Now().AddDate(0, 0, -7)).
+			Delete(&models.LoginHistory{}).Error; err != nil {
+			logger.Warn("Failed to reset password login history", zap.Error(err))
+		} else {
+			logger.Info("Password login history reset after email verification",
+				zap.Uint("userID", user.ID),
+				zap.String("email", user.Email))
+		}
+	}
+
+	// 15. 清除失败登录计数
 	if utils.GlobalLoginSecurityManager != nil {
 		utils.GlobalLoginSecurityManager.ClearFailedLoginCount(form.Email)
 	}
@@ -409,8 +463,24 @@ func (h *Handlers) handleUserSigninByPassword(c *gin.Context) {
 		// 5. 检查密码登录次数限制（需要邮箱验证）
 		if utils.GlobalLoginSecurityManager != nil {
 			checkLimitFunc := func(db *gorm.DB, userID uint) (int64, error) {
-				var count int64
+				// 检查最近是否有邮箱验证码登录
+				var recentEmailLogin int64
 				err := db.Table("login_histories").
+					Where("user_id = ? AND login_type = ? AND success = ? AND created_at > ?",
+						userID, "email", true, time.Now().AddDate(0, 0, -7)). // 最近7天
+					Count(&recentEmailLogin).Error
+				if err != nil {
+					return 0, err
+				}
+
+				// 如果最近7天内有邮箱登录，则重置密码登录限制
+				if recentEmailLogin > 0 {
+					return 0, nil // 返回0，表示没有达到限制
+				}
+
+				// 否则正常检查密码登录次数
+				var count int64
+				err = db.Table("login_histories").
 					Where("user_id = ? AND login_type = ? AND success = ? AND created_at > ?",
 						userID, "password", true, time.Now().AddDate(0, 0, -30)). // 最近30天
 					Count(&count).Error
@@ -422,7 +492,17 @@ func (h *Handlers) handleUserSigninByPassword(c *gin.Context) {
 			}
 			if needsEmailVerification {
 				// 需要邮箱验证码，但这里先检查密码是否正确
-				if !models.CheckPassword(user, form.Password) {
+				passwordValid := false
+				// 检查是否是加密密码格式（passwordHash:encryptedHash:salt:timestamp）
+				if strings.Contains(form.Password, ":") && len(strings.Split(form.Password, ":")) == 4 {
+					// 加密密码验证
+					passwordValid = models.VerifyEncryptedPassword(form.Password, user.Password)
+				} else {
+					// 明文密码（向后兼容）
+					passwordValid = models.CheckPassword(user, form.Password)
+				}
+
+				if !passwordValid {
 					logger.Warn("Login failed: incorrect password (email verification required)", zap.String("email", form.Email), zap.Uint("userID", user.ID), zap.String("ip", clientIP))
 					if utils.GlobalLoginSecurityManager != nil {
 						recordFunc := func(db *gorm.DB, email string, userID uint, ipAddress string, failedCount int) error {
@@ -480,7 +560,12 @@ func (h *Handlers) handleUserSigninByPassword(c *gin.Context) {
 		// 检查是否是加密密码格式（passwordHash:encryptedHash:salt:timestamp）
 		if strings.Contains(form.Password, ":") && len(strings.Split(form.Password, ":")) == 4 {
 			// 加密密码验证
+			logger.Info("Verifying encrypted password",
+				zap.String("email", form.Email))
 			passwordValid = models.VerifyEncryptedPassword(form.Password, user.Password)
+			logger.Info("Encrypted password verification result",
+				zap.String("email", form.Email),
+				zap.Bool("valid", passwordValid))
 		} else {
 			// 明文密码（向后兼容）
 			passwordValid = models.CheckPassword(user, form.Password)
@@ -606,12 +691,51 @@ func (h *Handlers) handleUserSigninByPassword(c *gin.Context) {
 		logger.Warn("Failed to record login history", zap.Error(err))
 	}
 
-	// 14. 清除失败登录计数
+	// 14. 发送新设备登录警告邮件（异步）
+	if !isTrusted || isSuspicious {
+		go func() {
+			displayName := user.DisplayName
+			if displayName == "" {
+				displayName = user.Email
+			}
+
+			loginTime := time.Now().Format("2006-01-02 15:04:05")
+			securityURL := ""       // 可以设置为安全设置页面的URL
+			changePasswordURL := "" // 可以设置为修改密码页面的URL
+
+			err := notification.NewMailNotification(config.GlobalConfig.Mail).SendNewDeviceLoginAlert(
+				user.Email,
+				displayName,
+				loginTime,
+				clientIP,
+				location,
+				deviceType,
+				os,
+				browser,
+				isSuspicious,
+				securityURL,
+				changePasswordURL,
+			)
+			if err != nil {
+				logger.Error("Failed to send new device login alert email",
+					zap.Error(err),
+					zap.String("email", user.Email),
+					zap.String("deviceID", deviceID))
+			} else {
+				logger.Info("New device login alert email sent",
+					zap.String("email", user.Email),
+					zap.String("deviceID", deviceID),
+					zap.Bool("isSuspicious", isSuspicious))
+			}
+		}()
+	}
+
+	// 15. 清除失败登录计数
 	if utils.GlobalLoginSecurityManager != nil {
 		utils.GlobalLoginSecurityManager.ClearFailedLoginCount(form.Email)
 	}
 
-	// 14. 检查是否启用了两步验证
+	// 16. 检查是否启用了两步验证
 	if user.TwoFactorEnabled {
 		// 如果提供了两步验证码，验证它
 		if form.TwoFactorCode != "" {
@@ -662,7 +786,7 @@ func (h *Handlers) handleUserSigninByPassword(c *gin.Context) {
 	}
 	user.AuthToken = models.BuildAuthToken(user, expired, false)
 
-	// 15. 返回登录结果（包含可疑登录警告）
+	// 17. 返回登录结果（包含可疑登录警告）
 	responseData := gin.H{
 		"user":  user,
 		"token": user.AuthToken, // 为了兼容前端，同时返回token字段
@@ -1546,7 +1670,6 @@ func (h *Handlers) handleResetPassword(c *gin.Context) {
 
 	user, err := models.GetUserByEmail(h.db, form.Email)
 	if err != nil {
-		// 为了安全，不暴露用户是否存在
 		response.Success(c, "If the email exists, a reset link has been sent", nil)
 		return
 	}
@@ -1557,7 +1680,7 @@ func (h *Handlers) handleResetPassword(c *gin.Context) {
 		return
 	}
 
-	// 发送密码重置邮件
+	// 发射密码重置信号
 	utils.Sig().Emit(constants.SigUserResetPassword, user, token, c.ClientIP(), c.Request.UserAgent(), h.db)
 
 	response.Success(c, "If the email exists, a reset link has been sent", nil)

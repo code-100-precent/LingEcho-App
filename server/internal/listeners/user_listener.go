@@ -133,7 +133,7 @@ func InitUserListeners() {
 		logger.Info("Sending password reset email", zap.Uint("userId", user.ID), zap.String("email", user.Email))
 
 		// Send password reset email
-		go sendPasswordResetEmail(user, hash, clientIp, userAgent, db)
+		sendPasswordResetEmail(user, hash, clientIp, userAgent, db)
 	})
 
 	logger.Info("user module listener is already")

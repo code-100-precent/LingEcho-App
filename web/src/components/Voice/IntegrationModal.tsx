@@ -1,5 +1,5 @@
 import React, { useState } from 'react'
-import { Copy, Check, Download } from 'lucide-react'
+import { Copy, Check, Download, Lightbulb } from 'lucide-react'
 import Modal, { ModalContent, ModalFooter } from '@/components/UI/Modal'
 import Button from '@/components/UI/Button'
 import Card from '@/components/UI/Card'
@@ -179,7 +179,7 @@ class _VoiceAssistantPageState extends State<VoiceAssistantPage> {
             <Card variant="outlined" padding="md" className="border-blue-200 dark:border-blue-800 bg-blue-50/50 dark:bg-blue-900/10">
               <div className="flex items-start gap-3">
                 <div className="flex-shrink-0 w-8 h-8 rounded-full bg-blue-100 dark:bg-blue-900/30 flex items-center justify-center">
-                  <span className="text-blue-600 dark:text-blue-400 text-lg">💡</span>
+                  <Lightbulb className="w-4 h-4 text-blue-600 dark:text-blue-400" />
                 </div>
                 <div className="flex-1">
                   <h5 className="text-sm font-semibold text-blue-900 dark:text-blue-100 mb-2">快速开始</h5>

@@ -293,25 +293,43 @@ func VerifyEncryptedPassword(encryptedPassword, storedPasswordHash string) bool 
 		return false
 	}
 
+	// 如果时间戳是毫秒级（13位数字），转换为秒级
+	if timestamp > 9999999999 { // 大于10位数字，说明是毫秒时间戳
+		timestamp = timestamp / 1000
+	}
+
 	now := time.Now().Unix()
 	maxAge := int64(300) // 5分钟
 	if now-timestamp > maxAge {
+		fmt.Printf("DEBUG: Timestamp expired. now=%d, timestamp=%d, diff=%d\n",
+			now, timestamp, now-timestamp)
 		return false
 	}
 
 	// 验证 passwordHash 与存储的密码哈希匹配
 	storedHash := strings.TrimPrefix(storedPasswordHash, "sha256$")
+
 	if passwordHash != storedHash {
+		fmt.Printf("DEBUG: Password hash mismatch. Expected: %s, Got: %s\n",
+			storedHash, passwordHash)
 		return false
 	}
 
 	// 验证加密哈希：SHA256(原始密码的SHA256 + salt + timestamp)
 	// 注意：这里使用 passwordHash（即 SHA256(原始密码)）而不是原始密码本身
-	hashInput := fmt.Sprintf("%s%s%d", passwordHash, salt, timestamp)
+	// 前端使用毫秒时间戳计算hash，所以这里也要使用原始的毫秒时间戳
+	originalTimestamp, _ := strconv.ParseInt(timestampStr, 10, 64)
+	hashInput := fmt.Sprintf("%s%s%d", passwordHash, salt, originalTimestamp)
 	hashVal := sha256.Sum256([]byte(hashInput))
 	expectedHash := fmt.Sprintf("%x", hashVal)
 
-	return encryptedHash == expectedHash
+	isValid := encryptedHash == expectedHash
+	if !isValid {
+		fmt.Printf("DEBUG: Hash verification failed. Expected: %s, Got: %s\n",
+			expectedHash, encryptedHash)
+	}
+
+	return isValid
 }
 
 func GetUserByUID(db *gorm.DB, userID uint) (*User, error) {

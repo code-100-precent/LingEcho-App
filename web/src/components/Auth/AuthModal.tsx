@@ -10,19 +10,21 @@ import CaptchaModal from './CaptchaModal'
 import DeviceVerificationModal from './DeviceVerificationModal'
 import { useAuthStore } from '@/stores/authStore.ts'
 import { showAlert } from '@/utils/notification.ts'
-import { sendEmailCode, registerUserByEmail, registerUser, loginWithPassword, loginWithEmailCode } from '@/api/auth.ts'
+import { sendEmailCode, registerUserByEmail, registerUser, loginWithPassword, loginWithEmailCode, forgotPassword } from '@/api/auth.ts'
 import { encryptPasswordToString } from '@/utils/passwordEncrypt.ts'
 import { getSystemInit } from '@/api/system.ts'
 import { BehaviorTracker } from '@/utils/behaviorTracker.ts'
+import { useI18nStore } from '@/stores/i18nStore'
 
 interface AuthModalProps {
   isOpen: boolean
   onClose: () => void
-  initialMode?: 'login' | 'register'
+  initialMode?: 'login' | 'register' | 'forgot-password'
 }
 
 const AuthModal = ({ isOpen, onClose, initialMode = 'login' }: AuthModalProps) => {
-  const [mode, setMode] = useState<'login' | 'register'>(initialMode)
+  const { t } = useI18nStore()
+  const [mode, setMode] = useState<'login' | 'register' | 'forgot-password'>(initialMode)
   const [loginType, setLoginType] = useState<'email' | 'password'>('email') // 登录方式
   const [showPassword, setShowPassword] = useState(false)
   const [showConfirmPassword, setShowConfirmPassword] = useState(false)
@@ -36,7 +38,11 @@ const AuthModal = ({ isOpen, onClose, initialMode = 'login' }: AuthModalProps) =
   const [showTwoFactorInput, setShowTwoFactorInput] = useState(false)
   const [twoFactorCode, setTwoFactorCode] = useState('')
   const [showCaptchaModal, setShowCaptchaModal] = useState(false)
-  const [pendingAction, setPendingAction] = useState<'login' | 'register' | null>(null)
+  const [pendingAction, setPendingAction] = useState<'login' | 'register' | 'forgot-password' | null>(null)
+  
+  // 忘记密码相关状态
+  const [isForgotPasswordSuccess, setIsForgotPasswordSuccess] = useState(false)
+  const [forgotPasswordEmail, setForgotPasswordEmail] = useState('')
   
   // 设备验证相关状态
   const [showDeviceVerification, setShowDeviceVerification] = useState(false)
@@ -268,8 +274,41 @@ const AuthModal = ({ isOpen, onClose, initialMode = 'login' }: AuthModalProps) =
       performLogin(captchaId, captchaCode)
     } else if (pendingAction === 'register') {
       performRegister(captchaId, captchaCode)
+    } else if (pendingAction === 'forgot-password') {
+      performForgotPassword()
     }
     setPendingAction(null)
+  }
+
+  // 执行忘记密码
+  const performForgotPassword = async () => {
+    if (!formData.email) {
+      showAlert('请输入邮箱地址', 'error', '验证失败')
+      return
+    }
+
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
+    if (!emailRegex.test(formData.email)) {
+      showAlert('请输入有效的邮箱地址', 'error', '验证失败')
+      return
+    }
+
+    setIsLoading(true)
+    try {
+      const response = await forgotPassword(formData.email)
+      
+      if (response.code === 200) {
+        setForgotPasswordEmail(formData.email)
+        setIsForgotPasswordSuccess(true)
+        showAlert('重置密码邮件已发送，请查收邮箱', 'success', '发送成功')
+      } else {
+        throw new Error(response.msg || '发送失败')
+      }
+    } catch (error: any) {
+      showAlert(error?.msg || error?.message || '发送重置密码邮件失败，请重试', 'error', '发送失败')
+    } finally {
+      setIsLoading(false)
+    }
   }
 
   // 执行登录
@@ -350,6 +389,14 @@ const AuthModal = ({ isOpen, onClose, initialMode = 'login' }: AuthModalProps) =
           })
           
           if (response.code === 200) {
+            // 检查是否需要邮箱验证
+            if (response.data.requiresEmailVerification) {
+              showAlert('密码登录次数过多，请使用邮箱验证码登录', 'warning', '需要邮箱验证')
+              // 自动切换到邮箱验证码登录模式
+              setLoginType('email')
+              return
+            }
+            
             // 检查是否需要设备验证
             if (response.data.requiresDeviceVerification) {
               setShowDeviceVerification(true)
@@ -557,8 +604,11 @@ const AuthModal = ({ isOpen, onClose, initialMode = 'login' }: AuthModalProps) =
     if (mode === 'login') {
       setPendingAction('login')
       setShowCaptchaModal(true)
-    } else {
+    } else if (mode === 'register') {
       setPendingAction('register')
+      setShowCaptchaModal(true)
+    } else if (mode === 'forgot-password') {
+      setPendingAction('forgot-password')
       setShowCaptchaModal(true)
     }
   }
@@ -579,11 +629,8 @@ const AuthModal = ({ isOpen, onClose, initialMode = 'login' }: AuthModalProps) =
     setRegisterSuccessData(null)
     setIsLoginSuccess(false)
     setLoginSuccessData(null)
-  }
-
-  const switchMode = () => {
-    setMode(mode === 'login' ? 'register' : 'login')
-    resetForm()
+    setIsForgotPasswordSuccess(false)
+    setForgotPasswordEmail('')
   }
 
   return (
@@ -596,7 +643,7 @@ const AuthModal = ({ isOpen, onClose, initialMode = 'login' }: AuthModalProps) =
         resetForm()
       }}
       size="md"
-      title={mode === 'login' ? '登录' : '注册'}
+      title={mode === 'login' ? '登录' : mode === 'register' ? '注册' : t('forgotPassword.title')}
     >
       {/* 注册成功状态显示 */}
       {isRegisterSuccess && registerSuccessData && (
@@ -773,6 +820,95 @@ const AuthModal = ({ isOpen, onClose, initialMode = 'login' }: AuthModalProps) =
         </motion.div>
       )}
       
+      {/* 忘记密码成功状态显示 */}
+      {isForgotPasswordSuccess && (
+        <motion.div
+          initial={{ opacity: 0, scale: 0.9 }}
+          animate={{ opacity: 1, scale: 1 }}
+          className="text-center py-8"
+        >
+          <motion.div
+            initial={{ scale: 0 }}
+            animate={{ scale: 1 }}
+            transition={{ delay: 0.2, type: "spring", stiffness: 200 }}
+            className="w-16 h-16 bg-blue-100 dark:bg-blue-900/20 rounded-full flex items-center justify-center mx-auto mb-4"
+          >
+            <motion.div
+              initial={{ pathLength: 0 }}
+              animate={{ pathLength: 1 }}
+              transition={{ delay: 0.4, duration: 0.6 }}
+              className="w-8 h-8 text-blue-600 dark:text-blue-400"
+            >
+              <Mail className="w-8 h-8" />
+            </motion.div>
+          </motion.div>
+          
+          <motion.h3
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.3 }}
+            className="text-xl font-semibold text-gray-900 dark:text-white mb-2"
+          >
+            {t('forgotPassword.successTitle')}
+          </motion.h3>
+          
+          <motion.p
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.4 }}
+            className="text-gray-600 dark:text-gray-400 mb-6"
+          >
+            {t('forgotPassword.successMessage', { email: forgotPasswordEmail })}
+            <br />
+            {t('forgotPassword.successNote')}
+          </motion.p>
+          
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.5 }}
+            className="space-y-3"
+          >
+            <div className="text-sm text-gray-500 dark:text-gray-400 space-y-2">
+              <p className="flex items-center justify-center gap-2">
+                <Mail className="w-4 h-4" />
+                <span>{t('forgotPassword.emailDelay')}</span>
+              </p>
+              <p className="flex items-center justify-center gap-2">
+                <Clock className="w-4 h-4" />
+                <span>{t('forgotPassword.linkExpiry')}</span>
+              </p>
+            </div>
+            
+            <div className="flex space-x-3 pt-4">
+              <Button
+                variant="outline"
+                onClick={() => {
+                  setIsForgotPasswordSuccess(false)
+                  setForgotPasswordEmail('')
+                  setMode('forgot-password')
+                }}
+                className="flex-1"
+              >
+                {t('forgotPassword.resendButton')}
+              </Button>
+              <Button
+                variant="primary"
+                onClick={() => {
+                  setIsForgotPasswordSuccess(false)
+                  setForgotPasswordEmail('')
+                  setMode('login')
+                  resetForm()
+                }}
+                className="flex-1"
+              >
+                {t('forgotPassword.backToLogin')}
+              </Button>
+            </div>
+          </motion.div>
+        </motion.div>
+      )}
+      
       {/* 内存数据库警告提示 */}
       <AnimatePresence>
         {showMemoryDBWarning && (
@@ -799,7 +935,7 @@ const AuthModal = ({ isOpen, onClose, initialMode = 'login' }: AuthModalProps) =
       </AnimatePresence>
 
       {/* 正常表单显示 */}
-      {!isRegisterSuccess && !isLoginSuccess && (
+      {!isRegisterSuccess && !isLoginSuccess && !isForgotPasswordSuccess && (
         <form ref={formRef} onSubmit={handleSubmit} className="space-y-6">
         {/* 登录表单 */}
         {mode === 'login' && (
@@ -1172,6 +1308,40 @@ const AuthModal = ({ isOpen, onClose, initialMode = 'login' }: AuthModalProps) =
           </motion.div>
         )}
 
+        {/* 忘记密码表单 */}
+        {mode === 'forgot-password' && (
+          <motion.div
+            key="forgot-password"
+            initial={{ opacity: 0, x: -20 }}
+            animate={{ opacity: 1, x: 0 }}
+            exit={{ opacity: 0, x: 20 }}
+            transition={{ duration: 0.3 }}
+            className="space-y-4"
+          >
+            <div className="text-center mb-6">
+              <div className="w-16 h-16 bg-blue-100 dark:bg-blue-900/20 rounded-full flex items-center justify-center mx-auto mb-4">
+                <Mail className="w-8 h-8 text-blue-600 dark:text-blue-400" />
+              </div>
+              <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-2">
+                {t('forgotPassword.subtitle')}
+              </h3>
+              <p className="text-sm text-gray-600 dark:text-gray-400">
+                {t('forgotPassword.description')}
+              </p>
+            </div>
+
+            <Input
+              label={t('forgotPassword.emailLabel')}
+              type="email"
+              placeholder={t('forgotPassword.emailPlaceholder')}
+              value={formData.email}
+              onChange={(e) => handleInputChange('email', e.target.value)}
+              leftIcon={<Mail className="w-5 h-5" />}
+              required
+            />
+          </motion.div>
+        )}
+
         {/* 提交按钮 */}
         <div className="space-y-4">
           <motion.div
@@ -1226,7 +1396,7 @@ const AuthModal = ({ isOpen, onClose, initialMode = 'login' }: AuthModalProps) =
                       animate={{ opacity: 1, x: 0 }}
                       transition={{ duration: 0.3 }}
                     >
-                      {mode === 'login' ? '登录' : '注册'}
+                      {mode === 'login' ? '登录' : mode === 'register' ? '注册' : t('forgotPassword.sendButton')}
                     </motion.span>
                     <motion.div
                       initial={{ opacity: 0, x: 10 }}
@@ -1247,33 +1417,96 @@ const AuthModal = ({ isOpen, onClose, initialMode = 'login' }: AuthModalProps) =
             transition={{ duration: 0.4, delay: 0.3 }}
             className="text-center"
           >
-            <span className="text-sm text-neutral-600 dark:text-neutral-400">
-              {mode === 'login' ? '还没有账号？' : '已有账号？'}
-            </span>
-            <motion.button
-              type="button"
-              onClick={switchMode}
-              className="ml-2 text-sm text-primary hover:text-primary/80 font-medium transition-all duration-300 relative group"
-              whileHover={{ scale: 1.05 }}
-              whileTap={{ scale: 0.95 }}
-            >
-              {/* 下划线动画 */}
-              <motion.div
-                className="absolute bottom-0 left-0 w-0 h-0.5 bg-primary group-hover:w-full"
-                transition={{ duration: 0.3, ease: "easeOut" }}
-              />
-              
-              {/* 文字内容 */}
-              <motion.span
-                key={mode}
-                initial={{ opacity: 0, y: 5 }}
-                animate={{ opacity: 1, y: 0 }}
-                exit={{ opacity: 0, y: -5 }}
-                transition={{ duration: 0.2 }}
-              >
-                {mode === 'login' ? '立即注册' : '立即登录'}
-              </motion.span>
-            </motion.button>
+            {mode === 'login' && (
+              <>
+                <span className="text-sm text-neutral-600 dark:text-neutral-400">
+                  还没有账号？
+                </span>
+                <motion.button
+                  type="button"
+                  onClick={() => setMode('register')}
+                  className="ml-2 text-sm text-primary hover:text-primary/80 font-medium transition-all duration-300 relative group"
+                  whileHover={{ scale: 1.05 }}
+                  whileTap={{ scale: 0.95 }}
+                >
+                  <motion.div
+                    className="absolute bottom-0 left-0 w-0 h-0.5 bg-primary group-hover:w-full"
+                    transition={{ duration: 0.3, ease: "easeOut" }}
+                  />
+                  <span>立即注册</span>
+                </motion.button>
+                <span className="mx-2 text-sm text-neutral-400">|</span>
+                <motion.button
+                  type="button"
+                  onClick={() => setMode('forgot-password')}
+                  className="text-sm text-neutral-500 hover:text-primary font-medium transition-all duration-300 relative group"
+                  whileHover={{ scale: 1.05 }}
+                  whileTap={{ scale: 0.95 }}
+                >
+                  <motion.div
+                    className="absolute bottom-0 left-0 w-0 h-0.5 bg-primary group-hover:w-full"
+                    transition={{ duration: 0.3, ease: "easeOut" }}
+                  />
+                  <span>忘记密码？</span>
+                </motion.button>
+              </>
+            )}
+            
+            {mode === 'register' && (
+              <>
+                <span className="text-sm text-neutral-600 dark:text-neutral-400">
+                  已有账号？
+                </span>
+                <motion.button
+                  type="button"
+                  onClick={() => setMode('login')}
+                  className="ml-2 text-sm text-primary hover:text-primary/80 font-medium transition-all duration-300 relative group"
+                  whileHover={{ scale: 1.05 }}
+                  whileTap={{ scale: 0.95 }}
+                >
+                  <motion.div
+                    className="absolute bottom-0 left-0 w-0 h-0.5 bg-primary group-hover:w-full"
+                    transition={{ duration: 0.3, ease: "easeOut" }}
+                  />
+                  <span>立即登录</span>
+                </motion.button>
+              </>
+            )}
+            
+            {mode === 'forgot-password' && (
+              <>
+                <span className="text-sm text-neutral-600 dark:text-neutral-400">
+                  {t('forgotPassword.rememberPassword')}
+                </span>
+                <motion.button
+                  type="button"
+                  onClick={() => setMode('login')}
+                  className="ml-2 text-sm text-primary hover:text-primary/80 font-medium transition-all duration-300 relative group"
+                  whileHover={{ scale: 1.05 }}
+                  whileTap={{ scale: 0.95 }}
+                >
+                  <motion.div
+                    className="absolute bottom-0 left-0 w-0 h-0.5 bg-primary group-hover:w-full"
+                    transition={{ duration: 0.3, ease: "easeOut" }}
+                  />
+                  <span>{t('forgotPassword.backToLogin')}</span>
+                </motion.button>
+                <span className="mx-2 text-sm text-neutral-400">|</span>
+                <motion.button
+                  type="button"
+                  onClick={() => setMode('register')}
+                  className="text-sm text-neutral-500 hover:text-primary font-medium transition-all duration-300 relative group"
+                  whileHover={{ scale: 1.05 }}
+                  whileTap={{ scale: 0.95 }}
+                >
+                  <motion.div
+                    className="absolute bottom-0 left-0 w-0 h-0.5 bg-primary group-hover:w-full"
+                    transition={{ duration: 0.3, ease: "easeOut" }}
+                  />
+                  <span>{t('forgotPassword.createAccount')}</span>
+                </motion.button>
+              </>
+            )}
           </motion.div>
         </div>
       </form>
@@ -1288,7 +1521,7 @@ const AuthModal = ({ isOpen, onClose, initialMode = 'login' }: AuthModalProps) =
         setPendingAction(null)
       }}
       onVerify={handleCaptchaVerify}
-      title={mode === 'login' ? '登录验证' : '注册验证'}
+      title={mode === 'login' ? '登录验证' : mode === 'register' ? '注册验证' : '重置密码验证'}
     />
 
     {/* 设备验证弹窗 */}
