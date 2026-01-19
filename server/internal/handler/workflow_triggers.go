@@ -4,10 +4,10 @@ import (
 	"crypto/rand"
 	"encoding/hex"
 	"fmt"
-	apperrors "github.com/code-100-precent/LingEcho/pkg/errors"
 
 	"github.com/code-100-precent/LingEcho/internal/models"
 	workflowdef "github.com/code-100-precent/LingEcho/internal/workflow"
+	"github.com/code-100-precent/LingEcho/pkg/response"
 	"github.com/gin-gonic/gin"
 )
 
@@ -26,7 +26,7 @@ func (h *Handlers) RegisterPublicWorkflowRoutes(r *gin.RouterGroup) {
 func (h *Handlers) ExecutePublicWorkflow(c *gin.Context) {
 	slug := c.Param("slug")
 	if slug == "" {
-		apperrors.HandleError(c, apperrors.New(apperrors.ErrInternalServer, "invalid slug"))
+		response.Fail(c, "invalid slug", nil)
 		return
 	}
 
@@ -39,32 +39,32 @@ func (h *Handlers) ExecutePublicWorkflow(c *gin.Context) {
 	// 查找工作流定义
 	var def models.WorkflowDefinition
 	if err := h.db.Where("slug = ? AND status = ?", slug, "active").First(&def).Error; err != nil {
-		apperrors.HandleError(c, apperrors.New(apperrors.ErrInternalServer, "workflow not found or not active"))
+		response.Fail(c, "workflow not found or not active", nil)
 		return
 	}
 
 	// 解析触发器配置
 	config, err := workflowdef.ParseTriggerConfig(&def)
 	if err != nil {
-		apperrors.HandleError(c, apperrors.New(apperrors.ErrInternalServer, "invalid trigger config"))
+		response.Fail(c, "invalid trigger config", err.Error())
 		return
 	}
 
 	// 检查 API 触发是否启用
 	if config.API == nil || !config.API.Enabled {
-		apperrors.HandleError(c, apperrors.New(apperrors.ErrInternalServer, "API trigger is not enabled for this workflow"))
+		response.Fail(c, "API trigger is not enabled for this workflow", nil)
 		return
 	}
 
 	// 检查是否为公开API
 	if !config.API.Public {
-		apperrors.HandleError(c, apperrors.New(apperrors.ErrInternalServer, "this workflow requires authentication"))
+		response.Fail(c, "this workflow requires authentication", nil)
 		return
 	}
 
 	// 验证 API Key
 	if config.API.APIKey != "" && config.API.APIKey != apiKey {
-		apperrors.HandleError(c, apperrors.New(apperrors.ErrInternalServer, "invalid API key"))
+		response.Fail(c, "invalid API key", nil)
 		return
 	}
 
@@ -73,7 +73,7 @@ func (h *Handlers) ExecutePublicWorkflow(c *gin.Context) {
 		Parameters map[string]interface{} `json:"parameters"`
 	}
 	if err := c.ShouldBindJSON(&input); err != nil && err.Error() != "EOF" {
-		apperrors.HandleError(c, apperrors.New(apperrors.ErrInternalServer, "invalid payload"))
+		response.Fail(c, "invalid payload", err.Error())
 		return
 	}
 
@@ -86,38 +86,38 @@ func (h *Handlers) ExecutePublicWorkflow(c *gin.Context) {
 	)
 
 	if execErr != nil {
-		apperrors.HandleError(c, apperrors.New(apperrors.ErrInternalServer, "workflow execution failed"))
+		response.Fail(c, "workflow execution failed", execErr.Error())
 		return
 	}
 
-	apperrors.RespondSuccess(c, instance)
+	response.Success(c, "workflow executed successfully", instance)
 }
 
 // WebhookTriggerWorkflow Webhook触发工作流
 func (h *Handlers) WebhookTriggerWorkflow(c *gin.Context) {
 	slug := c.Param("slug")
 	if slug == "" {
-		apperrors.HandleError(c, apperrors.New(apperrors.ErrInternalServer, "invalid slug"))
+		response.Fail(c, "invalid slug", nil)
 		return
 	}
 
 	// 查找工作流定义
 	var def models.WorkflowDefinition
 	if err := h.db.Where("slug = ? AND status = ?", slug, "active").First(&def).Error; err != nil {
-		apperrors.HandleError(c, apperrors.New(apperrors.ErrInternalServer, "workflow not found or not active"))
+		response.Fail(c, "workflow not found or not active", nil)
 		return
 	}
 
 	// 解析触发器配置
 	config, err := workflowdef.ParseTriggerConfig(&def)
 	if err != nil {
-		apperrors.HandleError(c, apperrors.New(apperrors.ErrInternalServer, "invalid trigger config"))
+		response.Fail(c, "invalid trigger config", err.Error())
 		return
 	}
 
 	// 检查 Webhook 触发是否启用
 	if config.Webhook == nil || !config.Webhook.Enabled {
-		apperrors.HandleError(c, apperrors.New(apperrors.ErrInternalServer, "webhook trigger is not enabled for this workflow"))
+		response.Fail(c, "webhook trigger is not enabled for this workflow", nil)
 		return
 	}
 
@@ -125,7 +125,7 @@ func (h *Handlers) WebhookTriggerWorkflow(c *gin.Context) {
 	if config.Webhook.Secret != "" {
 		signature := c.GetHeader("X-Webhook-Signature")
 		if signature == "" {
-			apperrors.HandleError(c, apperrors.New(apperrors.ErrInternalServer, "missing webhook signature"))
+			response.Fail(c, "missing webhook signature", nil)
 			return
 		}
 		// TODO: 实现签名验证逻辑
@@ -161,11 +161,11 @@ func (h *Handlers) WebhookTriggerWorkflow(c *gin.Context) {
 	)
 
 	if execErr != nil {
-		apperrors.HandleError(c, apperrors.New(apperrors.ErrInternalServer, "workflow execution failed"))
+		response.Fail(c, "workflow execution failed", execErr.Error())
 		return
 	}
 
-	apperrors.RespondSuccess(c, instance)
+	response.Success(c, "workflow executed successfully", instance)
 }
 
 // GenerateAPIKey 生成随机API密钥

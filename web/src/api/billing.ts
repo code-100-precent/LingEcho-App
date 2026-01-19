@@ -1,5 +1,4 @@
-import { BaseApiService, CacheConfig } from './base.service'
-
+import { get, post, ApiResponse } from '@/utils/request'
 // 使用量类型
 export type UsageType = 'llm' | 'call' | 'asr' | 'tts' | 'api'
 
@@ -101,190 +100,188 @@ export interface GenerateBillRequest {
   title?: string
 }
 
-class BillingService extends BaseApiService {
-  constructor() {
-    super('/billing')
-  }
+// 获取使用量统计
+export const getUsageStatistics = async (params?: {
+  startTime?: string
+  endTime?: string
+  credentialId?: number
+  groupId?: number
+}): Promise<ApiResponse<UsageStatistics>> => {
+  const queryParams = new URLSearchParams()
+  if (params?.startTime) queryParams.append('startTime', params.startTime)
+  if (params?.endTime) queryParams.append('endTime', params.endTime)
+  if (params?.credentialId) queryParams.append('credentialId', params.credentialId.toString())
+  if (params?.groupId) queryParams.append('groupId', params.groupId.toString())
+  
+  return get(`/billing/statistics?${queryParams.toString()}`)
+}
 
-  // 获取使用量统计
-  async getUsageStatistics(params?: {
-    startTime?: string
-    endTime?: string
-    credentialId?: number
-    groupId?: number
-  }): Promise<UsageStatistics> {
-    const response = await this.get<UsageStatistics>('/statistics', { params }, { enabled: true, ttl: 60000 })
-    return this.handleResponse(response)
-  }
+// 获取每日使用量数据（用于图表）
+export const getDailyUsageData = async (params?: {
+  startTime?: string
+  endTime?: string
+  credentialId?: number
+  groupId?: number
+}): Promise<ApiResponse<DailyUsageData[]>> => {
+  const queryParams = new URLSearchParams()
+  if (params?.startTime) queryParams.append('startTime', params.startTime)
+  if (params?.endTime) queryParams.append('endTime', params.endTime)
+  if (params?.credentialId) queryParams.append('credentialId', params.credentialId.toString())
+  if (params?.groupId) queryParams.append('groupId', params.groupId.toString())
+  
+  return get(`/billing/daily-usage?${queryParams.toString()}`)
+}
 
-  // 获取每日使用量数据（用于图表）
-  async getDailyUsageData(params?: {
-    startTime?: string
-    endTime?: string
-    credentialId?: number
-    groupId?: number
-  }): Promise<DailyUsageData[]> {
-    const response = await this.get<DailyUsageData[]>('/daily-usage', { params }, { enabled: true, ttl: 60000 })
-    return this.handleResponse(response)
-  }
+// 获取使用量记录列表
+export const getUsageRecords = async (params?: {
+  page?: number
+  size?: number
+  credentialId?: number
+  assistantId?: number
+  groupId?: number
+  usageType?: UsageType
+  startTime?: string
+  endTime?: string
+  orderBy?: string
+}): Promise<ApiResponse<{
+  list: UsageRecord[]
+  total: number
+  page: number
+  size: number
+}>> => {
+  const queryParams = new URLSearchParams()
+  if (params?.page) queryParams.append('page', params.page.toString())
+  if (params?.size) queryParams.append('size', params.size.toString())
+  if (params?.credentialId) queryParams.append('credentialId', params.credentialId.toString())
+  if (params?.assistantId) queryParams.append('assistantId', params.assistantId.toString())
+  if (params?.groupId) queryParams.append('groupId', params.groupId.toString())
+  if (params?.usageType) queryParams.append('usageType', params.usageType)
+  if (params?.startTime) queryParams.append('startTime', params.startTime)
+  if (params?.endTime) queryParams.append('endTime', params.endTime)
+  if (params?.orderBy) queryParams.append('orderBy', params.orderBy)
+  
+  return get(`/billing/usage-records?${queryParams.toString()}`)
+}
 
-  // 获取使用量记录列表
-  async getUsageRecords(params?: {
-    page?: number
-    size?: number
-    credentialId?: number
-    assistantId?: number
-    groupId?: number
-    usageType?: UsageType
-    startTime?: string
-    endTime?: string
-    orderBy?: string
-  }): Promise<{
-    list: UsageRecord[]
-    total: number
-    page: number
-    size: number
-  }> {
-    const response = await this.get<{
-      list: UsageRecord[]
-      total: number
-      page: number
-      size: number
-    }>('/usage-records', { params })
-    return this.handleResponse(response)
-  }
-
-  // 导出使用量记录
-  async exportUsageRecords(params?: {
-    credentialId?: number
-    assistantId?: number
-    usageType?: UsageType
-    startTime?: string
-    endTime?: string
-    format?: 'csv' | 'excel'
-  }): Promise<void> {
-    const queryParams = new URLSearchParams()
-    if (params?.credentialId) queryParams.append('credentialId', params.credentialId.toString())
-    if (params?.assistantId) queryParams.append('assistantId', params.assistantId.toString())
-    if (params?.usageType) queryParams.append('usageType', params.usageType)
-    if (params?.startTime) queryParams.append('startTime', params.startTime)
-    if (params?.endTime) queryParams.append('endTime', params.endTime)
-    if (params?.format) queryParams.append('format', params.format)
+// 导出使用量记录
+export const exportUsageRecords = async (params?: {
+  credentialId?: number
+  assistantId?: number
+  usageType?: UsageType
+  startTime?: string
+  endTime?: string
+  format?: 'csv' | 'excel'
+}): Promise<void> => {
+  const queryParams = new URLSearchParams()
+  if (params?.credentialId) queryParams.append('credentialId', params.credentialId.toString())
+  if (params?.assistantId) queryParams.append('assistantId', params.assistantId.toString())
+  if (params?.usageType) queryParams.append('usageType', params.usageType)
+  if (params?.startTime) queryParams.append('startTime', params.startTime)
+  if (params?.endTime) queryParams.append('endTime', params.endTime)
+  if (params?.format) queryParams.append('format', params.format)
+  
+  // 使用 axios 下载文件（携带认证信息）
+  const axiosInstance = (await import('@/utils/axios')).default
+  
+  try {
+    const response = await axiosInstance({
+      url: `/billing/usage-records/export?${queryParams.toString()}`,
+      method: 'GET',
+      responseType: 'blob',
+    })
     
-    // 使用 axios 下载文件（携带认证信息）
-    const axiosInstance = (await import('@/utils/axios')).default
-    
-    try {
-      const response = await axiosInstance({
-        url: `${this.baseUrl}/usage-records/export?${queryParams.toString()}`,
-        method: 'GET',
-        responseType: 'blob',
-      })
-      
-      // 创建 blob URL 并触发下载
-      const isExcel = params?.format === 'excel'
-      const blobType = isExcel 
-        ? 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
-        : 'text/csv;charset=utf-8'
-      const fileExt = isExcel ? 'xlsx' : 'csv'
-      const blob = new Blob([response.data], { type: blobType })
-      const url = window.URL.createObjectURL(blob)
-      const link = document.createElement('a')
-      link.href = url
-      link.download = `usage_records_${new Date().toISOString().split('T')[0]}.${fileExt}`
-      document.body.appendChild(link)
-      link.click()
-      document.body.removeChild(link)
-      window.URL.revokeObjectURL(url)
-    } catch (error: any) {
-      throw new Error(error?.response?.data?.msg || error?.message || '导出失败')
-    }
-  }
-
-  // 生成账单
-  async generateBill(data: GenerateBillRequest): Promise<Bill> {
-    const response = await this.post<Bill>('/bills', data)
-    return this.handleResponse(response)
-  }
-
-  // 获取账单列表
-  async getBills(params?: {
-    page?: number
-    size?: number
-    credentialId?: number
-    groupId?: number
-    status?: BillStatus
-    startTime?: string
-    endTime?: string
-    orderBy?: string
-  }): Promise<{
-    list: Bill[]
-    total: number
-    page: number
-    size: number
-  }> {
-    const response = await this.get<{
-      list: Bill[]
-      total: number
-      page: number
-      size: number
-    }>('/bills', { params })
-    return this.handleResponse(response)
-  }
-
-  // 获取单个账单
-  async getBill(id: number): Promise<Bill> {
-    const response = await this.get<Bill>(`/bills/${id}`, {}, { enabled: true, ttl: 300000 })
-    return this.handleResponse(response)
-  }
-
-  // 导出账单
-  async exportBill(id: number, format?: 'csv' | 'excel'): Promise<void> {
-    const queryParams = new URLSearchParams()
-    if (format) queryParams.append('format', format)
-    
-    // 使用 axios 下载文件（携带认证信息）
-    const axiosInstance = (await import('@/utils/axios')).default
-    
-    try {
-      const response = await axiosInstance({
-        url: `${this.baseUrl}/bills/${id}/export?${queryParams.toString()}`,
-        method: 'GET',
-        responseType: 'blob',
-      })
-      
-      // 创建 blob URL 并触发下载
-      const isExcel = format === 'excel'
-      const blobType = isExcel 
-        ? 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
-        : 'text/csv;charset=utf-8'
-      const fileExt = isExcel ? 'xlsx' : 'csv'
-      const blob = new Blob([response.data], { type: blobType })
-      const url = window.URL.createObjectURL(blob)
-      const link = document.createElement('a')
-      link.href = url
-      link.download = `bill_${id}_${new Date().toISOString().split('T')[0]}.${fileExt}`
-      document.body.appendChild(link)
-      link.click()
-      document.body.removeChild(link)
-      window.URL.revokeObjectURL(url)
-    } catch (error: any) {
-      throw new Error(error?.response?.data?.msg || error?.message || '导出失败')
-    }
+    // 创建 blob URL 并触发下载
+    const isExcel = params?.format === 'excel'
+    const blobType = isExcel 
+      ? 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+      : 'text/csv;charset=utf-8'
+    const fileExt = isExcel ? 'xlsx' : 'csv'
+    const blob = new Blob([response.data], { type: blobType })
+    const url = window.URL.createObjectURL(blob)
+    const link = document.createElement('a')
+    link.href = url
+    link.download = `usage_records_${new Date().toISOString().split('T')[0]}.${fileExt}`
+    document.body.appendChild(link)
+    link.click()
+    document.body.removeChild(link)
+    window.URL.revokeObjectURL(url)
+  } catch (error: any) {
+    throw new Error(error?.response?.data?.msg || error?.message || '导出失败')
   }
 }
 
-// 导出单例
-export const billingService = new BillingService()
+// 生成账单
+export const generateBill = async (data: GenerateBillRequest): Promise<ApiResponse<Bill>> => {
+  return post('/billing/bills', data)
+}
 
-// 兼容性导出
-export const getUsageStatistics = billingService.getUsageStatistics.bind(billingService)
-export const getDailyUsageData = billingService.getDailyUsageData.bind(billingService)
-export const getUsageRecords = billingService.getUsageRecords.bind(billingService)
-export const exportUsageRecords = billingService.exportUsageRecords.bind(billingService)
-export const generateBill = billingService.generateBill.bind(billingService)
-export const getBills = billingService.getBills.bind(billingService)
-export const getBill = billingService.getBill.bind(billingService)
-export const exportBill = billingService.exportBill.bind(billingService)
+// 获取账单列表
+export const getBills = async (params?: {
+  page?: number
+  size?: number
+  credentialId?: number
+  groupId?: number
+  status?: BillStatus
+  startTime?: string
+  endTime?: string
+  orderBy?: string
+}): Promise<ApiResponse<{
+  list: Bill[]
+  total: number
+  page: number
+  size: number
+}>> => {
+  const queryParams = new URLSearchParams()
+  if (params?.page) queryParams.append('page', params.page.toString())
+  if (params?.size) queryParams.append('size', params.size.toString())
+  if (params?.credentialId) queryParams.append('credentialId', params.credentialId.toString())
+  if (params?.groupId) queryParams.append('groupId', params.groupId.toString())
+  if (params?.status) queryParams.append('status', params.status)
+  if (params?.startTime) queryParams.append('startTime', params.startTime)
+  if (params?.endTime) queryParams.append('endTime', params.endTime)
+  if (params?.orderBy) queryParams.append('orderBy', params.orderBy)
+  
+  return get(`/billing/bills?${queryParams.toString()}`)
+}
+
+// 获取单个账单
+export const getBill = async (id: number): Promise<ApiResponse<Bill>> => {
+  return get(`/billing/bills/${id}`)
+}
+
+// 导出账单
+export const exportBill = async (id: number, format?: 'csv' | 'excel'): Promise<void> => {
+  const queryParams = new URLSearchParams()
+  if (format) queryParams.append('format', format)
+  
+  // 使用 axios 下载文件（携带认证信息）
+  const axiosInstance = (await import('@/utils/axios')).default
+  
+  try {
+    const response = await axiosInstance({
+      url: `/billing/bills/${id}/export?${queryParams.toString()}`,
+      method: 'GET',
+      responseType: 'blob',
+    })
+    
+    // 创建 blob URL 并触发下载
+    const isExcel = format === 'excel'
+    const blobType = isExcel 
+      ? 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+      : 'text/csv;charset=utf-8'
+    const fileExt = isExcel ? 'xlsx' : 'csv'
+    const blob = new Blob([response.data], { type: blobType })
+    const url = window.URL.createObjectURL(blob)
+    const link = document.createElement('a')
+    link.href = url
+    link.download = `bill_${id}_${new Date().toISOString().split('T')[0]}.${fileExt}`
+    document.body.appendChild(link)
+    link.click()
+    document.body.removeChild(link)
+    window.URL.revokeObjectURL(url)
+  } catch (error: any) {
+    throw new Error(error?.response?.data?.msg || error?.message || '导出失败')
+  }
+}
 
 

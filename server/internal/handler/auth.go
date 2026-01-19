@@ -18,7 +18,6 @@ import (
 	"github.com/code-100-precent/LingEcho/pkg/captcha"
 	"github.com/code-100-precent/LingEcho/pkg/config"
 	"github.com/code-100-precent/LingEcho/pkg/constants"
-	apperrors "github.com/code-100-precent/LingEcho/pkg/errors"
 	"github.com/code-100-precent/LingEcho/pkg/logger"
 	"github.com/code-100-precent/LingEcho/pkg/middleware"
 	"github.com/code-100-precent/LingEcho/pkg/notification"
@@ -30,302 +29,6 @@ import (
 	"go.uber.org/zap"
 	"gorm.io/gorm"
 )
-
-// AuthHandler 认证处理器 - 整合所有认证相关逻辑
-type AuthHandler struct {
-	db                *gorm.DB
-	ipLocationService *utils.IPLocationService
-}
-
-// NewAuthHandler 创建认证处理器
-func NewAuthHandler(db *gorm.DB, ipLocationService *utils.IPLocationService) *AuthHandler {
-	return &AuthHandler{
-		db:                db,
-		ipLocationService: ipLocationService,
-	}
-}
-
-// LoginRequest 登录请求结构
-type LoginRequest struct {
-	Email         string `json:"email"`
-	Password      string `json:"password"`
-	Code          string `json:"code"`
-	CaptchaID     string `json:"captcha_id"`
-	CaptchaCode   string `json:"captcha_code"`
-	TwoFactorCode string `json:"two_factor_code"`
-	Timezone      string `json:"timezone"`
-	AuthToken     string `json:"auth_token"`
-	Remember      bool   `json:"remember"`
-}
-
-// executeLogin 执行登录的核心逻辑
-func (h *AuthHandler) executeLogin(c *gin.Context, req LoginRequest, loginType string) {
-	clientIP := c.ClientIP()
-	userAgent := c.Request.UserAgent()
-
-	// 1. 安全检查
-	if err := h.performSecurityChecks(clientIP, req.Email); err != nil {
-		apperrors.HandleError(c, err)
-		return
-	}
-
-	// 2. 验证验证码
-	if err := h.verifyCaptcha(req.CaptchaID, req.CaptchaCode); err != nil {
-		h.recordFailedLogin(clientIP, req.Email, 0, "captcha_invalid")
-		apperrors.HandleError(c, err)
-		return
-	}
-
-	// 3. 获取并验证用户
-	user, err := h.getUserAndVerifyCredentials(req, loginType)
-	if err != nil {
-		h.recordFailedLogin(clientIP, req.Email, 0, "invalid_credentials")
-		apperrors.HandleError(c, err)
-		return
-	}
-
-	// 4. 检查用户状态
-	if err := models.CheckUserAllowLogin(h.db, user); err != nil {
-		h.recordFailedLogin(clientIP, req.Email, user.ID, "user_not_allowed")
-		apperrors.HandleError(c, apperrors.Wrap(err, apperrors.ErrForbidden, "用户不允许登录"))
-		return
-	}
-
-	// 5. 两步验证检查
-	if user.TwoFactorEnabled && req.TwoFactorCode == "" {
-		apperrors.RespondSuccess(c, gin.H{
-			"requiresTwoFactor": true,
-			"message":           "需要两步验证",
-		})
-		return
-	}
-
-	if user.TwoFactorEnabled && req.TwoFactorCode != "" {
-		if !totp.Validate(req.TwoFactorCode, user.TwoFactorSecret) {
-			apperrors.HandleError(c, apperrors.New(apperrors.ErrInvalidCredentials, "两步验证码错误"))
-			return
-		}
-	}
-
-	// 6. 设备和位置检查
-	country, city, location := h.getLocationInfo(clientIP)
-	deviceType, os, browser := utils.ParseUserAgent(userAgent)
-	deviceID := utils.GetDeviceID(userAgent, clientIP)
-
-	// 7. 设备信任检查
-	isTrusted, _ := models.CheckDeviceTrust(h.db, user.ID, deviceID)
-	if !isTrusted && loginType == "password" {
-		apperrors.RespondSuccess(c, gin.H{
-			"requiresDeviceVerification": true,
-			"deviceId":                   deviceID,
-			"message":                    "需要设备验证",
-		})
-		return
-	}
-
-	// 8. 检测异地登录
-	isSuspicious := h.detectSuspiciousLogin(user.ID, clientIP, location, country)
-
-	// 9. 记录成功登录
-	h.recordSuccessfulLogin(user.ID, req.Email, clientIP, location, country, city, userAgent, deviceID, loginType, isSuspicious)
-
-	// 10. 更新设备信息
-	models.CreateOrUpdateUserDevice(h.db, user.ID, deviceID, fmt.Sprintf("%s on %s", browser, os), deviceType, os, browser, userAgent, clientIP, location)
-
-	// 11. 设置会话和返回响应
-	h.completeLogin(c, user, req, isSuspicious)
-}
-
-// performSecurityChecks 执行安全检查
-func (h *AuthHandler) performSecurityChecks(clientIP, email string) error {
-	if utils.GlobalLoginSecurityManager != nil {
-		if err := utils.GlobalLoginSecurityManager.CheckIPRateLimit(clientIP); err != nil {
-			return apperrors.ErrRateLimitError.WithCause(err)
-		}
-
-		checkLockFunc := func(db *gorm.DB, email string, userID uint) (*utils.AccountLockInfo, error) {
-			lock, err := models.GetAccountLock(db, email, userID)
-			if err != nil {
-				return nil, err
-			}
-			if lock == nil {
-				return nil, nil
-			}
-			return &utils.AccountLockInfo{
-				IsLocked: lock.IsLocked(),
-				UnlockAt: lock.UnlockAt,
-			}, nil
-		}
-
-		if err := utils.GlobalLoginSecurityManager.CheckAccountLock(h.db, email, 0, checkLockFunc); err != nil {
-			return apperrors.ErrAccountLockedError.WithCause(err)
-		}
-	}
-	return nil
-}
-
-// verifyCaptcha 验证图形验证码
-func (h *AuthHandler) verifyCaptcha(captchaID, captchaCode string) error {
-	if captcha.GlobalCaptchaManager != nil {
-		if captchaID == "" || captchaCode == "" {
-			return apperrors.ErrCaptchaRequiredError
-		}
-		valid, err := captcha.GlobalCaptchaManager.Verify(captchaID, captchaCode)
-		if err != nil || !valid {
-			return apperrors.ErrCaptchaInvalidError
-		}
-	}
-	return nil
-}
-
-// getUserAndVerifyCredentials 获取用户并验证凭证
-func (h *AuthHandler) getUserAndVerifyCredentials(req LoginRequest, loginType string) (*models.User, error) {
-	var user *models.User
-	var err error
-
-	// 获取用户
-	if req.AuthToken != "" {
-		user, err = models.DecodeHashToken(h.db, req.AuthToken, false)
-		if err != nil {
-			return nil, apperrors.NewInvalidCredentialsError("invalid_auth_token").WithCause(err)
-		}
-	} else {
-		user, err = models.GetUserByEmail(h.db, req.Email)
-		if err != nil {
-			return nil, apperrors.NewUserNotFoundError().WithCause(err)
-		}
-	}
-
-	// 验证凭证
-	if loginType == "password" && req.Password != "" {
-		passwordValid := false
-		if strings.Contains(req.Password, ":") && len(strings.Split(req.Password, ":")) == 4 {
-			passwordValid = models.VerifyEncryptedPassword(req.Password, user.Password)
-		} else {
-			passwordValid = models.CheckPassword(user, req.Password)
-		}
-		if !passwordValid {
-			return nil, apperrors.ErrInvalidPasswordError
-		}
-	}
-
-	if loginType == "email" && req.Code != "" {
-		cachedCode, ok := utils.GlobalCache.Get(req.Email)
-		if !ok || cachedCode != req.Code {
-			return nil, apperrors.NewInvalidCredentialsError("invalid_email_code")
-		}
-		utils.GlobalCache.Remove(req.Email)
-	}
-
-	return user, nil
-}
-
-// getLocationInfo 获取位置信息
-func (h *AuthHandler) getLocationInfo(clientIP string) (country, city, location string) {
-	country, city, location = "Unknown", "Unknown", "Unknown"
-	if h.ipLocationService != nil {
-		country, city, location, _ = h.ipLocationService.GetLocation(clientIP)
-	}
-	return
-}
-
-// detectSuspiciousLogin 检测可疑登录
-func (h *AuthHandler) detectSuspiciousLogin(userID uint, clientIP, location, country string) bool {
-	if utils.GlobalLoginSecurityManager == nil {
-		return false
-	}
-
-	getLocationsFunc := func(db *gorm.DB, userID uint, limit int) ([]utils.LoginLocation, error) {
-		histories, err := models.GetRecentLoginLocations(db, userID, limit)
-		if err != nil {
-			return nil, err
-		}
-		locations := make([]utils.LoginLocation, len(histories))
-		for i, h := range histories {
-			locations[i] = utils.LoginLocation{
-				Country: h.Country,
-				City:    h.City,
-			}
-		}
-		return locations, nil
-	}
-
-	isSuspicious, _ := utils.GlobalLoginSecurityManager.DetectSuspiciousLogin(h.db, userID, clientIP, location, country, getLocationsFunc)
-	if isSuspicious {
-		logger.Warn("Suspicious login detected",
-			zap.Uint("userID", userID),
-			zap.String("ip", clientIP),
-			zap.String("location", location))
-	}
-	return isSuspicious
-}
-
-// recordSuccessfulLogin 记录成功登录
-func (h *AuthHandler) recordSuccessfulLogin(userID uint, email, clientIP, location, country, city, userAgent, deviceID, loginType string, isSuspicious bool) {
-	if err := models.RecordLoginHistory(h.db, userID, email, clientIP, location, country, city, userAgent, deviceID, loginType, true, "", isSuspicious); err != nil {
-		logger.Warn("Failed to record login history", zap.Error(err))
-	}
-
-	if utils.GlobalLoginSecurityManager != nil {
-		utils.GlobalLoginSecurityManager.ClearFailedLoginCount(email)
-	}
-}
-
-// recordFailedLogin 记录失败登录
-func (h *AuthHandler) recordFailedLogin(clientIP, email string, userID uint, reason string) {
-	if err := models.RecordLoginHistory(h.db, userID, email, clientIP, "Unknown", "Unknown", "Unknown", "", "", "password", false, reason, false); err != nil {
-		logger.Warn("Failed to record failed login", zap.Error(err))
-	}
-
-	if utils.GlobalLoginSecurityManager != nil {
-		recordFunc := func(db *gorm.DB, email string, userID uint, ipAddress string, failedCount int) error {
-			_, err := models.CreateOrUpdateAccountLock(db, email, userID, ipAddress, failedCount)
-			return err
-		}
-		utils.GlobalLoginSecurityManager.RecordFailedLogin(h.db, email, userID, clientIP, recordFunc)
-	}
-}
-
-// completeLogin 完成登录流程
-func (h *AuthHandler) completeLogin(c *gin.Context, user *models.User, req LoginRequest, isSuspicious bool) {
-	if req.Timezone != "" {
-		models.InTimezone(c, req.Timezone)
-	}
-
-	models.Login(c, user)
-
-	if c.IsAborted() {
-		return
-	}
-
-	// 重新加载用户信息
-	updatedUser, err := models.GetUserByUID(h.db, user.ID)
-	if err != nil {
-		logger.Warn("Failed to reload user after login", zap.Error(err))
-		updatedUser = user
-	}
-
-	// 生成Token
-	tokenDuration := 24 * time.Hour
-	if req.Remember {
-		tokenDuration = 7 * 24 * time.Hour
-	}
-	updatedUser.AuthToken = models.BuildAuthToken(updatedUser, tokenDuration, false)
-
-	responseData := gin.H{
-		"user":  updatedUser,
-		"token": updatedUser.AuthToken,
-	}
-	if isSuspicious {
-		responseData["suspiciousLogin"] = true
-		responseData["message"] = "检测到异地登录，请验证身份"
-	}
-
-	logger.Info("Login successful",
-		zap.String("email", req.Email),
-		zap.Uint("userID", updatedUser.ID))
-	apperrors.RespondSuccess(c, responseData)
-}
 
 // handleUserSignupPage handle user signup page
 func (h *Handlers) handleUserSignupPage(c *gin.Context) {
@@ -385,57 +88,592 @@ func (h *Handlers) handleUserInfo(c *gin.Context) {
 func (h *Handlers) handleUserSigninByEmail(c *gin.Context) {
 	var form models.EmailOperatorForm
 	if err := c.BindJSON(&form); err != nil {
-		apperrors.HandleError(c, apperrors.New(apperrors.ErrInvalidInput, "Invalid request format"))
+		LingEcho.AbortWithJSONError(c, http.StatusBadRequest, err)
 		return
 	}
 
+	clientIP := c.ClientIP()
+	userAgent := c.Request.UserAgent()
 	db := c.MustGet(constants.DbField).(*gorm.DB)
 
-	// 创建认证处理器
-	authHandler := NewAuthHandler(db, h.ipLocationService)
-
-	// 构建登录请求
-	loginReq := LoginRequest{
-		Email:       form.Email,
-		Code:        form.Code,
-		CaptchaID:   form.CaptchaID,
-		CaptchaCode: form.CaptchaCode,
-		Timezone:    form.Timezone,
-		Remember:    form.AuthToken, // 使用 AuthToken 字段表示是否记住登录
+	// 1. IP限流检查
+	if utils.GlobalLoginSecurityManager != nil {
+		if err := utils.GlobalLoginSecurityManager.CheckIPRateLimit(clientIP); err != nil {
+			LingEcho.AbortWithJSONError(c, http.StatusTooManyRequests, err)
+			return
+		}
 	}
 
-	// 执行登录
-	authHandler.executeLogin(c, loginReq, "email")
+	// 2. 账号锁定检查
+	if utils.GlobalLoginSecurityManager != nil {
+		checkLockFunc := func(db *gorm.DB, email string, userID uint) (*utils.AccountLockInfo, error) {
+			lock, err := models.GetAccountLock(db, email, userID)
+			if err != nil {
+				return nil, err
+			}
+			if lock == nil {
+				return nil, nil
+			}
+			return &utils.AccountLockInfo{
+				IsLocked: lock.IsLocked(),
+				UnlockAt: lock.UnlockAt,
+			}, nil
+		}
+		if err := utils.GlobalLoginSecurityManager.CheckAccountLock(db, form.Email, 0, checkLockFunc); err != nil {
+			LingEcho.AbortWithJSONError(c, http.StatusForbidden, err)
+			return
+		}
+	}
+
+	// 3. 图形验证码验证（邮箱验证码登录需要）
+	if captcha.GlobalCaptchaManager != nil {
+		if form.CaptchaID == "" || form.CaptchaCode == "" {
+			LingEcho.AbortWithJSONError(c, http.StatusBadRequest, errors.New("captcha is required"))
+			return
+		}
+
+		valid, err := captcha.GlobalCaptchaManager.Verify(form.CaptchaID, form.CaptchaCode)
+		if err != nil || !valid {
+			if utils.GlobalLoginSecurityManager != nil {
+				recordFunc := func(db *gorm.DB, email string, userID uint, ipAddress string, failedCount int) error {
+					_, err := models.CreateOrUpdateAccountLock(db, email, userID, ipAddress, failedCount)
+					return err
+				}
+				utils.GlobalLoginSecurityManager.RecordFailedLogin(db, form.Email, 0, clientIP, recordFunc)
+			}
+			LingEcho.AbortWithJSONError(c, http.StatusBadRequest, errors.New("invalid captcha code"))
+			return
+		}
+	}
+
+	// 检查邮箱是否为空
+	if form.Email == "" {
+		LingEcho.AbortWithJSONError(c, http.StatusBadRequest, errors.New("email is required"))
+		return
+	}
+
+	// 4. 获取用户
+	user, err := models.GetUserByEmail(db, form.Email)
+	if err != nil {
+		if utils.GlobalLoginSecurityManager != nil {
+			recordFunc := func(db *gorm.DB, email string, userID uint, ipAddress string, failedCount int) error {
+				_, err := models.CreateOrUpdateAccountLock(db, email, userID, ipAddress, failedCount)
+				return err
+			}
+			utils.GlobalLoginSecurityManager.RecordFailedLogin(db, form.Email, 0, clientIP, recordFunc)
+		}
+		response.Fail(c, "user not exists", errors.New("user not exists"))
+		return
+	}
+
+	// 5. 校验验证码
+	if form.Code == "" {
+		LingEcho.AbortWithJSONError(c, http.StatusBadRequest, errors.New("verification code is required"))
+		return
+	}
+
+	// 从缓存中获取验证码
+	cachedCode, ok := utils.GlobalCache.Get(form.Email)
+	if !ok || cachedCode != form.Code {
+		if utils.GlobalLoginSecurityManager != nil {
+			recordFunc := func(db *gorm.DB, email string, userID uint, ipAddress string, failedCount int) error {
+				_, err := models.CreateOrUpdateAccountLock(db, email, userID, ipAddress, failedCount)
+				return err
+			}
+			utils.GlobalLoginSecurityManager.RecordFailedLogin(db, form.Email, user.ID, clientIP, recordFunc)
+		}
+		LingEcho.AbortWithJSONError(c, http.StatusBadRequest, errors.New("invalid verification code"))
+		return
+	}
+
+	// 清除已用验证码
+	utils.GlobalCache.Remove(form.Email)
+
+	// 6. 检查用户是否允许登录（激活、启用等）
+	err = models.CheckUserAllowLogin(db, user)
+	if err != nil {
+		if utils.GlobalLoginSecurityManager != nil {
+			recordFunc := func(db *gorm.DB, email string, userID uint, ipAddress string, failedCount int) error {
+				_, err := models.CreateOrUpdateAccountLock(db, email, userID, ipAddress, failedCount)
+				return err
+			}
+			utils.GlobalLoginSecurityManager.RecordFailedLogin(db, form.Email, user.ID, clientIP, recordFunc)
+		}
+		LingEcho.AbortWithJSONError(c, http.StatusForbidden, err)
+		return
+	}
+
+	// 7. 获取IP地理位置
+	country, city, location := "Unknown", "Unknown", "Unknown"
+	if h.ipLocationService != nil {
+		country, city, location, _ = h.ipLocationService.GetLocation(clientIP)
+	}
+
+	// 8. 检测异地登录
+	isSuspicious := false
+	if utils.GlobalLoginSecurityManager != nil {
+		getLocationsFunc := func(db *gorm.DB, userID uint, limit int) ([]utils.LoginLocation, error) {
+			histories, err := models.GetRecentLoginLocations(db, userID, limit)
+			if err != nil {
+				return nil, err
+			}
+			locations := make([]utils.LoginLocation, len(histories))
+			for i, h := range histories {
+				locations[i] = utils.LoginLocation{
+					Country: h.Country,
+					City:    h.City,
+				}
+			}
+			return locations, nil
+		}
+		isSuspicious, _ = utils.GlobalLoginSecurityManager.DetectSuspiciousLogin(db, user.ID, clientIP, location, country, getLocationsFunc)
+		if isSuspicious {
+			logger.Warn("Suspicious login detected",
+				zap.Uint("userID", user.ID),
+				zap.String("email", user.Email),
+				zap.String("ip", clientIP),
+				zap.String("location", location))
+		}
+	}
+
+	// 9. 解析设备信息
+	deviceType, os, browser := utils.ParseUserAgent(userAgent)
+	deviceID := utils.GetDeviceID(userAgent, clientIP)
+
+	// 10. 检查设备信任状态
+	isTrusted, err := models.CheckDeviceTrust(db, user.ID, deviceID)
+	if err != nil {
+		logger.Warn("Failed to check device trust", zap.Error(err))
+	}
+
+	// 如果设备不被信任，要求额外验证或拒绝登录
+	// 邮箱验证码登录本身就是一种额外验证，所以对于邮箱登录我们可以更宽松一些
+	if !isTrusted {
+		logger.Info("Email login from untrusted device, but allowing due to email verification",
+			zap.Uint("userID", user.ID),
+			zap.String("email", user.Email),
+			zap.String("deviceID", deviceID),
+			zap.String("ip", clientIP))
+
+		// 记录为可疑但成功的登录
+		isSuspicious = true
+	}
+
+	// 11. 创建设备记录
+	if _, err := models.CreateOrUpdateUserDevice(db, user.ID, deviceID, fmt.Sprintf("%s on %s", browser, os), deviceType, os, browser, userAgent, clientIP, location); err != nil {
+		logger.Warn("Failed to create/update user device", zap.Error(err))
+	}
+
+	// 12. 记录登录历史
+	if err := models.RecordLoginHistory(db, user.ID, form.Email, clientIP, location, country, city, userAgent, deviceID, "email", true, "", isSuspicious); err != nil {
+		logger.Warn("Failed to record login history", zap.Error(err))
+	}
+
+	// 13. 清除失败登录计数
+	if utils.GlobalLoginSecurityManager != nil {
+		utils.GlobalLoginSecurityManager.ClearFailedLoginCount(form.Email)
+	}
+
+	// 设置时区（如果有的话）
+	if form.Timezone != "" {
+		models.InTimezone(c, form.Timezone)
+	}
+
+	// 登录用户，设置 Session
+	models.Login(c, user)
+
+	// 检查是否被中止
+	if c.IsAborted() {
+		return
+	}
+
+	// 重新从数据库加载用户信息，确保获取最新的LastLogin等信息
+	updatedUser, err := models.GetUserByUID(db, user.ID)
+	if err != nil {
+		logger.Warn("Failed to reload user after login, using original user object", zap.Error(err))
+		updatedUser = user // 如果加载失败，使用原始user对象
+	} else {
+		user = updatedUser // 使用更新后的用户信息
+	}
+
+	// 如果需要 Token，生成 AuthToken
+	if form.AuthToken {
+		val := utils.GetValue(db, constants.KEY_AUTH_TOKEN_EXPIRED)
+		expired, _ := time.ParseDuration(val)
+		if expired < 24*time.Hour {
+			expired = 24 * time.Hour
+		}
+		user.AuthToken = models.BuildAuthToken(user, expired, false)
+	}
+
+	// 返回登录结果（包含可疑登录警告）
+	responseData := gin.H{
+		"user":  user,
+		"token": user.AuthToken, // 为了兼容前端，同时返回token字段
+	}
+	if isSuspicious {
+		responseData["suspiciousLogin"] = true
+		responseData["message"] = "Login from new location or untrusted device detected. Please verify your identity."
+	}
+
+	response.Success(c, "login success", responseData)
 }
 
-// handleUserSigninByPassword handle user signin by password
+// handleUserSignin handle user signin
 func (h *Handlers) handleUserSigninByPassword(c *gin.Context) {
 	var form models.LoginForm
 	if err := c.BindJSON(&form); err != nil {
 		logger.Error("Failed to bind login form", zap.Error(err))
-		apperrors.HandleError(c, apperrors.New(apperrors.ErrInvalidInput, "Invalid request format"))
+		response.Fail(c, "login failed", err)
 		return
 	}
 
+	clientIP := c.ClientIP()
+	userAgent := c.Request.UserAgent()
 	db := c.MustGet(constants.DbField).(*gorm.DB)
 
-	// 创建认证处理器
-	authHandler := NewAuthHandler(db, h.ipLocationService)
-
-	// 构建登录请求
-	loginReq := LoginRequest{
-		Email:         form.Email,
-		Password:      form.Password,
-		CaptchaID:     form.CaptchaID,
-		CaptchaCode:   form.CaptchaCode,
-		TwoFactorCode: form.TwoFactorCode,
-		Timezone:      form.Timezone,
-		AuthToken:     form.AuthToken,
-		Remember:      form.Remember,
+	// 1. IP限流检查
+	if utils.GlobalLoginSecurityManager != nil {
+		if err := utils.GlobalLoginSecurityManager.CheckIPRateLimit(clientIP); err != nil {
+			response.Fail(c, "too many login attempts", err)
+			return
+		}
 	}
 
-	// 执行登录
-	authHandler.executeLogin(c, loginReq, "password")
+	// 2. 代理IP检测
+	if utils.GlobalLoginSecurityManager != nil {
+		isProxy, err := utils.GlobalLoginSecurityManager.CheckProxyIP(clientIP)
+		if err != nil {
+			logger.Warn("Failed to check proxy IP", zap.String("ip", clientIP), zap.Error(err))
+		}
+		if isProxy {
+			logger.Warn("Login attempt from proxy IP", zap.String("ip", clientIP), zap.String("email", form.Email))
+		}
+	}
+
+	// 3. 账号锁定检查
+	if utils.GlobalLoginSecurityManager != nil {
+		checkLockFunc := func(db *gorm.DB, email string, userID uint) (*utils.AccountLockInfo, error) {
+			lock, err := models.GetAccountLock(db, email, userID)
+			if err != nil {
+				return nil, err
+			}
+			if lock == nil {
+				return nil, nil
+			}
+			return &utils.AccountLockInfo{
+				IsLocked: lock.IsLocked(),
+				UnlockAt: lock.UnlockAt,
+			}, nil
+		}
+		if err := utils.GlobalLoginSecurityManager.CheckAccountLock(db, form.Email, 0, checkLockFunc); err != nil {
+			response.Fail(c, "account is locked", err)
+			return
+		}
+	}
+
+	if form.AuthToken == "" && form.Email == "" {
+		logger.Warn("Login attempt without email or token", zap.String("ip", clientIP))
+		response.Fail(c, "login failed", errors.New("email is required"))
+		return
+	}
+
+	if form.Password == "" && form.AuthToken == "" {
+		logger.Warn("Login attempt without password or token", zap.String("ip", clientIP), zap.String("email", form.Email))
+		response.Fail(c, "login failed", errors.New("empty password"))
+		return
+	}
+
+	// 4. 获取用户
+	var user *models.User
+	var err error
+	if form.Password != "" {
+		user, err = models.GetUserByEmail(db, form.Email)
+		if err != nil {
+			logger.Warn("Login attempt with non-existent email", zap.String("email", form.Email), zap.String("ip", clientIP), zap.Error(err))
+			// 记录失败登录
+			if utils.GlobalLoginSecurityManager != nil {
+				recordFunc := func(db *gorm.DB, email string, userID uint, ipAddress string, failedCount int) error {
+					_, err := models.CreateOrUpdateAccountLock(db, email, userID, ipAddress, failedCount)
+					return err
+				}
+				utils.GlobalLoginSecurityManager.RecordFailedLogin(db, form.Email, 0, clientIP, recordFunc)
+			}
+			response.Fail(c, "用户不存在，请检查邮箱地址", gin.H{
+				"error":   "user_not_exists",
+				"message": "用户不存在，请检查邮箱地址",
+			})
+			return
+		}
+
+		// 5. 检查密码登录次数限制（需要邮箱验证）
+		if utils.GlobalLoginSecurityManager != nil {
+			checkLimitFunc := func(db *gorm.DB, userID uint) (int64, error) {
+				var count int64
+				err := db.Table("login_histories").
+					Where("user_id = ? AND login_type = ? AND success = ? AND created_at > ?",
+						userID, "password", true, time.Now().AddDate(0, 0, -30)). // 最近30天
+					Count(&count).Error
+				return count, err
+			}
+			needsEmailVerification, err := utils.GlobalLoginSecurityManager.CheckPasswordLoginLimit(db, user.ID, form.Email, checkLimitFunc)
+			if err != nil {
+				logger.Warn("Failed to check password login limit", zap.Error(err))
+			}
+			if needsEmailVerification {
+				// 需要邮箱验证码，但这里先检查密码是否正确
+				if !models.CheckPassword(user, form.Password) {
+					logger.Warn("Login failed: incorrect password (email verification required)", zap.String("email", form.Email), zap.Uint("userID", user.ID), zap.String("ip", clientIP))
+					if utils.GlobalLoginSecurityManager != nil {
+						recordFunc := func(db *gorm.DB, email string, userID uint, ipAddress string, failedCount int) error {
+							_, err := models.CreateOrUpdateAccountLock(db, email, userID, ipAddress, failedCount)
+							return err
+						}
+						utils.GlobalLoginSecurityManager.RecordFailedLogin(db, form.Email, user.ID, clientIP, recordFunc)
+					}
+					response.Fail(c, "密码错误，请检查后重试", gin.H{
+						"error":   "incorrect_password",
+						"message": "密码错误，请检查后重试",
+					})
+					return
+				}
+				// 密码正确，但需要邮箱验证
+				response.Success(c, "Email verification required", gin.H{
+					"requiresEmailVerification": true,
+					"message":                   "Password login limit reached. Please verify with email code.",
+				})
+				return
+			}
+		}
+
+		// 6. 图形验证码验证（密码登录需要）
+		if captcha.GlobalCaptchaManager != nil {
+			if form.CaptchaID == "" || form.CaptchaCode == "" {
+				logger.Warn("Login failed: captcha is required", zap.String("email", form.Email), zap.Uint("userID", user.ID), zap.String("ip", clientIP))
+				response.Fail(c, "请输入图形验证码", gin.H{
+					"error":   "captcha_required",
+					"message": "请输入图形验证码",
+				})
+				return
+			}
+
+			valid, err := captcha.GlobalCaptchaManager.Verify(form.CaptchaID, form.CaptchaCode)
+			if err != nil || !valid {
+				logger.Warn("Login failed: invalid captcha code", zap.String("email", form.Email), zap.Uint("userID", user.ID), zap.String("ip", clientIP), zap.String("captchaID", form.CaptchaID), zap.Error(err))
+				if utils.GlobalLoginSecurityManager != nil {
+					recordFunc := func(db *gorm.DB, email string, userID uint, ipAddress string, failedCount int) error {
+						_, err := models.CreateOrUpdateAccountLock(db, email, userID, ipAddress, failedCount)
+						return err
+					}
+					utils.GlobalLoginSecurityManager.RecordFailedLogin(db, form.Email, user.ID, clientIP, recordFunc)
+				}
+				response.Fail(c, "验证码错误，请重新输入", gin.H{
+					"error":   "invalid_captcha",
+					"message": "验证码错误，请重新输入",
+				})
+				return
+			}
+		}
+
+		// 7. 验证密码（支持加密密码和明文密码）
+		passwordValid := false
+		// 检查是否是加密密码格式（passwordHash:encryptedHash:salt:timestamp）
+		if strings.Contains(form.Password, ":") && len(strings.Split(form.Password, ":")) == 4 {
+			// 加密密码验证
+			passwordValid = models.VerifyEncryptedPassword(form.Password, user.Password)
+		} else {
+			// 明文密码（向后兼容）
+			passwordValid = models.CheckPassword(user, form.Password)
+		}
+
+		if !passwordValid {
+			logger.Warn("Login failed: incorrect password", zap.String("email", form.Email), zap.Uint("userID", user.ID), zap.String("ip", clientIP))
+			// 记录失败登录
+			if utils.GlobalLoginSecurityManager != nil {
+				recordFunc := func(db *gorm.DB, email string, userID uint, ipAddress string, failedCount int) error {
+					_, err := models.CreateOrUpdateAccountLock(db, email, userID, ipAddress, failedCount)
+					return err
+				}
+				utils.GlobalLoginSecurityManager.RecordFailedLogin(db, form.Email, user.ID, clientIP, recordFunc)
+			}
+			response.Fail(c, "密码错误，请检查后重试", gin.H{
+				"error":   "incorrect_password",
+				"message": "密码错误，请检查后重试",
+			})
+			return
+		}
+	} else {
+		user, err = models.DecodeHashToken(db, form.AuthToken, false)
+		if err != nil {
+			logger.Warn("Login failed: invalid auth token", zap.String("ip", clientIP), zap.Error(err))
+			response.Fail(c, "login failed", err)
+			return
+		}
+	}
+
+	err = models.CheckUserAllowLogin(db, user)
+	if err != nil {
+		logger.Warn("Login failed: user not allowed to login", zap.String("email", form.Email), zap.Uint("userID", user.ID), zap.String("ip", clientIP), zap.Error(err))
+		response.Fail(c, "login failed", err)
+		return
+	}
+
+	// 8. 获取IP地理位置
+	country, city, location := "Unknown", "Unknown", "Unknown"
+	if h.ipLocationService != nil {
+		country, city, location, _ = h.ipLocationService.GetLocation(clientIP)
+	}
+
+	// 9. 检测异地登录
+	isSuspicious := false
+	if utils.GlobalLoginSecurityManager != nil {
+		getLocationsFunc := func(db *gorm.DB, userID uint, limit int) ([]utils.LoginLocation, error) {
+			histories, err := models.GetRecentLoginLocations(db, userID, limit)
+			if err != nil {
+				return nil, err
+			}
+			locations := make([]utils.LoginLocation, len(histories))
+			for i, h := range histories {
+				locations[i] = utils.LoginLocation{
+					Country: h.Country,
+					City:    h.City,
+				}
+			}
+			return locations, nil
+		}
+		isSuspicious, _ = utils.GlobalLoginSecurityManager.DetectSuspiciousLogin(db, user.ID, clientIP, location, country, getLocationsFunc)
+		if isSuspicious {
+			logger.Warn("Suspicious login detected",
+				zap.Uint("userID", user.ID),
+				zap.String("email", user.Email),
+				zap.String("ip", clientIP),
+				zap.String("location", location))
+		}
+	}
+
+	// 10. 解析设备信息
+	deviceType, os, browser := utils.ParseUserAgent(userAgent)
+	deviceID := utils.GetDeviceID(userAgent, clientIP)
+
+	// 11. 检查设备信任状态
+	isTrusted, err := models.CheckDeviceTrust(db, user.ID, deviceID)
+	if err != nil {
+		logger.Warn("Failed to check device trust", zap.Error(err))
+	}
+
+	// 如果设备不被信任，要求额外验证或拒绝登录
+	// 但是如果用户已经有有效的会话令牌，则允许继续（避免取消信任当前设备后立即失去访问权限）
+	if !isTrusted {
+		// 检查是否是通过有效令牌登录（表示用户已经通过了之前的验证）
+		isTokenLogin := form.AuthToken != ""
+
+		if !isTokenLogin {
+			// 记录可疑登录尝试
+			if err := models.RecordLoginHistory(db, user.ID, form.Email, clientIP, location, country, city, userAgent, deviceID, "password", false, "untrusted device", true); err != nil {
+				logger.Warn("Failed to record login history for untrusted device", zap.Error(err))
+			}
+
+			logger.Warn("Login attempt from untrusted device",
+				zap.Uint("userID", user.ID),
+				zap.String("email", user.Email),
+				zap.String("deviceID", deviceID),
+				zap.String("ip", clientIP))
+
+			// 返回需要设备验证的响应
+			response.Success(c, "Device verification required", gin.H{
+				"requiresDeviceVerification": true,
+				"deviceId":                   deviceID,
+				"message":                    "This device is not trusted. Please verify this device or use a trusted device to login.",
+			})
+			return
+		} else {
+			// 令牌登录时，记录警告但允许继续
+			logger.Info("Token login from untrusted device allowed",
+				zap.Uint("userID", user.ID),
+				zap.String("email", user.Email),
+				zap.String("deviceID", deviceID),
+				zap.String("ip", clientIP))
+		}
+	}
+
+	// 12. 创建设备记录
+	if _, err := models.CreateOrUpdateUserDevice(db, user.ID, deviceID, fmt.Sprintf("%s on %s", browser, os), deviceType, os, browser, userAgent, clientIP, location); err != nil {
+		logger.Warn("Failed to create/update user device", zap.Error(err))
+	}
+
+	// 13. 记录登录历史
+	if err := models.RecordLoginHistory(db, user.ID, form.Email, clientIP, location, country, city, userAgent, deviceID, "password", true, "", isSuspicious); err != nil {
+		logger.Warn("Failed to record login history", zap.Error(err))
+	}
+
+	// 14. 清除失败登录计数
+	if utils.GlobalLoginSecurityManager != nil {
+		utils.GlobalLoginSecurityManager.ClearFailedLoginCount(form.Email)
+	}
+
+	// 14. 检查是否启用了两步验证
+	if user.TwoFactorEnabled {
+		// 如果提供了两步验证码，验证它
+		if form.TwoFactorCode != "" {
+			valid := totp.Validate(form.TwoFactorCode, user.TwoFactorSecret)
+			if !valid {
+				response.Fail(c, "Invalid two-factor authentication code", errors.New("invalid 2fa code"))
+				return
+			}
+		} else {
+			// 需要两步验证码
+			response.Success(c, "Two-factor authentication required", gin.H{
+				"requiresTwoFactor": true,
+				"message":           "Please enter your two-factor authentication code",
+			})
+			return
+		}
+	}
+
+	if form.Timezone != "" {
+		models.InTimezone(c, form.Timezone)
+	}
+
+	// 执行登录操作（设置session等）
+	models.Login(c, user)
+
+	// 检查是否被中止（models.Login内部可能出错并中止请求）
+	if c.IsAborted() {
+		logger.Error("Login failed: models.Login aborted the request", zap.String("email", form.Email), zap.Uint("userID", user.ID), zap.String("ip", clientIP))
+		return
+	}
+
+	// 重新从数据库加载用户信息，确保获取最新的LastLogin等信息
+	updatedUser, err := models.GetUserByUID(db, user.ID)
+	if err != nil {
+		logger.Warn("Failed to reload user after login, using original user object", zap.Error(err))
+		updatedUser = user // 如果加载失败，使用原始user对象
+	} else {
+		user = updatedUser // 使用更新后的用户信息
+	}
+
+	// 生成认证Token
+	val := utils.GetValue(db, constants.KEY_AUTH_TOKEN_EXPIRED) // 7d
+	expired, err := time.ParseDuration(val)
+	if err != nil {
+		logger.Warn("Failed to parse auth token expired duration, using default 7 days", zap.Error(err))
+		// 7 days
+		expired = 7 * 24 * time.Hour
+	}
+	user.AuthToken = models.BuildAuthToken(user, expired, false)
+
+	// 15. 返回登录结果（包含可疑登录警告）
+	responseData := gin.H{
+		"user":  user,
+		"token": user.AuthToken, // 为了兼容前端，同时返回token字段
+	}
+	if isSuspicious {
+		responseData["suspiciousLogin"] = true
+		responseData["message"] = "Login from new location detected. Please verify your identity."
+	}
+
+	logger.Info("Login successful", zap.String("email", form.Email), zap.Uint("userID", user.ID), zap.String("ip", clientIP))
+	response.Success(c, "login successful", responseData)
 }
 
 // handleUserSignin handle user signin
@@ -855,7 +1093,7 @@ func (h *Handlers) handleUserSignupByEmail(c *gin.Context) {
 func (h *Handlers) handleUserUpdate(c *gin.Context) {
 	var req models.UpdateUserRequest
 	if err := c.ShouldBind(&req); err != nil {
-		apperrors.HandleError(c, apperrors.NewParameterError("request_body", "invalid_format").WithCause(err))
+		response.Fail(c, "Invalid request", err)
 		return
 	}
 
@@ -901,14 +1139,14 @@ func (h *Handlers) handleUserUpdate(c *gin.Context) {
 
 	err := models.UpdateUser(h.db, user, vals)
 	if err != nil {
-		apperrors.HandleError(c, apperrors.ErrUpdateFailedError.WithCause(err))
+		response.Fail(c, "update user failed", err)
 		return
 	}
 
 	// 重新获取更新后的用户信息
 	updatedUser, err := models.GetUserByUID(h.db, user.ID)
 	if err != nil {
-		apperrors.HandleError(c, apperrors.ErrQueryFailedError.WithCause(err))
+		response.Fail(c, "failed to get updated user", err)
 		return
 	}
 	cache.Delete(c, constants.CacheKeyUserByID+strconv.Itoa(int(user.ID)))

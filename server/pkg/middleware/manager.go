@@ -5,7 +5,6 @@ import (
 	"time"
 
 	"github.com/code-100-precent/LingEcho/pkg/config"
-	apperrors "github.com/code-100-precent/LingEcho/pkg/errors"
 	"github.com/code-100-precent/LingEcho/pkg/logger"
 	"github.com/gin-gonic/gin"
 	"go.uber.org/zap"
@@ -134,11 +133,7 @@ func (mgr *MiddlewareManager) ApplyMiddlewares(r *gin.RouterGroup) {
 		zap.Bool("circuitBreaker", mgr.config.EnableCircuitBreaker),
 		zap.Bool("operationLog", mgr.config.EnableOperationLog))
 
-	// 0. 错误处理中间件（最先执行，捕获所有panic）
-	r.Use(apperrors.ErrorHandlingMiddleware())
-	logger.Info("Error handling middleware applied")
-
-	// 1. 限流中间件
+	// 1. 限流中间件（最先执行）
 	if mgr.config.EnableRateLimit && mgr.rateLimiter != nil {
 		r.Use(RateLimitMiddleware())
 		logger.Info("Rate limit middleware applied")
