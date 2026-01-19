@@ -1,5 +1,4 @@
-import { BaseApiService } from './base.service'
-import { ApiResponse } from '@/utils/http'
+import { post, get, ApiResponse } from '@/utils/request'
 
 // 用户注册表单类型
 export interface RegisterUserForm {
@@ -170,105 +169,78 @@ export interface User {
   emailVerified?: boolean
 }
 
-// Auth Service 类
-export class AuthService extends BaseApiService {
-  constructor() {
-    super('/auth')
-  }
-
-  // 用户注册
-  async register(data: RegisterUserForm): Promise<ApiResponse<RegisterResponseData>> {
-    return this.post<RegisterResponseData>('/register', data)
-  }
-
-  // 邮箱验证码注册
-  async registerByEmail(data: EmailRegisterForm): Promise<ApiResponse<RegisterResponseData>> {
-    return this.post<RegisterResponseData>('/register/email', data)
-  }
-
-  // 发送邮箱验证码
-  async sendEmailCode(data: SendEmailCodeRequest): Promise<ApiResponse<null>> {
-    return this.post<null>('/send/email', data)
-  }
-
-  // 用户登录
-  async login(data: LoginForm): Promise<ApiResponse<LoginResponseData>> {
-    return this.post<LoginResponseData>('/login/password', data)
-  }
-
-  // 密码登录
-  async loginWithPassword(data: PasswordLoginForm): Promise<ApiResponse<LoginResponseData>> {
-    return this.post<LoginResponseData>('/login/password', data)
-  }
-
-  // 邮箱验证码登录
-  async loginWithEmailCode(data: EmailCodeLoginForm): Promise<ApiResponse<LoginResponseData>> {
-    return this.post<LoginResponseData>('/login/email', data)
-  }
-
-  // 发送设备验证码
-  async sendDeviceVerificationCode(data: { email: string; deviceId: string }): Promise<ApiResponse<null>> {
-    return this.post('/devices/send-verification', data)
-  }
-
-  // 验证设备
-  async verifyDevice(data: { email: string; deviceId: string; verifyCode: string }): Promise<ApiResponse<null>> {
-    return this.post('/devices/verify', data)
-  }
-
-  // 获取用户信息
-  async getUserInfo(): Promise<ApiResponse<User>> {
-    return this.get<User>('/info')
-  }
-
-  // 刷新token
-  async refreshToken(): Promise<ApiResponse<{ token: string }>> {
-    return this.post<{ token: string }>('/refresh')
-  }
-
-  // 发送邮箱验证邮件
-  async sendEmailVerification(): Promise<ApiResponse<null>> {
-    return this.post<null>('/send-email-verification')
-  }
-
-  // 验证邮箱（通过URL中的token）
-  async verifyEmail(token: string): Promise<ApiResponse<User>> {
-    return this.get<User>(`/verify-email?token=${token}`)
-  }
-
-  // 登出
-  async logout(next?: string): Promise<ApiResponse<null>> {
-    const params = next ? { next } : undefined
-    return this.get<null>('/logout', { params })
-  }
-
-  // 获取图形验证码
-  async getCaptcha(): Promise<ApiResponse<CaptchaResponse>> {
-    return this.get<CaptchaResponse>('/captcha')
-  }
-
-  // 验证图形验证码
-  async verifyCaptcha(id: string, code: string): Promise<ApiResponse<{ valid: boolean }>> {
-    return this.post<{ valid: boolean }>('/captcha/verify', { id, code })
-  }
+// 用户注册
+export const registerUser = async (data: RegisterUserForm): Promise<ApiResponse<RegisterResponseData>> => {
+  return post<RegisterResponseData>('/auth/register', data)
 }
 
-// 导出单例
-export const authService = new AuthService()
+// 邮箱验证码注册
+export const registerUserByEmail = async (data: EmailRegisterForm): Promise<ApiResponse<RegisterResponseData>> => {
+  return post<RegisterResponseData>('/auth/register/email', data)
+}
 
-// 兼容性导出（保持向后兼容）
-export const registerUser = (data: RegisterUserForm) => authService.register(data)
-export const registerUserByEmail = (data: EmailRegisterForm) => authService.registerByEmail(data)
-export const sendEmailCode = (data: SendEmailCodeRequest) => authService.sendEmailCode(data)
-export const loginUser = (data: LoginForm) => authService.login(data)
-export const loginWithPassword = (data: PasswordLoginForm) => authService.loginWithPassword(data)
-export const loginWithEmailCode = (data: EmailCodeLoginForm) => authService.loginWithEmailCode(data)
-export const sendDeviceVerificationCode = (data: { email: string; deviceId: string }) => authService.sendDeviceVerificationCode(data)
-export const verifyDevice = (data: { email: string; deviceId: string; verifyCode: string }) => authService.verifyDevice(data)
-export const getUserInfo = () => authService.getUserInfo()
-export const refreshToken = () => authService.refreshToken()
-export const sendEmailVerification = () => authService.sendEmailVerification()
-export const verifyEmail = (token: string) => authService.verifyEmail(token)
-export const logoutUser = (next?: string) => authService.logout(next)
-export const getCaptcha = () => authService.getCaptcha()
-export const verifyCaptcha = (id: string, code: string) => authService.verifyCaptcha(id, code)
+// 发送邮箱验证码
+export const sendEmailCode = async (data: SendEmailCodeRequest): Promise<ApiResponse<null>> => {
+  return post<null>('/auth/send/email', data)
+}
+
+// 用户登录
+export const loginUser = async (data: LoginForm): Promise<ApiResponse<LoginResponseData>> => {
+  return post<LoginResponseData>('/auth/login/password', data)
+}
+
+// 密码登录
+export const loginWithPassword = async (data: PasswordLoginForm): Promise<ApiResponse<LoginResponseData>> => {
+  return post<LoginResponseData>('/auth/login/password', data)
+}
+
+// 邮箱验证码登录
+export const loginWithEmailCode = async (data: EmailCodeLoginForm): Promise<ApiResponse<LoginResponseData>> => {
+  return post<LoginResponseData>('/auth/login/email', data)
+}
+
+// 发送设备验证码
+export const sendDeviceVerificationCode = async (data: { email: string; deviceId: string }): Promise<ApiResponse<null>> => {
+  return post('/auth/devices/send-verification', data)
+}
+
+// 验证设备
+export const verifyDevice = async (data: { email: string; deviceId: string; verifyCode: string }): Promise<ApiResponse<null>> => {
+  return post('/auth/devices/verify', data)
+}
+
+// 获取用户信息
+export const getUserInfo = async (): Promise<ApiResponse<User>> => {
+  return get<User>('/auth/info')
+}
+
+// 刷新token
+export const refreshToken = async (): Promise<ApiResponse<{ token: string }>> => {
+  return post<{ token: string }>('/auth/refresh')
+}
+
+// 发送邮箱验证邮件
+export const sendEmailVerification = async (): Promise<ApiResponse<null>> => {
+  return post<null>('/auth/send-email-verification')
+}
+
+// 验证邮箱（通过URL中的token）
+export const verifyEmail = async (token: string): Promise<ApiResponse<User>> => {
+  return get<User>(`/auth/verify-email?token=${token}`)
+}
+
+// 登出 - 对应 GET /auth/logout
+export const logoutUser = async (next?: string): Promise<ApiResponse<null>> => {
+  const params = next ? { next } : undefined
+  return get<null>('/auth/logout', { params })
+}
+
+// 获取图形验证码
+export const getCaptcha = async (): Promise<ApiResponse<CaptchaResponse>> => {
+  return get<CaptchaResponse>('/auth/captcha')
+}
+
+// 验证图形验证码
+export const verifyCaptcha = async (id: string, code: string): Promise<ApiResponse<{ valid: boolean }>> => {
+  return post<{ valid: boolean }>('/auth/captcha/verify', { id, code })
+}

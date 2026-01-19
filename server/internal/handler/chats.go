@@ -1,9 +1,6 @@
 package handlers
 
 import (
-	apperrors "github.com/code-100-precent/LingEcho/pkg/errors"
-	"github.com/code-100-precent/LingEcho/pkg/response"
-
 	"encoding/json"
 	"fmt"
 	"log"
@@ -16,6 +13,7 @@ import (
 	"github.com/code-100-precent/LingEcho/internal/models"
 	"github.com/code-100-precent/LingEcho/pkg/config"
 	"github.com/code-100-precent/LingEcho/pkg/graph"
+	"github.com/code-100-precent/LingEcho/pkg/response"
 	"github.com/code-100-precent/LingEcho/pkg/webrtc/constants"
 	"github.com/code-100-precent/LingEcho/pkg/webrtc/rtcmedia"
 	transports "github.com/code-100-precent/LingEcho/pkg/webrtc/transport"
@@ -89,7 +87,7 @@ type ChatSessionMap struct {
 func (h *Handlers) Chat(c *gin.Context) {
 	user := models.CurrentUser(c)
 	if user == nil {
-		apperrors.HandleError(c, apperrors.New(apperrors.ErrInternalServer, "User is not logged in."))
+		response.Fail(c, "User is not logged in.", nil)
 		return
 	}
 
@@ -101,11 +99,11 @@ func (h *Handlers) Chat(c *gin.Context) {
 
 	cred, err := models.GetUserCredentialByApiSecretAndApiKey(h.db, req.ApiKey, req.ApiSecret)
 	if err != nil {
-		apperrors.HandleError(c, apperrors.Wrap(err, apperrors.ErrInternalServer, "Database error"))
+		response.Fail(c, "Database error: "+err.Error(), nil)
 		return
 	}
 	if cred == nil {
-		apperrors.HandleError(c, apperrors.New(apperrors.ErrInternalServer, "Secret or key is invalid or wrong. Please check again."))
+		response.Fail(c, "Secret or key is invalid or wrong. Please check again.", nil)
 		return
 	}
 }
@@ -113,16 +111,16 @@ func (h *Handlers) Chat(c *gin.Context) {
 func (h *Handlers) StopChat(c *gin.Context) {
 	sessionID := c.Query("sessionId")
 	if sessionID == "" {
-		apperrors.HandleError(c, apperrors.New(apperrors.ErrInternalServer, "not find param sessionId "))
+		response.Fail(c, "not find param sessionId ", nil)
 		return
 	}
-	apperrors.HandleError(c, apperrors.New(apperrors.ErrInternalServer, "未找到活动通话"))
+	response.Fail(c, "未找到活动通话", nil)
 }
 
 func (h *Handlers) ChatStream(c *gin.Context) {
 	sessionId := c.Query("sessionId")
 	if sessionId == "" {
-		apperrors.HandleError(c, apperrors.New(apperrors.ErrInternalServer, "not find param sessionId "))
+		response.Fail(c, "not find param sessionId ", nil)
 		return
 	}
 
@@ -137,7 +135,7 @@ func (h *Handlers) getChatSessionLog(c *gin.Context) {
 	// 获取当前登录用户
 	user := models.CurrentUser(c)
 	if user == nil {
-		apperrors.HandleError(c, apperrors.New(apperrors.ErrInternalServer, "User is not logged in."))
+		response.Fail(c, "User is not logged in.", nil)
 		return
 	}
 
@@ -147,7 +145,7 @@ func (h *Handlers) getChatSessionLog(c *gin.Context) {
 
 	pageSizeInt, _ := strconv.Atoi(pageSize)
 	if pageSizeInt <= 0 {
-		apperrors.HandleError(c, apperrors.New(apperrors.ErrInternalServer, "Invalid pageSize"))
+		response.Fail(c, "Invalid pageSize", nil)
 		return
 	}
 
@@ -157,7 +155,7 @@ func (h *Handlers) getChatSessionLog(c *gin.Context) {
 		var err error
 		cursorID, err = strconv.ParseInt(cursor, 10, 64)
 		if err != nil {
-			apperrors.HandleError(c, apperrors.New(apperrors.ErrInternalServer, "Invalid cursor"))
+			response.Fail(c, "Invalid cursor", nil)
 			return
 		}
 	}
@@ -165,7 +163,7 @@ func (h *Handlers) getChatSessionLog(c *gin.Context) {
 	// 使用新的模型方法获取聊天记录
 	logs, err := models.GetChatSessionLogs(h.db, user.ID, pageSizeInt, cursorID)
 	if err != nil {
-		apperrors.HandleError(c, apperrors.New(apperrors.ErrInternalServer, "Failed to fetch chat logs"))
+		response.Fail(c, "Failed to fetch chat logs", err.Error())
 		return
 	}
 
@@ -187,20 +185,20 @@ func (h *Handlers) getChatSessionLogDetail(c *gin.Context) {
 	// 获取当前登录用户
 	user := models.CurrentUser(c)
 	if user == nil {
-		apperrors.HandleError(c, apperrors.New(apperrors.ErrInternalServer, "User is not logged in."))
+		response.Fail(c, "User is not logged in.", nil)
 		return
 	}
 
 	id := c.Param("id")
 	if id == "" {
-		apperrors.HandleError(c, apperrors.New(apperrors.ErrInternalServer, "not find param id"))
+		response.Fail(c, "not find param id", nil)
 		return
 	}
 
 	// 解析ID
 	logID, err := strconv.ParseInt(id, 10, 64)
 	if err != nil {
-		apperrors.HandleError(c, apperrors.New(apperrors.ErrInternalServer, "Invalid log ID"))
+		response.Fail(c, "Invalid log ID", nil)
 		return
 	}
 
@@ -210,13 +208,13 @@ func (h *Handlers) getChatSessionLogDetail(c *gin.Context) {
 	detail, err := models.GetChatSessionLogDetail(h.db, logID, user.ID)
 	if err != nil {
 		fmt.Printf("查询聊天记录详情失败: %v\n", err)
-		apperrors.HandleError(c, apperrors.New(apperrors.ErrInternalServer, "Failed to fetch chat log"))
+		response.Fail(c, "Failed to fetch chat log", err.Error())
 		return
 	}
 
 	fmt.Printf("查询聊天记录详情成功: %+v\n", detail)
 
-	apperrors.RespondSuccess(c, detail)
+	response.Success(c, "Fetched chat log successfully", detail)
 }
 
 // getChatSessionLogsBySession 获取指定会话的所有聊天记录
@@ -224,21 +222,21 @@ func (h *Handlers) getChatSessionLogsBySession(c *gin.Context) {
 	// 获取当前登录用户
 	user := models.CurrentUser(c)
 	if user == nil {
-		apperrors.HandleError(c, apperrors.New(apperrors.ErrInternalServer, "User is not logged in."))
+		response.Fail(c, "User is not logged in.", nil)
 		return
 	}
 
 	// 获取会话ID
 	sessionID := c.Param("sessionId")
 	if sessionID == "" {
-		apperrors.HandleError(c, apperrors.New(apperrors.ErrInternalServer, "Session ID is required"))
+		response.Fail(c, "Session ID is required", nil)
 		return
 	}
 
 	// 获取该会话的所有记录
 	logs, err := models.GetChatSessionLogsBySession(h.db, sessionID, user.ID)
 	if err != nil {
-		apperrors.HandleError(c, apperrors.New(apperrors.ErrInternalServer, "Failed to fetch chat logs"))
+		response.Fail(c, "Failed to fetch chat logs", err.Error())
 		return
 	}
 
@@ -274,7 +272,7 @@ func (h *Handlers) getChatSessionLogsBySession(c *gin.Context) {
 		details = append(details, detail)
 	}
 
-	apperrors.RespondSuccess(c, details)
+	response.Success(c, "Fetched chat session logs successfully", details)
 }
 
 // getChatSessionLogByAssistant 获取指定助手的聊天记录
@@ -282,20 +280,20 @@ func (h *Handlers) getChatSessionLogByAssistant(c *gin.Context) {
 	// 获取当前登录用户
 	user := models.CurrentUser(c)
 	if user == nil {
-		apperrors.HandleError(c, apperrors.New(apperrors.ErrInternalServer, "User is not logged in."))
+		response.Fail(c, "User is not logged in.", nil)
 		return
 	}
 
 	// 获取助手ID
 	assistantIDStr := c.Param("assistantId")
 	if assistantIDStr == "" {
-		apperrors.HandleError(c, apperrors.New(apperrors.ErrInternalServer, "Assistant ID is required"))
+		response.Fail(c, "Assistant ID is required", nil)
 		return
 	}
 
 	assistantID, err := strconv.ParseInt(assistantIDStr, 10, 64)
 	if err != nil {
-		apperrors.HandleError(c, apperrors.New(apperrors.ErrInternalServer, "Invalid assistant ID"))
+		response.Fail(c, "Invalid assistant ID", nil)
 		return
 	}
 
@@ -305,7 +303,7 @@ func (h *Handlers) getChatSessionLogByAssistant(c *gin.Context) {
 
 	pageSizeInt, _ := strconv.Atoi(pageSize)
 	if pageSizeInt <= 0 {
-		apperrors.HandleError(c, apperrors.New(apperrors.ErrInternalServer, "Invalid pageSize"))
+		response.Fail(c, "Invalid pageSize", nil)
 		return
 	}
 
@@ -314,7 +312,7 @@ func (h *Handlers) getChatSessionLogByAssistant(c *gin.Context) {
 	if cursor != "" {
 		cursorID, err = strconv.ParseInt(cursor, 10, 64)
 		if err != nil {
-			apperrors.HandleError(c, apperrors.New(apperrors.ErrInternalServer, "Invalid cursor"))
+			response.Fail(c, "Invalid cursor", nil)
 			return
 		}
 	}
@@ -334,7 +332,7 @@ func (h *Handlers) getChatSessionLogByAssistant(c *gin.Context) {
 
 	err = query.Order("csl.id DESC").Limit(pageSizeInt).Scan(&logs).Error
 	if err != nil {
-		apperrors.HandleError(c, apperrors.New(apperrors.ErrInternalServer, "Failed to fetch chat logs"))
+		response.Fail(c, "Failed to fetch chat logs", err.Error())
 		return
 	}
 

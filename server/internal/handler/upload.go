@@ -1,9 +1,6 @@
 package handlers
 
 import (
-	apperrors "github.com/code-100-precent/LingEcho/pkg/errors"
-	"github.com/code-100-precent/LingEcho/pkg/response"
-
 	"fmt"
 	"strconv"
 	"time"
@@ -11,6 +8,7 @@ import (
 	"github.com/LingByte/lingstorage-sdk-go"
 	"github.com/code-100-precent/LingEcho/internal/models"
 	"github.com/code-100-precent/LingEcho/pkg/config"
+	"github.com/code-100-precent/LingEcho/pkg/response"
 	"github.com/code-100-precent/LingEcho/pkg/utils"
 	"github.com/gin-gonic/gin"
 	"gorm.io/gorm"
@@ -35,7 +33,7 @@ func (h *UploadHandler) UploadAudio(c *gin.Context) {
 	// Get uploaded file
 	file, header, err := c.Request.FormFile("audio")
 	if err != nil {
-		apperrors.HandleError(c, apperrors.New(apperrors.ErrInvalidInput, "Failed to get uploaded file: "+err.Error()))
+		response.Fail(c, "Failed to get uploaded file: "+err.Error(), nil)
 		return
 	}
 	defer file.Close()
@@ -43,7 +41,7 @@ func (h *UploadHandler) UploadAudio(c *gin.Context) {
 	// Check file type
 	contentType := header.Header.Get("Content-Type")
 	if contentType != "audio/webm" && contentType != "audio/wav" && contentType != "audio/mp3" {
-		apperrors.HandleError(c, apperrors.New(apperrors.ErrInvalidInput, "Unsupported file type: "+contentType))
+		response.Fail(c, "Unsupported file type: "+contentType, nil)
 		return
 	}
 
@@ -59,7 +57,7 @@ func (h *UploadHandler) UploadAudio(c *gin.Context) {
 		Key:      storageKey,
 	})
 	if err != nil {
-		apperrors.HandleError(c, apperrors.ErrFileUploadFailedError.WithCause(err))
+		response.Fail(c, "Failed to upload file: "+err.Error(), nil)
 		return
 	}
 
@@ -89,7 +87,7 @@ func (h *UploadHandler) UploadAudio(c *gin.Context) {
 	}
 
 	// Return success response
-	response.Success(c, "音频文件上传成功", map[string]interface{}{
+	response.Success(c, "音s频文件上传成功", map[string]interface{}{
 		"fileName":   fileName,
 		"filePath":   reader.URL,
 		"fileSize":   reader.Size,

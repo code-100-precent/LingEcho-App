@@ -1,13 +1,11 @@
 package handlers
 
 import (
-	apperrors "github.com/code-100-precent/LingEcho/pkg/errors"
-	"github.com/code-100-precent/LingEcho/pkg/response"
-
 	"fmt"
 	"strconv"
 
 	"github.com/code-100-precent/LingEcho/internal/models"
+	"github.com/code-100-precent/LingEcho/pkg/response"
 	"github.com/code-100-precent/LingEcho/pkg/voiceclone"
 	"github.com/gin-gonic/gin"
 	"github.com/sirupsen/logrus"
@@ -51,13 +49,13 @@ type VolcengineQueryTaskResponse struct {
 func (h *Handlers) VolcengineSynthesize(c *gin.Context) {
 	var req VolcengineTTSRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		apperrors.HandleError(c, apperrors.New(apperrors.ErrInternalServer, "参数错误"))
+		response.Fail(c, "参数错误", err.Error())
 		return
 	}
 
 	user := models.CurrentUser(c)
 	if user == nil {
-		apperrors.HandleError(c, apperrors.New(apperrors.ErrInternalServer, "未授权"))
+		response.Fail(c, "未授权", "用户未登录")
 		return
 	}
 
@@ -80,7 +78,7 @@ func (h *Handlers) VolcengineSynthesize(c *gin.Context) {
 	factory := voiceclone.NewFactory()
 	service, err := factory.CreateServiceFromEnv(voiceclone.ProviderVolcengine)
 	if err != nil {
-		apperrors.HandleError(c, apperrors.New(apperrors.ErrInternalServer, "初始化火山引擎服务失败"))
+		response.Fail(c, "初始化火山引擎服务失败", err.Error())
 		return
 	}
 
@@ -91,7 +89,7 @@ func (h *Handlers) VolcengineSynthesize(c *gin.Context) {
 	}
 	url, err := service.SynthesizeToStorage(c.Request.Context(), synthesizeReq, key)
 	if err != nil {
-		apperrors.HandleError(c, apperrors.New(apperrors.ErrInternalServer, "语音合成失败"))
+		response.Fail(c, "语音合成失败", err.Error())
 		return
 	}
 
@@ -118,7 +116,7 @@ func (h *Handlers) VolcengineSynthesize(c *gin.Context) {
 		}
 	}
 
-	apperrors.RespondSuccess(c, VolcengineTTSResponse{URL: url})
+	response.Success(c, "语音合成成功", VolcengineTTSResponse{URL: url})
 }
 
 // VolcengineSubmitAudio 提交音频文件进行训练
@@ -126,21 +124,21 @@ func (h *Handlers) VolcengineSynthesize(c *gin.Context) {
 func (h *Handlers) VolcengineSubmitAudio(c *gin.Context) {
 	var req VolcengineSubmitAudioRequest
 	if err := c.ShouldBind(&req); err != nil {
-		apperrors.HandleError(c, apperrors.New(apperrors.ErrInternalServer, "参数错误"))
+		response.Fail(c, "参数错误", err.Error())
 		return
 	}
 
 	// 获取上传的文件
 	file, err := c.FormFile("audio")
 	if err != nil {
-		apperrors.HandleError(c, apperrors.New(apperrors.ErrInternalServer, "获取音频文件失败"))
+		response.Fail(c, "获取音频文件失败", err.Error())
 		return
 	}
 
 	// 打开文件
 	src, err := file.Open()
 	if err != nil {
-		apperrors.HandleError(c, apperrors.New(apperrors.ErrInternalServer, "打开音频文件失败"))
+		response.Fail(c, "打开音频文件失败", err.Error())
 		return
 	}
 	defer src.Close()
@@ -149,7 +147,7 @@ func (h *Handlers) VolcengineSubmitAudio(c *gin.Context) {
 	factory := voiceclone.NewFactory()
 	service, err := factory.CreateServiceFromEnv(voiceclone.ProviderVolcengine)
 	if err != nil {
-		apperrors.HandleError(c, apperrors.New(apperrors.ErrInternalServer, "初始化火山引擎服务失败"))
+		response.Fail(c, "初始化火山引擎服务失败", err.Error())
 		return
 	}
 
@@ -162,7 +160,7 @@ func (h *Handlers) VolcengineSubmitAudio(c *gin.Context) {
 	}
 	err = service.SubmitAudio(c.Request.Context(), submitReq)
 	if err != nil {
-		apperrors.HandleError(c, apperrors.New(apperrors.ErrInternalServer, "提交音频失败"))
+		response.Fail(c, "提交音频失败", err.Error())
 		return
 	}
 
@@ -179,13 +177,13 @@ func (h *Handlers) VolcengineSubmitAudio(c *gin.Context) {
 func (h *Handlers) VolcengineQueryTask(c *gin.Context) {
 	var req VolcengineQueryTaskRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		apperrors.HandleError(c, apperrors.New(apperrors.ErrInternalServer, "参数错误"))
+		response.Fail(c, "参数错误", err.Error())
 		return
 	}
 
 	user := models.CurrentUser(c)
 	if user == nil {
-		apperrors.HandleError(c, apperrors.New(apperrors.ErrInternalServer, "未授权"))
+		response.Fail(c, "未授权", "用户未登录")
 		return
 	}
 
@@ -193,13 +191,13 @@ func (h *Handlers) VolcengineQueryTask(c *gin.Context) {
 	factory := voiceclone.NewFactory()
 	service, err := factory.CreateServiceFromEnv(voiceclone.ProviderVolcengine)
 	if err != nil {
-		apperrors.HandleError(c, apperrors.New(apperrors.ErrInternalServer, "初始化火山引擎服务失败"))
+		response.Fail(c, "初始化火山引擎服务失败", err.Error())
 		return
 	}
 
 	status, err := service.QueryTaskStatus(c.Request.Context(), req.SpeakerID)
 	if err != nil {
-		apperrors.HandleError(c, apperrors.New(apperrors.ErrInternalServer, "查询任务状态失败"))
+		response.Fail(c, "查询任务状态失败", err.Error())
 		return
 	}
 
@@ -234,7 +232,7 @@ func (h *Handlers) VolcengineQueryTask(c *gin.Context) {
 				TrainVID: status.TrainVID,
 			}
 			if err := h.db.Create(&task).Error; err != nil {
-				apperrors.HandleError(c, apperrors.New(apperrors.ErrInternalServer, "创建训练任务记录失败"))
+				response.Fail(c, "创建训练任务记录失败", err.Error())
 				return
 			}
 		} else {
@@ -243,14 +241,14 @@ func (h *Handlers) VolcengineQueryTask(c *gin.Context) {
 			task.AssetID = status.AssetID
 			task.TrainVID = status.TrainVID
 			if err := h.db.Save(&task).Error; err != nil {
-				apperrors.HandleError(c, apperrors.New(apperrors.ErrInternalServer, "更新训练任务记录失败"))
+				response.Fail(c, "更新训练任务记录失败", err.Error())
 				return
 			}
 		}
 
 		// 使用 upsertVoiceClone 保存音色记录
 		if err := h.upsertVoiceClone(c.Request.Context(), user.ID, &task, status.AssetID, status.TrainVID, "volcengine"); err != nil {
-			apperrors.HandleError(c, apperrors.New(apperrors.ErrInternalServer, "创建音色记录失败"))
+			response.Fail(c, "创建音色记录失败", err.Error())
 			return
 		}
 	}

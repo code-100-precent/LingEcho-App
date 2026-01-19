@@ -1,4 +1,4 @@
-import { BaseApiService } from './base.service'
+import { get, post, del, ApiResponse } from '@/utils/request'
 
 // 知识库基本信息
 export interface KnowledgeBase {
@@ -31,7 +31,6 @@ export interface UploadKnowledgeBaseRequest {
 export interface DeleteKnowledgeBaseRequest {
     knowledgeKey: string
 }
-
 export interface KnowledgeInfo {
     name: string
     key: string
@@ -39,6 +38,7 @@ export interface KnowledgeInfo {
 
 // 根据用户ID获取知识库列表响应
 export type GetKnowledgeBaseByUserResponse = KnowledgeInfo[]
+
 
 // 向知识库提问请求参数
 export interface AskKnowledgeBaseRequest {
@@ -49,63 +49,53 @@ export interface AskKnowledgeBaseRequest {
 // 向知识库提问响应
 export type AskKnowledgeBaseResponse = string
 
-class KnowledgeService extends BaseApiService {
-    constructor() {
-        super('/knowledge')
+// 创建知识库
+export const createKnowledgeBase = async (
+    data: CreateKnowledgeBaseRequest
+): Promise<ApiResponse<KnowledgeBase>> => {
+    const formData = new FormData()
+    formData.append('knowledgeName', data.knowledgeName)
+    formData.append('file', data.file)
+    if (data.groupId) {
+        formData.append('group_id', data.groupId.toString())
     }
-
-    // 创建知识库
-    async createKnowledgeBase(data: CreateKnowledgeBaseRequest): Promise<KnowledgeBase> {
-        const formData = new FormData()
-        formData.append('knowledgeName', data.knowledgeName)
-        formData.append('file', data.file)
-        if (data.groupId) {
-            formData.append('group_id', data.groupId.toString())
-        }
-        const response = await this.post<KnowledgeBase>('/create', formData)
-        this.invalidateCache()
-        return this.handleResponse(response)
-    }
-
-    // 上传文件到知识库
-    async uploadKnowledgeBase(data: UploadKnowledgeBaseRequest): Promise<null> {
-        const formData = new FormData()
-        formData.append('file', data.file)
-        formData.append('knowledgeKey', data.knowledgeKey)
-        const response = await this.post<null>('/upload', formData)
-        this.invalidateCache()
-        return this.handleResponse(response)
-    }
-
-    // 删除知识库
-    async deleteKnowledgeBase(knowledgeKey: string): Promise<string> {
-        const response = await this.delete<string>('/delete', {
-            params: { knowledgeKey }
-        })
-        this.invalidateCache()
-        return this.handleResponse(response)
-    }
-
-    // 根据用户ID获取知识库名称列表
-    async getKnowledgeBaseByUser(): Promise<GetKnowledgeBaseByUserResponse> {
-        const response = await this.get<GetKnowledgeBaseByUserResponse>('/get', {}, { enabled: true, ttl: 60000 })
-        return this.handleResponse(response)
-    }
-
-    // 向知识库提问
-    async askKnowledgeBase(params: AskKnowledgeBaseRequest): Promise<AskKnowledgeBaseResponse> {
-        const response = await this.get<AskKnowledgeBaseResponse>('/getInfo', { params })
-        return this.handleResponse(response)
-    }
+    return post<KnowledgeBase>('/knowledge/create', formData)
 }
 
-// 导出单例
-export const knowledgeService = new KnowledgeService()
+// 上传文件到知识库
+// 在 knowledge.ts 中检查 uploadKnowledgeBase 函数
+export const uploadKnowledgeBase = async (
+    data: UploadKnowledgeBaseRequest
+): Promise<ApiResponse<null>> => {
+    const formData = new FormData()
+    formData.append('file', data.file)
+    formData.append('knowledgeKey', data.knowledgeKey) // 确保参数名匹配
+    return post<null>('/knowledge/upload', formData)
+}
 
-// 兼容性导出
-export const createKnowledgeBase = knowledgeService.createKnowledgeBase.bind(knowledgeService)
-export const uploadKnowledgeBase = knowledgeService.uploadKnowledgeBase.bind(knowledgeService)
-export const deleteKnowledgeBase = knowledgeService.deleteKnowledgeBase.bind(knowledgeService)
-export const getKnowledgeBaseByUser = knowledgeService.getKnowledgeBaseByUser.bind(knowledgeService)
-export const askKnowledgeBase = knowledgeService.askKnowledgeBase.bind(knowledgeService)
+
+// 删除知识库
+export const deleteKnowledgeBase = async (
+    knowledgeKey: string
+): Promise<ApiResponse<string>> => {
+    return del<string>('/knowledge/delete', {
+        params: { knowledgeKey }
+    })
+}
+
+// 根据用户ID获取知识库名称列表
+export const getKnowledgeBaseByUser = async (): Promise<ApiResponse<GetKnowledgeBaseByUserResponse>> => {
+    return get<GetKnowledgeBaseByUserResponse>(
+        '/knowledge/get',
+    )
+}
+// 向知识库提问
+export const askKnowledgeBase = async (
+    params: AskKnowledgeBaseRequest
+): Promise<ApiResponse<AskKnowledgeBaseResponse>> => {
+    return get<AskKnowledgeBaseResponse>(
+        '/knowledge/getInfo',
+        { params }
+    )
+}
 

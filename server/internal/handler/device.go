@@ -3,7 +3,6 @@ package handlers
 import (
 	"context"
 	"fmt"
-	apperrors "github.com/code-100-precent/LingEcho/pkg/errors"
 	"strconv"
 	"strings"
 	"time"
@@ -11,6 +10,7 @@ import (
 	"github.com/code-100-precent/LingEcho/internal/models"
 	"github.com/code-100-precent/LingEcho/pkg/cache"
 	"github.com/code-100-precent/LingEcho/pkg/logger"
+	"github.com/code-100-precent/LingEcho/pkg/response"
 	"github.com/gin-gonic/gin"
 	"go.uber.org/zap"
 )
@@ -22,7 +22,7 @@ func (h *Handlers) BindDevice(c *gin.Context) {
 	deviceCode := c.Param("deviceCode")
 
 	if deviceCode == "" {
-		apperrors.HandleError(c, apperrors.New(apperrors.ErrInternalServer, "Activation code cannot be empty"))
+		response.Fail(c, "Activation code cannot be empty", nil)
 		return
 	}
 
@@ -35,13 +35,13 @@ func (h *Handlers) BindDevice(c *gin.Context) {
 	deviceKey := fmt.Sprintf("ota:activation:code:%s", deviceCode)
 	deviceIdObj, ok := cacheClient.Get(ctx, deviceKey)
 	if !ok {
-		apperrors.HandleError(c, apperrors.New(apperrors.ErrInternalServer, "激活码错误"))
+		response.Fail(c, "激活码错误", nil)
 		return
 	}
 
 	deviceId, ok := deviceIdObj.(string)
 	if !ok {
-		apperrors.HandleError(c, apperrors.New(apperrors.ErrInternalServer, "激活码错误"))
+		response.Fail(c, "激活码错误", nil)
 		return
 	}
 
@@ -50,40 +50,40 @@ func (h *Handlers) BindDevice(c *gin.Context) {
 	dataKey := fmt.Sprintf("ota:activation:data:%s", safeDeviceId)
 	dataObj, ok := cacheClient.Get(ctx, dataKey)
 	if !ok {
-		apperrors.HandleError(c, apperrors.New(apperrors.ErrInternalServer, "激活码错误"))
+		response.Fail(c, "激活码错误", nil)
 		return
 	}
 
 	dataMap, ok := dataObj.(map[string]interface{})
 	if !ok {
-		apperrors.HandleError(c, apperrors.New(apperrors.ErrInternalServer, "激活码错误"))
+		response.Fail(c, "激活码错误", nil)
 		return
 	}
 
 	cachedCode, ok := dataMap["activation_code"].(string)
 	if !ok || cachedCode != deviceCode {
-		apperrors.HandleError(c, apperrors.New(apperrors.ErrInternalServer, "激活码错误"))
+		response.Fail(c, "激活码错误", nil)
 		return
 	}
 
 	// Check if device has already been activated
 	existingDevice, err := models.GetDeviceByMacAddress(h.db, deviceId)
 	if err == nil && existingDevice != nil {
-		apperrors.HandleError(c, apperrors.New(apperrors.ErrInternalServer, "Device has already been activated"))
+		response.Fail(c, "Device has already been activated", nil)
 		return
 	}
 
 	// Get current user
 	user := models.CurrentUser(c)
 	if user == nil {
-		apperrors.HandleError(c, apperrors.New(apperrors.ErrInternalServer, "User not logged in"))
+		response.Fail(c, "User not logged in", nil)
 		return
 	}
 
 	// Parse agentId (assistant ID)
 	agentId, err := strconv.ParseUint(agentIdStr, 10, 32)
 	if err != nil {
-		apperrors.HandleError(c, apperrors.New(apperrors.ErrInternalServer, "Invalid assistant ID"))
+		response.Fail(c, "Invalid assistant ID", nil)
 		return
 	}
 	assistantID := uint(agentId)
@@ -91,14 +91,14 @@ func (h *Handlers) BindDevice(c *gin.Context) {
 	// Verify that assistant exists and belongs to current user
 	var assistant models.Assistant
 	if err := h.db.Where("id = ?", assistantID).First(&assistant).Error; err != nil {
-		apperrors.HandleError(c, apperrors.New(apperrors.ErrInternalServer, "Assistant does not exist"))
+		response.Fail(c, "Assistant does not exist", nil)
 		return
 	}
 
 	if assistant.UserID != user.ID {
 		// Check if it's an organization-shared assistant
 		if assistant.GroupID == nil {
-			apperrors.HandleError(c, apperrors.New(apperrors.ErrInternalServer, "Insufficient permissions: Assistant does not belong to you"))
+			response.Fail(c, "Insufficient permissions: Assistant does not belong to you", nil)
 			return
 		}
 		// TODO: Organization member permission check can be added here
@@ -135,7 +135,7 @@ func (h *Handlers) BindDevice(c *gin.Context) {
 
 	if err := models.CreateDevice(h.db, newDevice); err != nil {
 		logger.Error("Failed to create device", zap.Error(err), zap.String("deviceId", deviceId))
-		apperrors.HandleError(c, apperrors.New(apperrors.ErrInternalServer, "Failed to create device"))
+		response.Fail(c, "Failed to create device", nil)
 		return
 	}
 
@@ -149,7 +149,7 @@ func (h *Handlers) BindDevice(c *gin.Context) {
 		zap.Uint("userId", user.ID),
 		zap.Uint("assistantID", assistantID))
 
-	apperrors.RespondSuccess(c, nil)
+	response.Success(c, "Device activated successfully", nil)
 }
 
 // GetUserDevices gets bound devices - completely consistent with xiaozhi-esp32
@@ -160,7 +160,7 @@ func (h *Handlers) GetUserDevices(c *gin.Context) {
 	// Parse agentId (assistant ID)
 	agentId, err := strconv.ParseUint(agentIdStr, 10, 32)
 	if err != nil {
-		apperrors.HandleError(c, apperrors.New(apperrors.ErrInternalServer, "Invalid assistant ID"))
+		response.Fail(c, "Invalid assistant ID", nil)
 		return
 	}
 	assistantID := uint(agentId)
@@ -168,7 +168,7 @@ func (h *Handlers) GetUserDevices(c *gin.Context) {
 	// Get current user
 	user := models.CurrentUser(c)
 	if user == nil {
-		apperrors.HandleError(c, apperrors.New(apperrors.ErrInternalServer, "User not logged in"))
+		response.Fail(c, "User not logged in", nil)
 		return
 	}
 
@@ -200,11 +200,11 @@ func (h *Handlers) GetUserDevices(c *gin.Context) {
 	err = query.Find(&devices).Error
 	if err != nil {
 		logger.Error("Failed to query devices", zap.Error(err))
-		apperrors.HandleError(c, apperrors.New(apperrors.ErrInternalServer, "Failed to query devices"))
+		response.Fail(c, "Failed to query devices", nil)
 		return
 	}
 
-	apperrors.RespondSuccess(c, devices)
+	response.Success(c, "Query successful", devices)
 }
 
 // UnbindDevice unbinds device
@@ -215,38 +215,38 @@ func (h *Handlers) UnbindDevice(c *gin.Context) {
 	}
 
 	if err := c.ShouldBindJSON(&req); err != nil {
-		apperrors.HandleError(c, apperrors.New(apperrors.ErrInternalServer, "Invalid parameters"))
+		response.Fail(c, "Invalid parameters", nil)
 		return
 	}
 
 	// Get current user
 	user := models.CurrentUser(c)
 	if user == nil {
-		apperrors.HandleError(c, apperrors.New(apperrors.ErrInternalServer, "User not logged in"))
+		response.Fail(c, "User not logged in", nil)
 		return
 	}
 
 	// Query device
 	device, err := models.GetDeviceByID(h.db, req.DeviceID)
 	if err != nil || device == nil {
-		apperrors.HandleError(c, apperrors.New(apperrors.ErrInternalServer, "Device does not exist"))
+		response.Fail(c, "Device does not exist", nil)
 		return
 	}
 
 	// Verify permissions
 	if device.UserID != user.ID {
-		apperrors.HandleError(c, apperrors.New(apperrors.ErrInternalServer, "Insufficient permissions"))
+		response.Fail(c, "Insufficient permissions", nil)
 		return
 	}
 
 	// Delete device
 	if err := models.DeleteDevice(h.db, req.DeviceID); err != nil {
 		logger.Error("Failed to delete device", zap.Error(err))
-		apperrors.HandleError(c, apperrors.New(apperrors.ErrInternalServer, "Failed to delete device"))
+		response.Fail(c, "Failed to delete device", nil)
 		return
 	}
 
-	apperrors.RespondSuccess(c, nil)
+	response.Success(c, "Device unbound successfully", nil)
 }
 
 // UpdateDeviceInfo updates device information
@@ -261,40 +261,40 @@ func (h *Handlers) UpdateDeviceInfo(c *gin.Context) {
 	}
 
 	if err := c.ShouldBindJSON(&req); err != nil {
-		apperrors.HandleError(c, apperrors.New(apperrors.ErrInternalServer, "Invalid parameters"))
+		response.Fail(c, "Invalid parameters", nil)
 		return
 	}
 
 	// Get current user
 	user := models.CurrentUser(c)
 	if user == nil {
-		apperrors.HandleError(c, apperrors.New(apperrors.ErrInternalServer, "User not logged in"))
+		response.Fail(c, "User not logged in", nil)
 		return
 	}
 
 	// Query device
 	device, err := models.GetDeviceByID(h.db, deviceID)
 	if err != nil || device == nil {
-		apperrors.HandleError(c, apperrors.New(apperrors.ErrInternalServer, "Device does not exist"))
+		response.Fail(c, "Device does not exist", nil)
 		return
 	}
 
 	// Verify permissions: 只有创建者或组织管理员可以更新
 	if device.UserID != user.ID {
 		if device.GroupID == nil {
-			apperrors.HandleError(c, apperrors.New(apperrors.ErrInternalServer, "Insufficient permissions"))
+			response.Fail(c, "Insufficient permissions", nil)
 			return
 		}
 		// 检查用户是否是组织创建者或管理员
 		var group models.Group
 		if err := h.db.Where("id = ?", *device.GroupID).First(&group).Error; err != nil {
-			apperrors.HandleError(c, apperrors.New(apperrors.ErrInternalServer, "Organization not found"))
+			response.Fail(c, "Organization not found", nil)
 			return
 		}
 		if group.CreatorID != user.ID {
 			var member models.GroupMember
 			if err := h.db.Where("group_id = ? AND user_id = ? AND role = ?", *device.GroupID, user.ID, models.GroupRoleAdmin).First(&member).Error; err != nil {
-				apperrors.HandleError(c, apperrors.New(apperrors.ErrInternalServer, "Insufficient permissions"))
+				response.Fail(c, "Insufficient permissions", "Only creator or admin can update organization-shared devices")
 				return
 			}
 		}
@@ -304,13 +304,13 @@ func (h *Handlers) UpdateDeviceInfo(c *gin.Context) {
 	if req.GroupID != nil {
 		var group models.Group
 		if err := h.db.Where("id = ?", *req.GroupID).First(&group).Error; err != nil {
-			apperrors.HandleError(c, apperrors.New(apperrors.ErrInternalServer, "组织不存在"))
+			response.Fail(c, "组织不存在", nil)
 			return
 		}
 		if group.CreatorID != user.ID {
 			var member models.GroupMember
 			if err := h.db.Where("group_id = ? AND user_id = ?", *req.GroupID, user.ID).First(&member).Error; err != nil {
-				apperrors.HandleError(c, apperrors.New(apperrors.ErrInternalServer, "权限不足"))
+				response.Fail(c, "权限不足", "您不是该组织的成员")
 				return
 			}
 		}
@@ -327,11 +327,11 @@ func (h *Handlers) UpdateDeviceInfo(c *gin.Context) {
 
 	if err := models.UpdateDevice(h.db, device); err != nil {
 		logger.Error("Failed to update device", zap.Error(err))
-		apperrors.HandleError(c, apperrors.New(apperrors.ErrInternalServer, "Failed to update device"))
+		response.Fail(c, "Failed to update device", nil)
 		return
 	}
 
-	apperrors.RespondSuccess(c, device)
+	response.Success(c, "Update successful", device)
 }
 
 // ManualAddDevice manually adds device
@@ -346,34 +346,34 @@ func (h *Handlers) ManualAddDevice(c *gin.Context) {
 	}
 
 	if err := c.ShouldBindJSON(&req); err != nil {
-		apperrors.HandleError(c, apperrors.New(apperrors.ErrInternalServer, "参数错误"))
+		response.Fail(c, "参数错误", nil)
 		return
 	}
 
 	// Validate MAC address format
 	if !isMacAddressValid(req.MacAddress) {
-		apperrors.HandleError(c, apperrors.New(apperrors.ErrInternalServer, "Invalid MAC address"))
+		response.Fail(c, "Invalid MAC address", nil)
 		return
 	}
 
 	// Check if MAC address already exists
 	existingDevice, err := models.GetDeviceByMacAddress(h.db, req.MacAddress)
 	if err == nil && existingDevice != nil {
-		apperrors.HandleError(c, apperrors.New(apperrors.ErrInternalServer, "MAC address already exists"))
+		response.Fail(c, "MAC address already exists", nil)
 		return
 	}
 
 	// 获取当前用户
 	user := models.CurrentUser(c)
 	if user == nil {
-		apperrors.HandleError(c, apperrors.New(apperrors.ErrInternalServer, "用户未登录"))
+		response.Fail(c, "用户未登录", nil)
 		return
 	}
 
 	// 解析 agentId (assistant ID)
 	agentId, err := strconv.ParseUint(req.AgentID, 10, 32)
 	if err != nil {
-		apperrors.HandleError(c, apperrors.New(apperrors.ErrInternalServer, "无效的助手ID"))
+		response.Fail(c, "无效的助手ID", nil)
 		return
 	}
 	assistantID := uint(agentId)
@@ -381,14 +381,14 @@ func (h *Handlers) ManualAddDevice(c *gin.Context) {
 	// 验证 assistant 是否存在且属于当前用户
 	var assistant models.Assistant
 	if err := h.db.Where("id = ?", assistantID).First(&assistant).Error; err != nil {
-		apperrors.HandleError(c, apperrors.New(apperrors.ErrInternalServer, "助手不存在"))
+		response.Fail(c, "助手不存在", nil)
 		return
 	}
 
 	if assistant.UserID != user.ID {
 		// 检查是否是组织共享的助手
 		if assistant.GroupID == nil {
-			apperrors.HandleError(c, apperrors.New(apperrors.ErrInternalServer, "权限不足：助手不属于您"))
+			response.Fail(c, "权限不足：助手不属于您", nil)
 			return
 		}
 		// TODO: 可以在这里添加组织成员权限检查
@@ -403,14 +403,14 @@ func (h *Handlers) ManualAddDevice(c *gin.Context) {
 	if req.GroupID != nil {
 		var group models.Group
 		if err := h.db.Where("id = ?", *req.GroupID).First(&group).Error; err != nil {
-			apperrors.HandleError(c, apperrors.New(apperrors.ErrInternalServer, "组织不存在"))
+			response.Fail(c, "组织不存在", nil)
 			return
 		}
 		// 检查用户是否是组织成员或创建者
 		if group.CreatorID != user.ID {
 			var member models.GroupMember
 			if err := h.db.Where("group_id = ? AND user_id = ?", *req.GroupID, user.ID).First(&member).Error; err != nil {
-				apperrors.HandleError(c, apperrors.New(apperrors.ErrInternalServer, "权限不足"))
+				response.Fail(c, "权限不足", "您不是该组织的成员")
 				return
 			}
 		}
@@ -432,11 +432,11 @@ func (h *Handlers) ManualAddDevice(c *gin.Context) {
 
 	if err := models.CreateDevice(h.db, newDevice); err != nil {
 		logger.Error("Failed to create device", zap.Error(err))
-		apperrors.HandleError(c, apperrors.New(apperrors.ErrInternalServer, "创建设备失败"))
+		response.Fail(c, "创建设备失败", nil)
 		return
 	}
 
-	apperrors.RespondSuccess(c, newDevice)
+	response.Success(c, "Device added successfully", newDevice)
 }
 
 // GetDeviceConfig 通过Device-Id获取设备配置（供xiaozhi-server调用）
@@ -454,20 +454,20 @@ func (h *Handlers) GetDeviceConfig(c *gin.Context) {
 	}
 
 	if deviceID == "" {
-		apperrors.HandleError(c, apperrors.New(apperrors.ErrInternalServer, "Device ID is required"))
+		response.Fail(c, "Device ID is required", nil)
 		return
 	}
 
 	// 根据Device-Id查询设备
 	device, err := models.GetDeviceByMacAddress(h.db, deviceID)
 	if err != nil || device == nil {
-		apperrors.HandleError(c, apperrors.New(apperrors.ErrInternalServer, "Device not found or not activated"))
+		response.Fail(c, "Device not found or not activated", nil)
 		return
 	}
 
 	// 检查设备是否绑定了助手
 	if device.AssistantID == nil {
-		apperrors.HandleError(c, apperrors.New(apperrors.ErrInternalServer, "Device is not bound to an assistant"))
+		response.Fail(c, "Device is not bound to an assistant", nil)
 		return
 	}
 
@@ -477,17 +477,17 @@ func (h *Handlers) GetDeviceConfig(c *gin.Context) {
 	var assistant models.Assistant
 	if err := h.db.Where("id = ?", assistantID).First(&assistant).Error; err != nil {
 		logger.Error("Failed to get assistant", zap.Error(err), zap.Uint("assistantID", assistantID))
-		apperrors.HandleError(c, apperrors.New(apperrors.ErrInternalServer, "Failed to get assistant configuration"))
+		response.Fail(c, "Failed to get assistant configuration", nil)
 		return
 	}
 	if assistant.ID == 0 {
-		apperrors.HandleError(c, apperrors.New(apperrors.ErrInternalServer, "Assistant does not exist"))
+		response.Fail(c, "Assistant does not exist", nil)
 		return
 	}
 
 	// 检查助手是否配置了API凭证
 	if assistant.ApiKey == "" || assistant.ApiSecret == "" {
-		apperrors.HandleError(c, apperrors.New(apperrors.ErrInternalServer, "Assistant API credentials not configured"))
+		response.Fail(c, "Assistant API credentials not configured", nil)
 		return
 	}
 
@@ -517,5 +517,5 @@ func (h *Handlers) GetDeviceConfig(c *gin.Context) {
 		zap.String("deviceID", deviceID),
 		zap.Int64("assistantID", int64(assistantID)))
 
-	apperrors.RespondSuccess(c, config)
+	response.Success(c, "Success", config)
 }

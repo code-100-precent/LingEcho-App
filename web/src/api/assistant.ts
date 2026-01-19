@@ -1,5 +1,4 @@
-import { BaseApiService } from './base.service'
-import { ApiResponse } from '@/utils/http'
+import { get, post, put, del, ApiResponse } from '@/utils/request'
 import { getApiBaseURL } from '@/config/apiConfig'
 
 // 助手创建表单
@@ -78,6 +77,36 @@ export interface AssistantListItem {
   updatedAt?: string
 }
 
+// 创建助手
+export const createAssistant = async (data: CreateAssistantForm): Promise<ApiResponse<Assistant>> => {
+  return post('/assistant/add', data)
+}
+
+// 获取助手列表
+export const getAssistantList = async (): Promise<ApiResponse<AssistantListItem[]>> => {
+  return get('/assistant')
+}
+
+// 获取助手详情
+export const getAssistant = async (id: number): Promise<ApiResponse<Assistant>> => {
+  return get(`/assistant/${id}`)
+}
+
+// 更新助手
+export const updateAssistant = async (id: number, data: UpdateAssistantForm): Promise<ApiResponse<Assistant>> => {
+  return put(`/assistant/${id}`, data)
+}
+
+// 更新助手JS模板
+export const updateAssistantJS = async (id: number, jsSourceId: string): Promise<ApiResponse<any>> => {
+  return put(`/assistant/${id}/js`, { jsSourceId })
+}
+
+// 删除助手
+export const deleteAssistant = async (id: number): Promise<ApiResponse<null>> => {
+  return del(`/assistant/${id}`)
+}
+
 // 语音相关接口
 export interface VoiceClone {
   id: number
@@ -115,6 +144,103 @@ export interface OneShotResponse {
   requestId?: string
 }
 
+// 获取用户音色列表
+export const getVoiceClones = async (): Promise<ApiResponse<VoiceClone[]>> => {
+  return get('/voice/clones')
+}
+
+// 一句话模式 - 文本输入（带TTS合成）
+export const oneShotText = async (data: OneShotTextV2Request): Promise<ApiResponse<OneShotResponse>> => {
+  return post('/voice/oneshot_text', data)
+}
+
+// 纯文本对话 - 文本输入（不进行TTS合成，用于调试）
+export const plainText = async (data: OneShotTextV2Request): Promise<ApiResponse<{ text: string }>> => {
+  return post('/voice/plain_text', data)
+}
+
+// 纯文本对话 - 流式接收（SSE）
+export const plainTextStream = async (
+  data: OneShotTextV2Request,
+  onChunk: (text: string) => void,
+  onComplete?: () => void,
+  onError?: (error: string) => void
+): Promise<void> => {
+  try {
+    // 获取API基础URL
+    const baseURL = getApiBaseURL()
+    const token = localStorage.getItem('auth_token') || localStorage.getItem('token') || ''
+    
+    const response = await fetch(`${baseURL}/voice/plain_text`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${token}`,
+      },
+      body: JSON.stringify(data),
+    })
+
+    if (!response.ok) {
+      const errorData = await response.json().catch(() => ({ msg: '请求失败' }))
+      onError?.(errorData.msg || '请求失败')
+      return
+    }
+
+    const reader = response.body?.getReader()
+    if (!reader) {
+      onError?.('无法读取响应流')
+      return
+    }
+
+    const decoder = new TextDecoder()
+    let buffer = ''
+
+    while (true) {
+      const { done, value } = await reader.read()
+      
+      if (done) {
+        onComplete?.()
+        break
+      }
+
+      buffer += decoder.decode(value, { stream: true })
+      const lines = buffer.split('\n')
+      buffer = lines.pop() || ''
+
+      for (const line of lines) {
+        if (line.startsWith('data: ')) {
+          const dataStr = line.slice(6).trim()
+          if (dataStr === '[DONE]' || dataStr === '{"done": true}') {
+            onComplete?.()
+            return
+          }
+
+          try {
+            const jsonData = JSON.parse(dataStr)
+            if (jsonData.error) {
+              onError?.(jsonData.error)
+              return
+            }
+            if (jsonData.text) {
+              onChunk(jsonData.text)
+            }
+          } catch (e) {
+            // 忽略解析错误，继续处理下一行
+            console.warn('Failed to parse SSE data:', dataStr, e)
+          }
+        }
+      }
+    }
+  } catch (error: any) {
+    onError?.(error.message || '流式请求失败')
+  }
+}
+
+// 获取音频处理状态
+export const getAudioStatus = async (requestId: string): Promise<ApiResponse<{ status: string; audioUrl?: string; text?: string }>> => {
+  return get('/voice/audio_status', { params: { requestId } })
+}
+
 // 音色选项接口
 export interface VoiceOption {
   id: string          // 音色编码
@@ -132,6 +258,11 @@ export interface VoiceOptionsResponse {
   voices: VoiceOption[]
 }
 
+// 根据TTS Provider获取音色列表
+export const getVoiceOptions = async (provider: string): Promise<ApiResponse<VoiceOptionsResponse>> => {
+  return get('/voice/options', { params: { provider } })
+}
+
 // 语言选项接口
 export interface LanguageOption {
   code: string        // 语言代码，如 zh-CN, en-US
@@ -144,6 +275,11 @@ export interface LanguageOption {
 export interface LanguageOptionsResponse {
   provider: string
   languages: LanguageOption[]
+}
+
+// 根据TTS Provider获取支持的语言列表
+export const getLanguageOptions = async (provider: string): Promise<ApiResponse<LanguageOptionsResponse>> => {
+  return get('/voice/language-options', { params: { provider } })
 }
 
 // ========== Assistant Tools 相关接口 ==========
@@ -182,6 +318,26 @@ export interface UpdateToolForm {
   enabled?: boolean
 }
 
+// 获取助手的所有工具
+export const getAssistantTools = async (assistantId: number): Promise<ApiResponse<AssistantTool[]>> => {
+  return get(`/assistant/${assistantId}/tools`)
+}
+
+// 创建工具
+export const createAssistantTool = async (assistantId: number, data: CreateToolForm): Promise<ApiResponse<AssistantTool>> => {
+  return post(`/assistant/${assistantId}/tools`, data)
+}
+
+// 更新工具
+export const updateAssistantTool = async (assistantId: number, toolId: number, data: UpdateToolForm): Promise<ApiResponse<AssistantTool>> => {
+  return put(`/assistant/${assistantId}/tools/${toolId}`, data)
+}
+
+// 删除工具
+export const deleteAssistantTool = async (assistantId: number, toolId: number): Promise<ApiResponse<null>> => {
+  return del(`/assistant/${assistantId}/tools/${toolId}`)
+}
+
 // 测试工具
 export interface TestToolRequest {
   args: Record<string, any>
@@ -190,6 +346,10 @@ export interface TestToolRequest {
 export interface TestToolResponse {
   result: string
   tool: AssistantTool
+}
+
+export const testAssistantTool = async (assistantId: number, toolId: number, args: Record<string, any>): Promise<ApiResponse<TestToolResponse>> => {
+  return post(`/assistant/${assistantId}/tools/${toolId}/test`, { args })
 }
 
 // ========== Assistant Graph Data 相关接口 ==========
@@ -230,231 +390,7 @@ export interface AssistantGraphData {
   stats: GraphStats
 }
 
-// Assistant Service 类
-export class AssistantService extends BaseApiService {
-  constructor() {
-    super('/assistant')
-  }
-
-  // 创建助手
-  async createAssistant(data: CreateAssistantForm): Promise<Assistant> {
-    const response = await this.post<Assistant>('/add', data)
-    return this.handleResponse(response)
-  }
-
-  // 获取助手列表
-  async getAssistantList(): Promise<AssistantListItem[]> {
-    const response = await this.get<AssistantListItem[]>('')
-    return this.handleResponse(response)
-  }
-
-  // 获取助手详情
-  async getAssistant(id: number): Promise<Assistant> {
-    const response = await this.get<Assistant>(`/${id}`)
-    return this.handleResponse(response)
-  }
-
-  // 更新助手
-  async updateAssistant(id: number, data: UpdateAssistantForm): Promise<Assistant> {
-    const response = await this.put<Assistant>(`/${id}`, data)
-    return this.handleResponse(response)
-  }
-
-  // 更新助手JS模板
-  async updateAssistantJS(id: number, jsSourceId: string): Promise<any> {
-    const response = await this.put<any>(`/${id}/js`, { jsSourceId })
-    return this.handleResponse(response)
-  }
-
-  // 删除助手
-  async deleteAssistant(id: number): Promise<null> {
-    const response = await this.delete<null>(`/${id}`)
-    return this.handleResponse(response)
-  }
-
-  // 获取助手的所有工具
-  async getAssistantTools(assistantId: number): Promise<AssistantTool[]> {
-    const response = await this.get<AssistantTool[]>(`/${assistantId}/tools`)
-    return this.handleResponse(response)
-  }
-
-  // 创建工具
-  async createAssistantTool(assistantId: number, data: CreateToolForm): Promise<AssistantTool> {
-    const response = await this.post<AssistantTool>(`/${assistantId}/tools`, data)
-    return this.handleResponse(response)
-  }
-
-  // 更新工具
-  async updateAssistantTool(assistantId: number, toolId: number, data: UpdateToolForm): Promise<AssistantTool> {
-    const response = await this.put<AssistantTool>(`/${assistantId}/tools/${toolId}`, data)
-    return this.handleResponse(response)
-  }
-
-  // 删除工具
-  async deleteAssistantTool(assistantId: number, toolId: number): Promise<null> {
-    const response = await this.delete<null>(`/${assistantId}/tools/${toolId}`)
-    return this.handleResponse(response)
-  }
-
-  // 测试工具
-  async testAssistantTool(assistantId: number, toolId: number, args: Record<string, any>): Promise<TestToolResponse> {
-    const response = await this.post<TestToolResponse>(`/${assistantId}/tools/${toolId}/test`, { args })
-    return this.handleResponse(response)
-  }
-
-  // 获取助手图数据
-  async getAssistantGraphData(assistantId: number): Promise<AssistantGraphData> {
-    const response = await this.get<AssistantGraphData>(`/${assistantId}/graph`)
-    return this.handleResponse(response)
-  }
+// 获取助手图数据
+export const getAssistantGraphData = async (assistantId: number): Promise<ApiResponse<AssistantGraphData>> => {
+  return get(`/assistant/${assistantId}/graph`)
 }
-
-// Voice Service 类
-export class VoiceService extends BaseApiService {
-  constructor() {
-    super('/voice')
-  }
-
-  // 获取用户音色列表
-  async getVoiceClones(): Promise<VoiceClone[]> {
-    const response = await this.get<VoiceClone[]>('/clones')
-    return this.handleResponse(response)
-  }
-
-  // 一句话模式 - 文本输入（带TTS合成）
-  async oneShotText(data: OneShotTextV2Request): Promise<OneShotResponse> {
-    const response = await this.post<OneShotResponse>('/oneshot_text', data)
-    return this.handleResponse(response)
-  }
-
-  // 纯文本对话 - 文本输入（不进行TTS合成，用于调试）
-  async plainText(data: OneShotTextV2Request): Promise<{ text: string }> {
-    const response = await this.post<{ text: string }>('/plain_text', data)
-    return this.handleResponse(response)
-  }
-
-  // 纯文本对话 - 流式接收（SSE）
-  async plainTextStream(
-    data: OneShotTextV2Request,
-    onChunk: (text: string) => void,
-    onComplete?: () => void,
-    onError?: (error: string) => void
-  ): Promise<void> {
-    try {
-      // 获取API基础URL
-      const baseURL = getApiBaseURL()
-      const token = localStorage.getItem('auth_token') || localStorage.getItem('token') || ''
-      
-      const response = await fetch(`${baseURL}/voice/plain_text`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`,
-        },
-        body: JSON.stringify(data),
-      })
-
-      if (!response.ok) {
-        const errorData = await response.json().catch(() => ({ msg: '请求失败' }))
-        onError?.(errorData.msg || '请求失败')
-        return
-      }
-
-      const reader = response.body?.getReader()
-      if (!reader) {
-        onError?.('无法读取响应流')
-        return
-      }
-
-      const decoder = new TextDecoder()
-      let buffer = ''
-
-      while (true) {
-        const { done, value } = await reader.read()
-        
-        if (done) {
-          onComplete?.()
-          break
-        }
-
-        buffer += decoder.decode(value, { stream: true })
-        const lines = buffer.split('\n')
-        buffer = lines.pop() || ''
-
-        for (const line of lines) {
-          if (line.startsWith('data: ')) {
-            const dataStr = line.slice(6).trim()
-            if (dataStr === '[DONE]' || dataStr === '{"done": true}') {
-              onComplete?.()
-              return
-            }
-
-            try {
-              const jsonData = JSON.parse(dataStr)
-              if (jsonData.error) {
-                onError?.(jsonData.error)
-                return
-              }
-              if (jsonData.text) {
-                onChunk(jsonData.text)
-              }
-            } catch (e) {
-              // 忽略解析错误，继续处理下一行
-              console.warn('Failed to parse SSE data:', dataStr, e)
-            }
-          }
-        }
-      }
-    } catch (error: any) {
-      onError?.(error.message || '流式请求失败')
-    }
-  }
-
-  // 获取音频处理状态
-  async getAudioStatus(requestId: string): Promise<{ status: string; audioUrl?: string; text?: string }> {
-    const response = await this.get<{ status: string; audioUrl?: string; text?: string }>('/audio_status', { params: { requestId } })
-    return this.handleResponse(response)
-  }
-
-  // 根据TTS Provider获取音色列表
-  async getVoiceOptions(provider: string): Promise<VoiceOptionsResponse> {
-    const response = await this.get<VoiceOptionsResponse>('/options', { params: { provider } })
-    return this.handleResponse(response)
-  }
-
-  // 根据TTS Provider获取支持的语言列表
-  async getLanguageOptions(provider: string): Promise<LanguageOptionsResponse> {
-    const response = await this.get<LanguageOptionsResponse>('/language-options', { params: { provider } })
-    return this.handleResponse(response)
-  }
-}
-
-// 导出服务实例
-export const assistantService = new AssistantService()
-export const voiceService = new VoiceService()
-
-// 兼容性导出（保持向后兼容）
-export const createAssistant = (data: CreateAssistantForm) => assistantService.createAssistant(data)
-export const getAssistantList = () => assistantService.getAssistantList()
-export const getAssistant = (id: number) => assistantService.getAssistant(id)
-export const updateAssistant = (id: number, data: UpdateAssistantForm) => assistantService.updateAssistant(id, data)
-export const updateAssistantJS = (id: number, jsSourceId: string) => assistantService.updateAssistantJS(id, jsSourceId)
-export const deleteAssistant = (id: number) => assistantService.deleteAssistant(id)
-export const getVoiceClones = () => voiceService.getVoiceClones()
-export const oneShotText = (data: OneShotTextV2Request) => voiceService.oneShotText(data)
-export const plainText = (data: OneShotTextV2Request) => voiceService.plainText(data)
-export const plainTextStream = (
-  data: OneShotTextV2Request,
-  onChunk: (text: string) => void,
-  onComplete?: () => void,
-  onError?: (error: string) => void
-) => voiceService.plainTextStream(data, onChunk, onComplete, onError)
-export const getAudioStatus = (requestId: string) => voiceService.getAudioStatus(requestId)
-export const getVoiceOptions = (provider: string) => voiceService.getVoiceOptions(provider)
-export const getLanguageOptions = (provider: string) => voiceService.getLanguageOptions(provider)
-export const getAssistantTools = (assistantId: number) => assistantService.getAssistantTools(assistantId)
-export const createAssistantTool = (assistantId: number, data: CreateToolForm) => assistantService.createAssistantTool(assistantId, data)
-export const updateAssistantTool = (assistantId: number, toolId: number, data: UpdateToolForm) => assistantService.updateAssistantTool(assistantId, toolId, data)
-export const deleteAssistantTool = (assistantId: number, toolId: number) => assistantService.deleteAssistantTool(assistantId, toolId)
-export const testAssistantTool = (assistantId: number, toolId: number, args: Record<string, any>) => assistantService.testAssistantTool(assistantId, toolId, args)
-export const getAssistantGraphData = (assistantId: number) => assistantService.getAssistantGraphData(assistantId)

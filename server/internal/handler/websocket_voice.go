@@ -2,7 +2,6 @@ package handlers
 
 import (
 	"fmt"
-	apperrors "github.com/code-100-precent/LingEcho/pkg/errors"
 	"log"
 	"net/http"
 	"strconv"
@@ -13,6 +12,7 @@ import (
 	"github.com/code-100-precent/LingEcho/pkg/graph"
 	"github.com/code-100-precent/LingEcho/pkg/hardware"
 	"github.com/code-100-precent/LingEcho/pkg/logger"
+	"github.com/code-100-precent/LingEcho/pkg/response"
 	"github.com/code-100-precent/LingEcho/pkg/voice"
 	"github.com/gin-gonic/gin"
 	"github.com/gorilla/websocket"
@@ -44,35 +44,35 @@ func (h *Handlers) HandleWebSocketVoice(c *gin.Context) {
 
 	// 验证参数
 	if apiKey == "" || apiSecret == "" {
-		apperrors.HandleError(c, apperrors.New(apperrors.ErrInternalServer, "缺少apiKey或apiSecret参数"))
+		response.Fail(c, "缺少apiKey或apiSecret参数", nil)
 		return
 	}
 
 	assistantID, err := strconv.Atoi(assistantIDStr)
 	if err != nil || assistantID <= 0 {
-		apperrors.HandleError(c, apperrors.New(apperrors.ErrInternalServer, "无效的助手ID"))
+		response.Fail(c, "无效的助手ID", nil)
 		return
 	}
 
 	// 验证凭证
 	cred, err := models.GetUserCredentialByApiSecretAndApiKey(h.db, apiKey, apiSecret)
 	if err != nil {
-		apperrors.HandleError(c, apperrors.Wrap(err, apperrors.ErrInternalServer, "Database error"))
+		response.Fail(c, "Database error: "+err.Error(), nil)
 		return
 	}
 	if cred == nil {
-		apperrors.HandleError(c, apperrors.New(apperrors.ErrInternalServer, "Invalid credentials"))
+		response.Fail(c, "Invalid credentials", nil)
 		return
 	}
 
 	// 获取助手配置
 	var assistant models.Assistant
 	if err := h.db.Where("id = ?", assistantID).First(&assistant).Error; err != nil {
-		apperrors.HandleError(c, apperrors.Wrap(err, apperrors.ErrInternalServer, "获取助手配置失败"))
+		response.Fail(c, "获取助手配置失败: "+err.Error(), nil)
 		return
 	}
 	if assistant.ID == 0 {
-		apperrors.HandleError(c, apperrors.New(apperrors.ErrInternalServer, "助手不存在"))
+		response.Fail(c, "助手不存在", nil)
 		return
 	}
 
@@ -80,7 +80,7 @@ func (h *Handlers) HandleWebSocketVoice(c *gin.Context) {
 	conn, err := voiceUpgrader.Upgrade(c.Writer, c.Request, nil)
 	if err != nil {
 		log.Println("Error upgrading connection:", err)
-		apperrors.HandleError(c, apperrors.New(apperrors.ErrInternalServer, "Failed to upgrade connection"))
+		response.Fail(c, "Failed to upgrade connection", nil)
 		return
 	}
 

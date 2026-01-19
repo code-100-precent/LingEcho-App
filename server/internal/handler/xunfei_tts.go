@@ -1,12 +1,10 @@
 package handlers
 
 import (
-	apperrors "github.com/code-100-precent/LingEcho/pkg/errors"
-	"github.com/code-100-precent/LingEcho/pkg/response"
-
 	"strconv"
 	"time"
 
+	"github.com/code-100-precent/LingEcho/pkg/response"
 	"github.com/code-100-precent/LingEcho/pkg/voiceclone"
 	"github.com/gin-gonic/gin"
 )
@@ -68,7 +66,7 @@ type XunfeiQueryTaskResponse struct {
 func (h *Handlers) XunfeiSynthesize(c *gin.Context) {
 	var req XunfeiTTSRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		apperrors.HandleError(c, apperrors.New(apperrors.ErrInternalServer, "参数错误"))
+		response.Fail(c, "参数错误", err.Error())
 		return
 	}
 
@@ -85,7 +83,7 @@ func (h *Handlers) XunfeiSynthesize(c *gin.Context) {
 	factory := voiceclone.NewFactory()
 	service, err := factory.CreateServiceFromEnv(voiceclone.ProviderXunfei)
 	if err != nil {
-		apperrors.HandleError(c, apperrors.New(apperrors.ErrInternalServer, "初始化讯飞服务失败"))
+		response.Fail(c, "初始化讯飞服务失败", err.Error())
 		return
 	}
 
@@ -96,18 +94,18 @@ func (h *Handlers) XunfeiSynthesize(c *gin.Context) {
 	}
 	url, err := service.SynthesizeToStorage(c.Request.Context(), synthesizeReq, key)
 	if err != nil {
-		apperrors.HandleError(c, apperrors.New(apperrors.ErrInternalServer, "语音合成失败"))
+		response.Fail(c, "语音合成失败", err.Error())
 		return
 	}
 
-	apperrors.RespondSuccess(c, XunfeiTTSResponse{URL: url})
+	response.Success(c, "语音合成成功", XunfeiTTSResponse{URL: url})
 }
 
 // XunfeiCreateTask 创建训练任务
 func (h *Handlers) XunfeiCreateTask(c *gin.Context) {
 	var req XunfeiCreateTaskRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		apperrors.HandleError(c, apperrors.New(apperrors.ErrInternalServer, "参数错误"))
+		response.Fail(c, "参数错误", err.Error())
 		return
 	}
 
@@ -126,7 +124,7 @@ func (h *Handlers) XunfeiCreateTask(c *gin.Context) {
 	factory := voiceclone.NewFactory()
 	service, err := factory.CreateServiceFromEnv(voiceclone.ProviderXunfei)
 	if err != nil {
-		apperrors.HandleError(c, apperrors.New(apperrors.ErrInternalServer, "初始化讯飞服务失败"))
+		response.Fail(c, "初始化讯飞服务失败", err.Error())
 		return
 	}
 
@@ -138,34 +136,34 @@ func (h *Handlers) XunfeiCreateTask(c *gin.Context) {
 	}
 	createResp, err := service.CreateTask(c.Request.Context(), createReq)
 	if err != nil {
-		apperrors.HandleError(c, apperrors.New(apperrors.ErrInternalServer, "创建训练任务失败"))
+		response.Fail(c, "创建训练任务失败", err.Error())
 		return
 	}
 
 	taskID := createResp.TaskID
 
-	apperrors.RespondSuccess(c, XunfeiCreateTaskResponse{TaskID: taskID})
+	response.Success(c, "创建训练任务成功", XunfeiCreateTaskResponse{TaskID: taskID})
 }
 
 // XunfeiSubmitAudio 提交音频文件
 func (h *Handlers) XunfeiSubmitAudio(c *gin.Context) {
 	var req XunfeiSubmitAudioRequest
 	if err := c.ShouldBind(&req); err != nil {
-		apperrors.HandleError(c, apperrors.New(apperrors.ErrInternalServer, "参数错误"))
+		response.Fail(c, "参数错误", err.Error())
 		return
 	}
 
 	// 获取上传的文件
 	file, err := c.FormFile("audio")
 	if err != nil {
-		apperrors.HandleError(c, apperrors.New(apperrors.ErrInternalServer, "获取音频文件失败"))
+		response.Fail(c, "获取音频文件失败", err.Error())
 		return
 	}
 
 	// 打开文件
 	src, err := file.Open()
 	if err != nil {
-		apperrors.HandleError(c, apperrors.New(apperrors.ErrInternalServer, "打开音频文件失败"))
+		response.Fail(c, "打开音频文件失败", err.Error())
 		return
 	}
 	defer src.Close()
@@ -174,7 +172,7 @@ func (h *Handlers) XunfeiSubmitAudio(c *gin.Context) {
 	factory := voiceclone.NewFactory()
 	service, err := factory.CreateServiceFromEnv(voiceclone.ProviderXunfei)
 	if err != nil {
-		apperrors.HandleError(c, apperrors.New(apperrors.ErrInternalServer, "初始化讯飞服务失败"))
+		response.Fail(c, "初始化讯飞服务失败", err.Error())
 		return
 	}
 
@@ -187,18 +185,18 @@ func (h *Handlers) XunfeiSubmitAudio(c *gin.Context) {
 	}
 	err = service.SubmitAudio(c.Request.Context(), submitReq)
 	if err != nil {
-		apperrors.HandleError(c, apperrors.New(apperrors.ErrInternalServer, "提交音频失败"))
+		response.Fail(c, "提交音频失败", err.Error())
 		return
 	}
 
-	apperrors.RespondSuccess(c, nil)
+	response.Success(c, "提交音频成功", nil)
 }
 
 // XunfeiQueryTask 查询任务状态
 func (h *Handlers) XunfeiQueryTask(c *gin.Context) {
 	var req XunfeiQueryTaskRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		apperrors.HandleError(c, apperrors.New(apperrors.ErrInternalServer, "参数错误"))
+		response.Fail(c, "参数错误", err.Error())
 		return
 	}
 
@@ -206,13 +204,13 @@ func (h *Handlers) XunfeiQueryTask(c *gin.Context) {
 	factory := voiceclone.NewFactory()
 	service, err := factory.CreateServiceFromEnv(voiceclone.ProviderXunfei)
 	if err != nil {
-		apperrors.HandleError(c, apperrors.New(apperrors.ErrInternalServer, "初始化讯飞服务失败"))
+		response.Fail(c, "初始化讯飞服务失败", err.Error())
 		return
 	}
 
 	status, err := service.QueryTaskStatus(c.Request.Context(), req.TaskID)
 	if err != nil {
-		apperrors.HandleError(c, apperrors.New(apperrors.ErrInternalServer, "查询任务状态失败"))
+		response.Fail(c, "查询任务状态失败", err.Error())
 		return
 	}
 
@@ -254,7 +252,7 @@ func (h *Handlers) XunfeiGetTrainingTexts(c *gin.Context) {
 
 	textID, err := strconv.ParseInt(textIDStr, 10, 64)
 	if err != nil {
-		apperrors.HandleError(c, apperrors.New(apperrors.ErrInternalServer, "文本ID格式错误"))
+		response.Fail(c, "文本ID格式错误", err.Error())
 		return
 	}
 
@@ -262,13 +260,13 @@ func (h *Handlers) XunfeiGetTrainingTexts(c *gin.Context) {
 	factory := voiceclone.NewFactory()
 	service, err := factory.CreateServiceFromEnv(voiceclone.ProviderXunfei)
 	if err != nil {
-		apperrors.HandleError(c, apperrors.New(apperrors.ErrInternalServer, "初始化讯飞服务失败"))
+		response.Fail(c, "初始化讯飞服务失败", err.Error())
 		return
 	}
 
 	trainingText, err := service.GetTrainingTexts(c.Request.Context(), textID)
 	if err != nil {
-		apperrors.HandleError(c, apperrors.New(apperrors.ErrInternalServer, "获取训练文本失败"))
+		response.Fail(c, "获取训练文本失败", err.Error())
 		return
 	}
 
@@ -300,5 +298,5 @@ func (h *Handlers) XunfeiGetTrainingTexts(c *gin.Context) {
 		TextSegs: textSegs,
 	}
 
-	apperrors.RespondSuccess(c, responseTexts)
+	response.Success(c, "获取训练文本成功", responseTexts)
 }

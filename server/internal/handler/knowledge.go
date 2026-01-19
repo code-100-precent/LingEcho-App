@@ -4,7 +4,6 @@ import (
 	"context"
 	"crypto/md5"
 	"fmt"
-	apperrors "github.com/code-100-precent/LingEcho/pkg/errors"
 	"io"
 	"log"
 	"mime/multipart"
@@ -18,6 +17,7 @@ import (
 	"github.com/code-100-precent/LingEcho/pkg/config"
 	"github.com/code-100-precent/LingEcho/pkg/constants"
 	"github.com/code-100-precent/LingEcho/pkg/knowledge"
+	"github.com/code-100-precent/LingEcho/pkg/response"
 	"github.com/gin-gonic/gin"
 	"github.com/go-resty/resty/v2"
 )
@@ -138,11 +138,11 @@ func (h *Handlers) CreateKnowledgeBase(c *gin.Context) {
 	// 1. Receive file
 	file, header, err := c.Request.FormFile(constants.FormFieldFile)
 	if err != nil {
-		apperrors.HandleError(c, apperrors.New(apperrors.ErrInvalidInput, "Failed to receive file: "+err.Error()))
+		response.Fail(c, knowledge.ErrFileReceiveFailed, err)
 		return
 	}
 	if file == nil || header == nil {
-		apperrors.HandleError(c, apperrors.New(apperrors.ErrInvalidInput, "File is empty"))
+		response.Fail(c, knowledge.ErrFileEmpty, nil)
 		return
 	}
 	defer file.Close()
@@ -171,14 +171,14 @@ func (h *Handlers) CreateKnowledgeBase(c *gin.Context) {
 	if groupID != nil {
 		var group models.Group
 		if err := h.db.First(&group, *groupID).Error; err != nil {
-			apperrors.HandleError(c, apperrors.New(apperrors.ErrInternalServer, "组织不存在"))
+			response.Fail(c, "组织不存在", nil)
 			return
 		}
 		// 检查用户是否是组织的创建者或管理员
 		if group.CreatorID != user.ID {
 			var member models.GroupMember
 			if err := h.db.Where("group_id = ? AND user_id = ? AND role = ?", *groupID, user.ID, models.GroupRoleAdmin).First(&member).Error; err != nil {
-				apperrors.HandleError(c, apperrors.New(apperrors.ErrInternalServer, "权限不足"))
+				response.Fail(c, "权限不足", "只有创建者或管理员可以创建组织共享的知识库")
 				return
 			}
 		}
@@ -190,7 +190,7 @@ func (h *Handlers) CreateKnowledgeBase(c *gin.Context) {
 	// 4. Get knowledge base instance
 	kb, err := getKnowledgeBase(provider)
 	if err != nil {
-		apperrors.HandleError(c, apperrors.Wrap(err, apperrors.ErrInternalServer, "Failed to initialize knowledge base"))
+		response.Fail(c, knowledge.ErrKnowledgeBaseInitFailed, err)
 		return
 	}
 
@@ -207,14 +207,14 @@ func (h *Handlers) CreateKnowledgeBase(c *gin.Context) {
 		aliyunConfig := getAliyunConfig()
 		client, err := createAliyunClient(aliyunConfig)
 		if err != nil {
-			apperrors.HandleError(c, apperrors.New(apperrors.ErrInternalServer, "failed to create Aliyun client"))
+			response.Fail(c, "failed to create Aliyun client", err)
 			return
 		}
 
 		// Upload file to get fileId
 		fileId, ok := uploadFileToAliyunWithClient(client, file, header, aliyunConfig)
 		if !ok {
-			apperrors.HandleError(c, apperrors.New(apperrors.ErrInternalServer, "Failed to upload file to Aliyun"))
+			response.Fail(c, knowledge.ErrFileUploadFailed, nil)
 			return
 		}
 
@@ -239,7 +239,7 @@ func (h *Handlers) CreateKnowledgeBase(c *gin.Context) {
 		}
 		indexId, err = kb.CreateIndex(context.Background(), knowledgeKey, createConfig)
 		if err != nil {
-			apperrors.HandleError(c, apperrors.Wrap(err, apperrors.ErrInternalServer, "Failed to create index"))
+			response.Fail(c, knowledge.ErrIndexCreateFailed, err)
 			return
 		}
 	} else {
@@ -251,7 +251,7 @@ func (h *Handlers) CreateKnowledgeBase(c *gin.Context) {
 		}
 		err = kb.UploadDocument(context.Background(), knowledgeKey, file, header, metadata)
 		if err != nil {
-			apperrors.HandleError(c, apperrors.Wrap(err, apperrors.ErrInternalServer, "Failed to upload document"))
+			response.Fail(c, knowledge.ErrFileUploadFailed, err)
 			return
 		}
 
@@ -276,7 +276,7 @@ func (h *Handlers) CreateKnowledgeBase(c *gin.Context) {
 
 		indexId, err = kb.CreateIndex(context.Background(), knowledgeKey, createConfig)
 		if err != nil {
-			apperrors.HandleError(c, apperrors.Wrap(err, apperrors.ErrInternalServer, "Failed to create index"))
+			response.Fail(c, knowledge.ErrIndexCreateFailed, err)
 			return
 		}
 	}
@@ -284,12 +284,12 @@ func (h *Handlers) CreateKnowledgeBase(c *gin.Context) {
 	// 8. Call models layer to create knowledge base record (use indexId as knowledgeKey)
 	knowledgeRecord, err := models.CreateKnowledge(h.db, int(userId), indexId, knowledgeName, provider, config, groupID)
 	if err != nil {
-		apperrors.HandleError(c, apperrors.Wrap(err, apperrors.ErrInternalServer, "Failed to create knowledge record"))
+		response.Fail(c, err.Error(), nil)
 		return
 	}
 
 	// 9. Return success response
-	apperrors.RespondSuccess(c, knowledgeRecord)
+	response.Success(c, "created successfully", knowledgeRecord)
 }
 
 // createAliyunClient creates Aliyun client from config
@@ -401,7 +401,7 @@ func (h *Handlers) UploadFileToKnowledgeBase(c *gin.Context) {
 	// 1. Receive file
 	file, header, err := c.Request.FormFile(constants.FormFieldFile)
 	if err != nil {
-		apperrors.HandleError(c, apperrors.New(apperrors.ErrInvalidInput, "Failed to receive file: "+err.Error()))
+		response.Fail(c, knowledge.ErrFileReceiveFailed, err)
 		return
 	}
 	defer file.Close()
@@ -409,28 +409,28 @@ func (h *Handlers) UploadFileToKnowledgeBase(c *gin.Context) {
 	// 2. Receive knowledge base key
 	knowledgeKey := c.PostForm(constants.FormFieldKnowledgeKey)
 	if knowledgeKey == "" {
-		apperrors.HandleError(c, apperrors.New(apperrors.ErrInvalidInput, "Knowledge key is required"))
+		response.Fail(c, knowledge.ErrKnowledgeKeyRequired, nil)
 		return
 	}
 
 	// 3. Get knowledge base info from database
 	k, err := models.GetKnowledge(h.db, knowledgeKey)
 	if err != nil {
-		apperrors.HandleError(c, apperrors.Wrap(err, apperrors.ErrNotFound, "Knowledge base not found"))
+		response.Fail(c, knowledge.ErrKnowledgeNotFound, err)
 		return
 	}
 
 	// 4. Parse config
 	config, err := models.GetKnowledgeConfigOrDefault(k.Provider, k.Config, getKnowledgeBaseConfig)
 	if err != nil {
-		apperrors.HandleError(c, apperrors.Wrap(err, apperrors.ErrInternalServer, "Failed to parse config"))
+		response.Fail(c, knowledge.ErrConfigParseFailed, err)
 		return
 	}
 
 	// 5. Get knowledge base instance
 	kb, err := knowledge.GetKnowledgeBaseByProvider(k.Provider, config)
 	if err != nil {
-		apperrors.HandleError(c, apperrors.Wrap(err, apperrors.ErrInternalServer, "Failed to initialize knowledge base"))
+		response.Fail(c, knowledge.ErrKnowledgeBaseInitFailed, err)
 		return
 	}
 
@@ -443,11 +443,11 @@ func (h *Handlers) UploadFileToKnowledgeBase(c *gin.Context) {
 
 	err = kb.UploadDocument(context.Background(), knowledgeKey, file, header, metadata)
 	if err != nil {
-		apperrors.HandleError(c, apperrors.Wrap(err, apperrors.ErrInternalServer, "Failed to upload document"))
+		response.Fail(c, knowledge.ErrFileUploadFailed, err)
 		return
 	}
 
-	apperrors.RespondSuccess(c, nil)
+	response.Success(c, "uploaded successfully", nil)
 }
 
 // GetKnowledgeBase gets knowledge base list for the current user
@@ -458,7 +458,7 @@ func (h *Handlers) GetKnowledgeBase(c *gin.Context) {
 	// Query knowledge base list by user ID
 	knowledgeList, err := models.GetKnowledgeByUserID(h.db, userID)
 	if err != nil {
-		apperrors.HandleError(c, apperrors.Wrap(err, apperrors.ErrInternalServer, "Failed to query knowledge list"))
+		response.Fail(c, knowledge.ErrQueryKnowledgeListFailed, err)
 		return
 	}
 
@@ -485,7 +485,7 @@ func (h *Handlers) GetKnowledgeBase(c *gin.Context) {
 		result = append(result, item)
 	}
 
-	apperrors.RespondSuccess(c, result)
+	response.Success(c, "retrieved successfully", result)
 }
 
 // DeleteKnowledgeBase deletes a knowledge base
@@ -493,45 +493,45 @@ func (h *Handlers) DeleteKnowledgeBase(c *gin.Context) {
 	// Receive knowledge base key
 	knowledgeKey := c.Query(constants.QueryParamKnowledgeKey)
 	if knowledgeKey == "" {
-		apperrors.HandleError(c, apperrors.New(apperrors.ErrInvalidInput, "Knowledge key is required"))
+		response.Fail(c, knowledge.ErrKnowledgeKeyRequired, nil)
 		return
 	}
 
 	// 1. Get knowledge base info
 	k, err := models.GetKnowledge(h.db, knowledgeKey)
 	if err != nil {
-		apperrors.HandleError(c, apperrors.Wrap(err, apperrors.ErrNotFound, "Knowledge base not found"))
+		response.Fail(c, knowledge.ErrKnowledgeNotFound, err)
 		return
 	}
 
 	// 2. Parse config
 	config, err := models.GetKnowledgeConfigOrDefault(k.Provider, k.Config, getKnowledgeBaseConfig)
 	if err != nil {
-		apperrors.HandleError(c, apperrors.Wrap(err, apperrors.ErrInternalServer, "Failed to parse config"))
+		response.Fail(c, knowledge.ErrConfigParseFailed, err)
 		return
 	}
 
 	// 3. Get knowledge base instance and delete
 	kb, err := knowledge.GetKnowledgeBaseByProvider(k.Provider, config)
 	if err != nil {
-		apperrors.HandleError(c, apperrors.Wrap(err, apperrors.ErrInternalServer, "Failed to initialize knowledge base"))
+		response.Fail(c, knowledge.ErrKnowledgeBaseInitFailed, err)
 		return
 	}
 
 	err = kb.DeleteIndex(context.Background(), knowledgeKey)
 	if err != nil {
-		apperrors.HandleError(c, apperrors.Wrap(err, apperrors.ErrInternalServer, "Failed to delete index"))
+		response.Fail(c, knowledge.ErrIndexDeleteFailed, err)
 		return
 	}
 
 	// 4. Delete database record
 	err = models.DeleteKnowledge(h.db, knowledgeKey)
 	if err != nil {
-		apperrors.HandleError(c, apperrors.Wrap(err, apperrors.ErrInternalServer, "Failed to delete knowledge record"))
+		response.Fail(c, knowledge.ErrDatabaseDeleteFailed, err)
 		return
 	}
 
-	apperrors.RespondSuccess(c, nil)
+	response.Success(c, "deleted successfully", nil)
 }
 
 // Note: Old uploadFile and initKnowledgeBase functions have been removed

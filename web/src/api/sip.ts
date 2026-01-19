@@ -1,4 +1,4 @@
-import { BaseApiService } from './base.service'
+import { get, post, ApiResponse } from '@/utils/request'
 
 // SIP用户
 export interface SipUser {
@@ -74,60 +74,37 @@ export interface SipCall {
   updatedAt: string
 }
 
-class SipService extends BaseApiService {
-  constructor() {
-    super('/sip')
-  }
-
-  // 获取SIP用户列表
-  async getSipUsers(): Promise<SipUser[]> {
-    const response = await this.get<SipUser[]>('/users', {}, { enabled: true, ttl: 30000 })
-    return this.handleResponse(response)
-  }
-
-  // 发起呼出
-  async makeOutgoingCall(data: MakeOutgoingCallRequest): Promise<MakeOutgoingCallResponse> {
-    const response = await this.post<MakeOutgoingCallResponse>('/calls/outgoing', data)
-    return this.handleResponse(response)
-  }
-
-  // 获取呼出状态
-  async getOutgoingCallStatus(callId: string): Promise<OutgoingSession> {
-    const response = await this.get<OutgoingSession>(`/calls/outgoing/${callId}`)
-    return this.handleResponse(response)
-  }
-
-  // 取消呼出
-  async cancelOutgoingCall(callId: string): Promise<void> {
-    const response = await this.post<void>(`/calls/outgoing/${callId}/cancel`)
-    return this.handleResponse(response)
-  }
-
-  // 挂断呼出（已接通的通话）
-  async hangupOutgoingCall(callId: string): Promise<void> {
-    const response = await this.post<void>(`/calls/outgoing/${callId}/hangup`)
-    return this.handleResponse(response)
-  }
-
-  // 获取通话历史
-  async getCallHistory(params?: {
-    userId?: number
-    status?: string
-    limit?: number
-  }): Promise<SipCall[]> {
-    const response = await this.get<SipCall[]>('/calls', { params })
-    return this.handleResponse(response)
-  }
+// 获取SIP用户列表
+export const getSipUsers = async (): Promise<ApiResponse<SipUser[]>> => {
+  return get('/sip/users')
 }
 
-// 导出单例
-export const sipService = new SipService()
+// 发起呼出
+export const makeOutgoingCall = async (data: MakeOutgoingCallRequest): Promise<ApiResponse<MakeOutgoingCallResponse>> => {
+  return post('/sip/calls/outgoing', data)
+}
 
-// 兼容性导出
-export const getSipUsers = sipService.getSipUsers.bind(sipService)
-export const makeOutgoingCall = sipService.makeOutgoingCall.bind(sipService)
-export const getOutgoingCallStatus = sipService.getOutgoingCallStatus.bind(sipService)
-export const cancelOutgoingCall = sipService.cancelOutgoingCall.bind(sipService)
-export const hangupOutgoingCall = sipService.hangupOutgoingCall.bind(sipService)
-export const getCallHistory = sipService.getCallHistory.bind(sipService)
+// 获取呼出状态
+export const getOutgoingCallStatus = async (callId: string): Promise<ApiResponse<OutgoingSession>> => {
+  return get(`/sip/calls/outgoing/${callId}`)
+}
+
+// 取消呼出
+export const cancelOutgoingCall = async (callId: string): Promise<ApiResponse<void>> => {
+  return post(`/sip/calls/outgoing/${callId}/cancel`)
+}
+
+// 挂断呼出（已接通的通话）
+export const hangupOutgoingCall = async (callId: string): Promise<ApiResponse<void>> => {
+  return post(`/sip/calls/outgoing/${callId}/hangup`)
+}
+
+// 获取通话历史
+export const getCallHistory = async (params?: {
+  userId?: number
+  status?: string
+  limit?: number
+}): Promise<ApiResponse<SipCall[]>> => {
+  return get('/sip/calls', params)
+}
 
