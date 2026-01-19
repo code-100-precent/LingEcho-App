@@ -93,7 +93,7 @@ func (h *Handlers) GetUsageStatistics(c *gin.Context) {
 	// Get statistics
 	stats, err := models.GetUsageStatistics(h.db, user.ID, startTime, endTime, credentialID, groupID)
 	if err != nil {
-		response.AbortWithStatusJSON(c, http.StatusInternalServerError, err)
+		apperrors.HandleError(c, apperrors.ErrQueryFailedError.WithCause(err))
 		return
 	}
 
@@ -174,7 +174,7 @@ func (h *Handlers) GetDailyUsageData(c *gin.Context) {
 	// Get daily usage data
 	dailyData, err := models.GetDailyUsageData(h.db, user.ID, startTime, endTime, credentialID, groupID)
 	if err != nil {
-		response.AbortWithStatusJSON(c, http.StatusInternalServerError, err)
+		apperrors.HandleError(c, apperrors.ErrQueryFailedError.WithCause(err))
 		return
 	}
 
@@ -261,7 +261,7 @@ func (h *Handlers) GetUsageRecords(c *gin.Context) {
 	// Get records
 	records, total, err := models.GetUsageRecords(h.db, user.ID, params)
 	if err != nil {
-		response.AbortWithStatusJSON(c, http.StatusInternalServerError, err)
+		apperrors.HandleError(c, apperrors.ErrQueryFailedError.WithCause(err))
 		return
 	}
 
@@ -359,7 +359,7 @@ func (h *Handlers) ExportUsageRecords(c *gin.Context) {
 		filePath, err = h.exportUsageRecords(user.ID, params, format, exportPath)
 	}
 	if err != nil {
-		response.AbortWithStatusJSON(c, http.StatusInternalServerError, err)
+		apperrors.HandleError(c, apperrors.ErrOperationFailedError.WithCause(err))
 		return
 	}
 
@@ -446,7 +446,7 @@ func (h *Handlers) GenerateBill(c *gin.Context) {
 	// Generate bill
 	bill, err := models.GenerateBill(h.db, user.ID, req.CredentialID, req.GroupID, startTime, endTime, title)
 	if err != nil {
-		response.AbortWithStatusJSON(c, http.StatusInternalServerError, err)
+		apperrors.HandleError(c, apperrors.ErrCreateFailedError.WithCause(err))
 		return
 	}
 
@@ -524,7 +524,7 @@ func (h *Handlers) GetBills(c *gin.Context) {
 	// Get bill list
 	bills, total, err := models.GetBills(h.db, user.ID, params)
 	if err != nil {
-		response.AbortWithStatusJSON(c, http.StatusInternalServerError, err)
+		apperrors.HandleError(c, apperrors.ErrQueryFailedError.WithCause(err))
 		return
 	}
 
@@ -547,13 +547,13 @@ func (h *Handlers) GetBill(c *gin.Context) {
 	billIDStr := c.Param("id")
 	billID, err := strconv.ParseUint(billIDStr, 10, 32)
 	if err != nil {
-		apperrors.HandleError(c, apperrors.New(apperrors.ErrInternalServer, "Invalid bill ID"))
+		apperrors.HandleError(c, apperrors.NewParameterError("id", "invalid_format").WithCause(err))
 		return
 	}
 
 	bill, err := models.GetBill(h.db, user.ID, uint(billID))
 	if err != nil {
-		response.AbortWithStatusJSON(c, http.StatusNotFound, err)
+		apperrors.HandleError(c, apperrors.NewResourceNotFoundError("bill", billIDStr))
 		return
 	}
 
@@ -602,7 +602,7 @@ func (h *Handlers) ExportBill(c *gin.Context) {
 		filePath, err = h.exportBill(bill, format, exportPath)
 	}
 	if err != nil {
-		response.AbortWithStatusJSON(c, http.StatusInternalServerError, err)
+		apperrors.HandleError(c, apperrors.ErrOperationFailedError.WithCause(err))
 		return
 	}
 
@@ -867,21 +867,21 @@ func (h *Handlers) formatUintPtr(ptr *uint) string {
 func (h *Handlers) UpdateBill(c *gin.Context) {
 	user := models.CurrentUser(c)
 	if user == nil {
-		apperrors.HandleError(c, apperrors.New(apperrors.ErrInternalServer, "User is not logged in."))
+		apperrors.HandleError(c, apperrors.NewUnauthorizedError("user_not_logged_in"))
 		return
 	}
 
 	billIDStr := c.Param("id")
 	billID, err := strconv.ParseUint(billIDStr, 10, 32)
 	if err != nil {
-		apperrors.HandleError(c, apperrors.New(apperrors.ErrInternalServer, "Invalid bill ID"))
+		apperrors.HandleError(c, apperrors.NewParameterError("id", "invalid_format").WithCause(err))
 		return
 	}
 
 	// 获取账单
 	bill, err := models.GetBill(h.db, user.ID, uint(billID))
 	if err != nil {
-		response.AbortWithStatusJSON(c, http.StatusNotFound, err)
+		apperrors.HandleError(c, apperrors.NewResourceNotFoundError("bill", billIDStr))
 		return
 	}
 
@@ -891,7 +891,7 @@ func (h *Handlers) UpdateBill(c *gin.Context) {
 	}
 
 	if err := c.ShouldBindJSON(&req); err != nil {
-		apperrors.HandleError(c, apperrors.New(apperrors.ErrInternalServer, "Invalid request format"))
+		apperrors.HandleError(c, apperrors.NewParameterError("request_body", "invalid_json").WithCause(err))
 		return
 	}
 
@@ -904,7 +904,7 @@ func (h *Handlers) UpdateBill(c *gin.Context) {
 	}
 
 	if err := models.UpdateBill(h.db, bill); err != nil {
-		response.AbortWithStatusJSON(c, http.StatusInternalServerError, err)
+		apperrors.HandleError(c, apperrors.ErrUpdateFailedError.WithCause(err))
 		return
 	}
 
@@ -915,27 +915,27 @@ func (h *Handlers) UpdateBill(c *gin.Context) {
 func (h *Handlers) DeleteBill(c *gin.Context) {
 	user := models.CurrentUser(c)
 	if user == nil {
-		apperrors.HandleError(c, apperrors.New(apperrors.ErrInternalServer, "User is not logged in."))
+		apperrors.HandleError(c, apperrors.NewUnauthorizedError("user_not_logged_in"))
 		return
 	}
 
 	billIDStr := c.Param("id")
 	billID, err := strconv.ParseUint(billIDStr, 10, 32)
 	if err != nil {
-		apperrors.HandleError(c, apperrors.New(apperrors.ErrInternalServer, "Invalid bill ID"))
+		apperrors.HandleError(c, apperrors.NewParameterError("id", "invalid_format").WithCause(err))
 		return
 	}
 
 	// 获取账单
 	bill, err := models.GetBill(h.db, user.ID, uint(billID))
 	if err != nil {
-		response.AbortWithStatusJSON(c, http.StatusNotFound, err)
+		apperrors.HandleError(c, apperrors.NewResourceNotFoundError("bill", billIDStr))
 		return
 	}
 
 	// 删除账单
 	if err := h.db.Delete(bill).Error; err != nil {
-		response.AbortWithStatusJSON(c, http.StatusInternalServerError, err)
+		apperrors.HandleError(c, apperrors.ErrDeleteFailedError.WithCause(err))
 		return
 	}
 
@@ -946,28 +946,28 @@ func (h *Handlers) DeleteBill(c *gin.Context) {
 func (h *Handlers) ArchiveBill(c *gin.Context) {
 	user := models.CurrentUser(c)
 	if user == nil {
-		apperrors.HandleError(c, apperrors.New(apperrors.ErrInternalServer, "User is not logged in."))
+		apperrors.HandleError(c, apperrors.NewUnauthorizedError("user_not_logged_in"))
 		return
 	}
 
 	billIDStr := c.Param("id")
 	billID, err := strconv.ParseUint(billIDStr, 10, 32)
 	if err != nil {
-		apperrors.HandleError(c, apperrors.New(apperrors.ErrInternalServer, "Invalid bill ID"))
+		apperrors.HandleError(c, apperrors.NewParameterError("id", "invalid_format").WithCause(err))
 		return
 	}
 
 	// 获取账单
 	bill, err := models.GetBill(h.db, user.ID, uint(billID))
 	if err != nil {
-		response.AbortWithStatusJSON(c, http.StatusNotFound, err)
+		apperrors.HandleError(c, apperrors.NewResourceNotFoundError("bill", billIDStr))
 		return
 	}
 
 	// 更新状态为已归档
 	bill.Status = models.BillStatusArchived
 	if err := models.UpdateBill(h.db, bill); err != nil {
-		response.AbortWithStatusJSON(c, http.StatusInternalServerError, err)
+		apperrors.HandleError(c, apperrors.ErrUpdateFailedError.WithCause(err))
 		return
 	}
 
@@ -978,21 +978,21 @@ func (h *Handlers) ArchiveBill(c *gin.Context) {
 func (h *Handlers) UpdateBillNotes(c *gin.Context) {
 	user := models.CurrentUser(c)
 	if user == nil {
-		apperrors.HandleError(c, apperrors.New(apperrors.ErrInternalServer, "User is not logged in."))
+		apperrors.HandleError(c, apperrors.NewUnauthorizedError("user_not_logged_in"))
 		return
 	}
 
 	billIDStr := c.Param("id")
 	billID, err := strconv.ParseUint(billIDStr, 10, 32)
 	if err != nil {
-		apperrors.HandleError(c, apperrors.New(apperrors.ErrInternalServer, "Invalid bill ID"))
+		apperrors.HandleError(c, apperrors.NewParameterError("id", "invalid_format").WithCause(err))
 		return
 	}
 
 	// 获取账单
 	bill, err := models.GetBill(h.db, user.ID, uint(billID))
 	if err != nil {
-		response.AbortWithStatusJSON(c, http.StatusNotFound, err)
+		apperrors.HandleError(c, apperrors.NewResourceNotFoundError("bill", billIDStr))
 		return
 	}
 
@@ -1001,14 +1001,14 @@ func (h *Handlers) UpdateBillNotes(c *gin.Context) {
 	}
 
 	if err := c.ShouldBindJSON(&req); err != nil {
-		apperrors.HandleError(c, apperrors.New(apperrors.ErrInternalServer, "Invalid request format"))
+		apperrors.HandleError(c, apperrors.NewParameterError("request_body", "invalid_json").WithCause(err))
 		return
 	}
 
 	// 更新备注
 	bill.Notes = req.Notes
 	if err := models.UpdateBill(h.db, bill); err != nil {
-		response.AbortWithStatusJSON(c, http.StatusInternalServerError, err)
+		apperrors.HandleError(c, apperrors.ErrUpdateFailedError.WithCause(err))
 		return
 	}
 

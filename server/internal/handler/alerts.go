@@ -2,11 +2,11 @@ package handlers
 
 import (
 	"errors"
-	"fmt"
 	"strconv"
 	"time"
 
 	"github.com/code-100-precent/LingEcho/internal/models"
+	apperrors "github.com/code-100-precent/LingEcho/pkg/errors"
 	"github.com/code-100-precent/LingEcho/pkg/response"
 	"github.com/gin-gonic/gin"
 	"gorm.io/gorm"
@@ -43,13 +43,13 @@ type UpdateAlertRuleRequest struct {
 func (h *Handlers) CreateAlertRule(c *gin.Context) {
 	user := models.CurrentUser(c)
 	if user == nil {
-		response.Fail(c, "Unauthorized", "User not logged in")
+		apperrors.HandleError(c, apperrors.NewUnauthorizedError("user_not_logged_in"))
 		return
 	}
 
 	var req CreateAlertRuleRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		response.Fail(c, "Parameter error", err.Error())
+		apperrors.HandleError(c, apperrors.NewParameterError("request_body", "invalid_json").WithCause(err))
 		return
 	}
 
@@ -58,7 +58,7 @@ func (h *Handlers) CreateAlertRule(c *gin.Context) {
 	case models.AlertTypeSystemError, models.AlertTypeQuotaExceeded, models.AlertTypeServiceError, models.AlertTypeCustom:
 		// Valid type
 	default:
-		response.Fail(c, "Parameter error", "Invalid alert type")
+		apperrors.HandleError(c, apperrors.NewParameterError("alert_type", "invalid_value"))
 		return
 	}
 
@@ -67,13 +67,13 @@ func (h *Handlers) CreateAlertRule(c *gin.Context) {
 	case models.AlertSeverityCritical, models.AlertSeverityHigh, models.AlertSeverityMedium, models.AlertSeverityLow:
 		// Valid severity
 	default:
-		response.Fail(c, "Parameter error", "Invalid severity")
+		apperrors.HandleError(c, apperrors.NewParameterError("severity", "invalid_value"))
 		return
 	}
 
 	// Validate notification channels
 	if len(req.Channels) == 0 {
-		response.Fail(c, "Parameter error", "At least one notification channel is required")
+		apperrors.HandleError(c, apperrors.NewParameterError("channels", "at_least_one_required"))
 		return
 	}
 
@@ -82,7 +82,7 @@ func (h *Handlers) CreateAlertRule(c *gin.Context) {
 		case models.NotificationChannelEmail, models.NotificationChannelInternal, models.NotificationChannelWebhook, models.NotificationChannelSMS:
 			// Valid channel
 		default:
-			response.Fail(c, "Parameter error", fmt.Sprintf("Invalid notification channel: %s", channel))
+			apperrors.HandleError(c, apperrors.NewParameterError("channel", "invalid_value"))
 			return
 		}
 	}
@@ -96,7 +96,7 @@ func (h *Handlers) CreateAlertRule(c *gin.Context) {
 		}
 	}
 	if hasWebhook && req.WebhookURL == "" {
-		response.Fail(c, "Parameter error", "Webhook URL is required when using Webhook notification")
+		apperrors.HandleError(c, apperrors.NewParameterError("webhook_url", "required_when_using_webhook"))
 		return
 	}
 
@@ -123,18 +123,18 @@ func (h *Handlers) CreateAlertRule(c *gin.Context) {
 
 	// Set conditions
 	if err := rule.SetConditions(req.Conditions); err != nil {
-		response.Fail(c, "Parameter error", "Condition format error: "+err.Error())
+		apperrors.HandleError(c, apperrors.NewParameterError("conditions", "invalid_format").WithCause(err))
 		return
 	}
 
 	// Set notification channels
 	if err := rule.SetChannels(req.Channels); err != nil {
-		response.Fail(c, "Parameter error", "Notification channel format error: "+err.Error())
+		apperrors.HandleError(c, apperrors.NewParameterError("channels", "invalid_format").WithCause(err))
 		return
 	}
 
 	if err := h.db.Create(&rule).Error; err != nil {
-		response.Fail(c, "Failed to create alert rule", err.Error())
+		apperrors.HandleError(c, apperrors.ErrCreateFailedError.WithCause(err))
 		return
 	}
 
@@ -145,7 +145,7 @@ func (h *Handlers) CreateAlertRule(c *gin.Context) {
 func (h *Handlers) ListAlertRules(c *gin.Context) {
 	user := models.CurrentUser(c)
 	if user == nil {
-		response.Fail(c, "Unauthorized", "User not logged in")
+		apperrors.HandleError(c, apperrors.NewUnauthorizedError("user_not_logged_in"))
 		return
 	}
 
@@ -164,7 +164,7 @@ func (h *Handlers) ListAlertRules(c *gin.Context) {
 	}
 
 	if err := query.Order("created_at DESC").Find(&rules).Error; err != nil {
-		response.Fail(c, "Query failed", err.Error())
+		apperrors.HandleError(c, apperrors.ErrQueryFailedError.WithCause(err))
 		return
 	}
 
@@ -175,22 +175,22 @@ func (h *Handlers) ListAlertRules(c *gin.Context) {
 func (h *Handlers) GetAlertRule(c *gin.Context) {
 	user := models.CurrentUser(c)
 	if user == nil {
-		response.Fail(c, "Unauthorized", "User not logged in")
+		apperrors.HandleError(c, apperrors.NewUnauthorizedError("user_not_logged_in"))
 		return
 	}
 
 	id, err := strconv.ParseUint(c.Param("id"), 10, 32)
 	if err != nil {
-		response.Fail(c, "Parameter error", "Invalid rule ID")
+		apperrors.HandleError(c, apperrors.NewParameterError("id", "invalid_format").WithCause(err))
 		return
 	}
 
 	var rule models.AlertRule
 	if err := h.db.Where("id = ? AND user_id = ?", id, user.ID).First(&rule).Error; err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
-			response.Fail(c, "Rule not found", nil)
+			apperrors.HandleError(c, apperrors.NewResourceNotFoundError("alert_rule", strconv.FormatUint(id, 10)))
 		} else {
-			response.Fail(c, "Query failed", err.Error())
+			apperrors.HandleError(c, apperrors.ErrQueryFailedError.WithCause(err))
 		}
 		return
 	}
@@ -202,29 +202,29 @@ func (h *Handlers) GetAlertRule(c *gin.Context) {
 func (h *Handlers) UpdateAlertRule(c *gin.Context) {
 	user := models.CurrentUser(c)
 	if user == nil {
-		response.Fail(c, "Unauthorized", "User not logged in")
+		apperrors.HandleError(c, apperrors.NewUnauthorizedError("user_not_logged_in"))
 		return
 	}
 
 	id, err := strconv.ParseUint(c.Param("id"), 10, 32)
 	if err != nil {
-		response.Fail(c, "Parameter error", "Invalid rule ID")
+		apperrors.HandleError(c, apperrors.NewParameterError("id", "invalid_format").WithCause(err))
 		return
 	}
 
 	var rule models.AlertRule
 	if err := h.db.Where("id = ? AND user_id = ?", id, user.ID).First(&rule).Error; err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
-			response.Fail(c, "Rule not found", nil)
+			apperrors.HandleError(c, apperrors.NewResourceNotFoundError("alert_rule", strconv.FormatUint(id, 10)))
 		} else {
-			response.Fail(c, "Query failed", err.Error())
+			apperrors.HandleError(c, apperrors.ErrQueryFailedError.WithCause(err))
 		}
 		return
 	}
 
 	var req UpdateAlertRuleRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		response.Fail(c, "Parameter error", err.Error())
+		apperrors.HandleError(c, apperrors.NewParameterError("request_body", "invalid_json").WithCause(err))
 		return
 	}
 
@@ -241,20 +241,20 @@ func (h *Handlers) UpdateAlertRule(c *gin.Context) {
 		case models.AlertSeverityCritical, models.AlertSeverityHigh, models.AlertSeverityMedium, models.AlertSeverityLow:
 			rule.Severity = *req.Severity
 		default:
-			response.Fail(c, "Parameter error", "Invalid severity")
+			apperrors.HandleError(c, apperrors.NewParameterError("severity", "invalid_value"))
 			return
 		}
 	}
 	if req.Conditions != nil {
 		if err := rule.SetConditions(req.Conditions); err != nil {
-			response.Fail(c, "Parameter error", "Condition format error: "+err.Error())
+			apperrors.HandleError(c, apperrors.NewParameterError("conditions", "invalid_format").WithCause(err))
 			return
 		}
 	}
 	if req.Channels != nil {
 		// Validate notification channels
 		if len(*req.Channels) == 0 {
-			response.Fail(c, "Parameter error", "At least one notification channel is required")
+			apperrors.HandleError(c, apperrors.NewParameterError("channels", "at_least_one_required"))
 			return
 		}
 		hasWebhook := false
@@ -270,12 +270,12 @@ func (h *Handlers) UpdateAlertRule(c *gin.Context) {
 				webhookURL = &rule.WebhookURL
 			}
 			if webhookURL == nil || *webhookURL == "" {
-				response.Fail(c, "Parameter error", "Webhook URL is required when using Webhook notification")
+				apperrors.HandleError(c, apperrors.NewParameterError("webhook_url", "required_when_using_webhook"))
 				return
 			}
 		}
 		if err := rule.SetChannels(*req.Channels); err != nil {
-			response.Fail(c, "Parameter error", "Notification channel format error: "+err.Error())
+			apperrors.HandleError(c, apperrors.NewParameterError("channels", "invalid_format").WithCause(err))
 			return
 		}
 	}
@@ -287,7 +287,7 @@ func (h *Handlers) UpdateAlertRule(c *gin.Context) {
 	}
 	if req.Cooldown != nil {
 		if *req.Cooldown <= 0 {
-			response.Fail(c, "Parameter error", "Cooldown time must be greater than 0")
+			apperrors.HandleError(c, apperrors.NewParameterError("cooldown", "must_be_greater_than_zero"))
 			return
 		}
 		rule.Cooldown = *req.Cooldown
@@ -297,7 +297,7 @@ func (h *Handlers) UpdateAlertRule(c *gin.Context) {
 	}
 
 	if err := h.db.Save(&rule).Error; err != nil {
-		response.Fail(c, "Update failed", err.Error())
+		apperrors.HandleError(c, apperrors.ErrUpdateFailedError.WithCause(err))
 		return
 	}
 
@@ -308,13 +308,13 @@ func (h *Handlers) UpdateAlertRule(c *gin.Context) {
 func (h *Handlers) DeleteAlertRule(c *gin.Context) {
 	user := models.CurrentUser(c)
 	if user == nil {
-		response.Fail(c, "Unauthorized", "User not logged in")
+		apperrors.HandleError(c, apperrors.NewUnauthorizedError("user_not_logged_in"))
 		return
 	}
 
 	id, err := strconv.ParseUint(c.Param("id"), 10, 32)
 	if err != nil {
-		response.Fail(c, "Parameter error", "Invalid rule ID")
+		apperrors.HandleError(c, apperrors.NewParameterError("id", "invalid_format").WithCause(err))
 		return
 	}
 
@@ -322,16 +322,16 @@ func (h *Handlers) DeleteAlertRule(c *gin.Context) {
 	var rule models.AlertRule
 	if err := h.db.Where("id = ? AND user_id = ?", id, user.ID).First(&rule).Error; err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
-			response.Fail(c, "Rule not found", nil)
+			apperrors.HandleError(c, apperrors.NewResourceNotFoundError("alert_rule", strconv.FormatUint(id, 10)))
 		} else {
-			response.Fail(c, "Query failed", err.Error())
+			apperrors.HandleError(c, apperrors.ErrQueryFailedError.WithCause(err))
 		}
 		return
 	}
 
 	// Delete rule
 	if err := h.db.Delete(&rule).Error; err != nil {
-		response.Fail(c, "Delete failed", err.Error())
+		apperrors.HandleError(c, apperrors.ErrDeleteFailedError.WithCause(err))
 		return
 	}
 
@@ -342,7 +342,7 @@ func (h *Handlers) DeleteAlertRule(c *gin.Context) {
 func (h *Handlers) ListAlerts(c *gin.Context) {
 	user := models.CurrentUser(c)
 	if user == nil {
-		response.Fail(c, "Unauthorized", "User not logged in")
+		apperrors.HandleError(c, apperrors.NewUnauthorizedError("user_not_logged_in"))
 		return
 	}
 
@@ -373,7 +373,7 @@ func (h *Handlers) ListAlerts(c *gin.Context) {
 	query.Model(&models.Alert{}).Count(&total)
 
 	if err := query.Offset((page - 1) * pageSize).Limit(pageSize).Order("created_at DESC").Find(&alerts).Error; err != nil {
-		response.Fail(c, "Query failed", err.Error())
+		apperrors.HandleError(c, apperrors.ErrQueryFailedError.WithCause(err))
 		return
 	}
 
@@ -389,22 +389,22 @@ func (h *Handlers) ListAlerts(c *gin.Context) {
 func (h *Handlers) GetAlert(c *gin.Context) {
 	user := models.CurrentUser(c)
 	if user == nil {
-		response.Fail(c, "Unauthorized", "User not logged in")
+		apperrors.HandleError(c, apperrors.NewUnauthorizedError("user_not_logged_in"))
 		return
 	}
 
 	id, err := strconv.ParseUint(c.Param("id"), 10, 32)
 	if err != nil {
-		response.Fail(c, "Parameter error", "Invalid alert ID")
+		apperrors.HandleError(c, apperrors.NewParameterError("id", "invalid_format").WithCause(err))
 		return
 	}
 
 	var alert models.Alert
 	if err := h.db.Where("id = ? AND user_id = ?", id, user.ID).Preload("Rule").First(&alert).Error; err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
-			response.Fail(c, "Alert not found", nil)
+			apperrors.HandleError(c, apperrors.NewResourceNotFoundError("alert", strconv.FormatUint(id, 10)))
 		} else {
-			response.Fail(c, "Query failed", err.Error())
+			apperrors.HandleError(c, apperrors.ErrQueryFailedError.WithCause(err))
 		}
 		return
 	}
@@ -424,22 +424,22 @@ func (h *Handlers) GetAlert(c *gin.Context) {
 func (h *Handlers) ResolveAlert(c *gin.Context) {
 	user := models.CurrentUser(c)
 	if user == nil {
-		response.Fail(c, "Unauthorized", "User not logged in")
+		apperrors.HandleError(c, apperrors.NewUnauthorizedError("user_not_logged_in"))
 		return
 	}
 
 	id, err := strconv.ParseUint(c.Param("id"), 10, 32)
 	if err != nil {
-		response.Fail(c, "Parameter error", "Invalid alert ID")
+		apperrors.HandleError(c, apperrors.NewParameterError("id", "invalid_format").WithCause(err))
 		return
 	}
 
 	var alert models.Alert
 	if err := h.db.Where("id = ? AND user_id = ?", id, user.ID).First(&alert).Error; err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
-			response.Fail(c, "Alert not found", nil)
+			apperrors.HandleError(c, apperrors.NewResourceNotFoundError("alert", strconv.FormatUint(id, 10)))
 		} else {
-			response.Fail(c, "Query failed", err.Error())
+			apperrors.HandleError(c, apperrors.ErrQueryFailedError.WithCause(err))
 		}
 		return
 	}
@@ -450,7 +450,7 @@ func (h *Handlers) ResolveAlert(c *gin.Context) {
 	alert.ResolvedBy = &user.ID
 
 	if err := h.db.Save(&alert).Error; err != nil {
-		response.Fail(c, "Update failed", err.Error())
+		apperrors.HandleError(c, apperrors.ErrUpdateFailedError.WithCause(err))
 		return
 	}
 
@@ -461,29 +461,29 @@ func (h *Handlers) ResolveAlert(c *gin.Context) {
 func (h *Handlers) MuteAlert(c *gin.Context) {
 	user := models.CurrentUser(c)
 	if user == nil {
-		response.Fail(c, "Unauthorized", "User not logged in")
+		apperrors.HandleError(c, apperrors.NewUnauthorizedError("user_not_logged_in"))
 		return
 	}
 
 	id, err := strconv.ParseUint(c.Param("id"), 10, 32)
 	if err != nil {
-		response.Fail(c, "Parameter error", "Invalid alert ID")
+		apperrors.HandleError(c, apperrors.NewParameterError("id", "invalid_format").WithCause(err))
 		return
 	}
 
 	var alert models.Alert
 	if err := h.db.Where("id = ? AND user_id = ?", id, user.ID).First(&alert).Error; err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
-			response.Fail(c, "Alert not found", nil)
+			apperrors.HandleError(c, apperrors.NewResourceNotFoundError("alert", strconv.FormatUint(id, 10)))
 		} else {
-			response.Fail(c, "Query failed", err.Error())
+			apperrors.HandleError(c, apperrors.ErrQueryFailedError.WithCause(err))
 		}
 		return
 	}
 
 	alert.Status = models.AlertStatusMuted
 	if err := h.db.Save(&alert).Error; err != nil {
-		response.Fail(c, "Update failed", err.Error())
+		apperrors.HandleError(c, apperrors.ErrUpdateFailedError.WithCause(err))
 		return
 	}
 

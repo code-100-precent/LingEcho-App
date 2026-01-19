@@ -59,7 +59,7 @@ func (h *UploadHandler) UploadAudio(c *gin.Context) {
 		Key:      storageKey,
 	})
 	if err != nil {
-		response.Fail(c, "Failed to upload file: "+err.Error(), nil)
+		apperrors.HandleError(c, apperrors.ErrFileUploadFailedError.WithCause(err))
 		return
 	}
 
