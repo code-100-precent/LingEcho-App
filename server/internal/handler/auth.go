@@ -140,7 +140,7 @@ func (h *AuthHandler) executeLogin(c *gin.Context, req LoginRequest, loginType s
 func (h *AuthHandler) performSecurityChecks(clientIP, email string) error {
 	if utils.GlobalLoginSecurityManager != nil {
 		if err := utils.GlobalLoginSecurityManager.CheckIPRateLimit(clientIP); err != nil {
-			return apperrors.Wrap(err, apperrors.ErrRateLimitExceeded, "登录尝试过于频繁")
+			return apperrors.ErrRateLimitError.WithCause(err)
 		}
 
 		checkLockFunc := func(db *gorm.DB, email string, userID uint) (*utils.AccountLockInfo, error) {
@@ -158,7 +158,7 @@ func (h *AuthHandler) performSecurityChecks(clientIP, email string) error {
 		}
 
 		if err := utils.GlobalLoginSecurityManager.CheckAccountLock(h.db, email, 0, checkLockFunc); err != nil {
-			return apperrors.Wrap(err, apperrors.ErrAccountLocked, "账户已被锁定")
+			return apperrors.ErrAccountLockedError.WithCause(err)
 		}
 	}
 	return nil
@@ -168,11 +168,11 @@ func (h *AuthHandler) performSecurityChecks(clientIP, email string) error {
 func (h *AuthHandler) verifyCaptcha(captchaID, captchaCode string) error {
 	if captcha.GlobalCaptchaManager != nil {
 		if captchaID == "" || captchaCode == "" {
-			return apperrors.New(apperrors.ErrCaptchaRequired, "需要验证码")
+			return apperrors.ErrCaptchaRequiredError
 		}
 		valid, err := captcha.GlobalCaptchaManager.Verify(captchaID, captchaCode)
 		if err != nil || !valid {
-			return apperrors.New(apperrors.ErrCaptchaInvalid, "验证码错误")
+			return apperrors.ErrCaptchaInvalidError
 		}
 	}
 	return nil
@@ -187,12 +187,12 @@ func (h *AuthHandler) getUserAndVerifyCredentials(req LoginRequest, loginType st
 	if req.AuthToken != "" {
 		user, err = models.DecodeHashToken(h.db, req.AuthToken, false)
 		if err != nil {
-			return nil, apperrors.Wrap(err, apperrors.ErrInvalidCredentials, "认证令牌无效")
+			return nil, apperrors.NewInvalidCredentialsError("invalid_auth_token").WithCause(err)
 		}
 	} else {
 		user, err = models.GetUserByEmail(h.db, req.Email)
 		if err != nil {
-			return nil, apperrors.Wrap(err, apperrors.ErrUserNotFound, "用户不存在")
+			return nil, apperrors.NewUserNotFoundError().WithCause(err)
 		}
 	}
 
@@ -205,14 +205,14 @@ func (h *AuthHandler) getUserAndVerifyCredentials(req LoginRequest, loginType st
 			passwordValid = models.CheckPassword(user, req.Password)
 		}
 		if !passwordValid {
-			return nil, apperrors.New(apperrors.ErrInvalidCredentials, "密码错误")
+			return nil, apperrors.ErrInvalidPasswordError
 		}
 	}
 
 	if loginType == "email" && req.Code != "" {
 		cachedCode, ok := utils.GlobalCache.Get(req.Email)
 		if !ok || cachedCode != req.Code {
-			return nil, apperrors.New(apperrors.ErrInvalidCredentials, "验证码错误")
+			return nil, apperrors.NewInvalidCredentialsError("invalid_email_code")
 		}
 		utils.GlobalCache.Remove(req.Email)
 	}
@@ -855,7 +855,7 @@ func (h *Handlers) handleUserSignupByEmail(c *gin.Context) {
 func (h *Handlers) handleUserUpdate(c *gin.Context) {
 	var req models.UpdateUserRequest
 	if err := c.ShouldBind(&req); err != nil {
-		response.Fail(c, "Invalid request", err)
+		apperrors.HandleError(c, apperrors.NewParameterError("request_body", "invalid_format").WithCause(err))
 		return
 	}
 
@@ -901,14 +901,14 @@ func (h *Handlers) handleUserUpdate(c *gin.Context) {
 
 	err := models.UpdateUser(h.db, user, vals)
 	if err != nil {
-		response.Fail(c, "update user failed", err)
+		apperrors.HandleError(c, apperrors.ErrUpdateFailedError.WithCause(err))
 		return
 	}
 
 	// 重新获取更新后的用户信息
 	updatedUser, err := models.GetUserByUID(h.db, user.ID)
 	if err != nil {
-		response.Fail(c, "failed to get updated user", err)
+		apperrors.HandleError(c, apperrors.ErrQueryFailedError.WithCause(err))
 		return
 	}
 	cache.Delete(c, constants.CacheKeyUserByID+strconv.Itoa(int(user.ID)))

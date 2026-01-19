@@ -793,12 +793,12 @@ func (h *Handlers) GetVoiceOptions(c *gin.Context) {
 	voices, err := loadVoiceOptionsFromJSON(normalizedProvider)
 	if err != nil {
 		logrus.WithError(err).Errorf("加载音色列表失败: provider=%s", normalizedProvider)
-		response.Fail(c, fmt.Sprintf("加载音色列表失败: %v", err), nil)
+		apperrors.HandleError(c, apperrors.ErrServiceUnavailableError.WithCause(err))
 		return
 	}
 
 	if voices == nil || len(voices) == 0 {
-		response.Fail(c, fmt.Sprintf("不支持的TTS Provider: %s 或音色列表为空", provider), nil)
+		apperrors.HandleError(c, apperrors.NewResourceNotFoundError("voices", provider))
 		return
 	}
 
@@ -895,7 +895,7 @@ func (h *Handlers) GetLanguageOptions(c *gin.Context) {
 	languages, err := loadLanguageOptionsFromJSON(normalizedProvider)
 	if err != nil {
 		logrus.WithError(err).Errorf("加载语言列表失败: provider=%s", normalizedProvider)
-		response.Fail(c, fmt.Sprintf("加载语言列表失败: %v", err), nil)
+		apperrors.HandleError(c, apperrors.ErrServiceUnavailableError.WithCause(err))
 		return
 	}
 

@@ -5,7 +5,6 @@ import (
 	"github.com/code-100-precent/LingEcho/pkg/response"
 
 	"fmt"
-	"net/http"
 	"time"
 
 	"github.com/code-100-precent/LingEcho/internal/models"
@@ -114,20 +113,20 @@ func (h *Handlers) handleMarkNotificationAsRead(c *gin.Context) {
 	var notificationID uint
 	_, err := fmt.Sscanf(idStr, "%d", &notificationID)
 	if err != nil {
-		response.AbortWithStatus(c, http.StatusBadRequest)
+		apperrors.HandleError(c, apperrors.NewParameterError("id", "invalid_format").WithCause(err))
 		return
 	}
 
 	_, err = notification.NewInternalNotificationService(h.db).GetOne(user.ID, notificationID)
 	if err != nil {
-		apperrors.HandleError(c, apperrors.New(apperrors.ErrInternalServer, "You don't have permission to flag this message."))
+		apperrors.HandleError(c, apperrors.NewResourceNotFoundError("notification", idStr))
 		return
 	}
 
 	// 调用服务层标记为已读
 	err = notification.NewInternalNotificationService(h.db).MarkAsRead(notificationID)
 	if err != nil {
-		response.AbortWithStatusJSON(c, http.StatusInternalServerError, err)
+		apperrors.HandleError(c, apperrors.ErrUpdateFailedError.WithCause(err))
 		return
 	}
 
@@ -137,18 +136,18 @@ func (h *Handlers) handleMarkNotificationAsRead(c *gin.Context) {
 func (h *Handlers) handleDeleteNotification(c *gin.Context) {
 	user := models.CurrentUser(c)
 	if user == nil {
-		apperrors.HandleError(c, apperrors.New(apperrors.ErrInternalServer, "User is not logged in."))
+		apperrors.HandleError(c, apperrors.NewUnauthorizedError("user_not_logged_in"))
 		return
 	}
 	var notificationID uint
 	_, err := fmt.Sscanf(c.Param("id"), "%d", &notificationID)
 	if err != nil {
-		response.AbortWithStatusJSON(c, http.StatusBadRequest, err)
+		apperrors.HandleError(c, apperrors.NewParameterError("id", "invalid_format").WithCause(err))
 		return
 	}
 	err = notification.NewInternalNotificationService(h.db).Delete(user.ID, notificationID)
 	if err != nil {
-		response.AbortWithStatusJSON(c, http.StatusInternalServerError, err)
+		apperrors.HandleError(c, apperrors.ErrDeleteFailedError.WithCause(err))
 		return
 	}
 	apperrors.RespondSuccess(c, nil)
@@ -167,19 +166,19 @@ func (h *Handlers) handleBatchDeleteNotifications(c *gin.Context) {
 	}
 
 	if err := c.ShouldBindJSON(&request); err != nil {
-		apperrors.HandleError(c, apperrors.New(apperrors.ErrInternalServer, "Invalid request format"))
+		apperrors.HandleError(c, apperrors.NewParameterError("request_body", "invalid_json").WithCause(err))
 		return
 	}
 
 	if len(request.IDs) == 0 {
-		apperrors.HandleError(c, apperrors.New(apperrors.ErrInternalServer, "No notification IDs provided"))
+		apperrors.HandleError(c, apperrors.NewParameterError("ids", "empty_array"))
 		return
 	}
 
 	service := notification.NewInternalNotificationService(h.db)
 	deletedCount, err := service.BatchDelete(user.ID, request.IDs)
 	if err != nil {
-		response.AbortWithStatusJSON(c, http.StatusInternalServerError, err)
+		apperrors.HandleError(c, apperrors.ErrDeleteFailedError.WithCause(err))
 		return
 	}
 
@@ -218,7 +217,7 @@ func (h *Handlers) handleGetAllNotificationIds(c *gin.Context) {
 	service := notification.NewInternalNotificationService(h.db)
 	ids, err := service.GetAllNotificationIds(user.ID, filterBy, title, content, start, end)
 	if err != nil {
-		response.AbortWithStatusJSON(c, http.StatusInternalServerError, err)
+		apperrors.HandleError(c, apperrors.ErrQueryFailedError.WithCause(err))
 		return
 	}
 

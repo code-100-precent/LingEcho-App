@@ -130,8 +130,9 @@ func GetAppError(err error) *AppError {
 	return nil
 }
 
-// 预定义的常用错误
+// 预定义的常用错误 - 认证相关
 var (
+	// 用户认证错误
 	ErrUserNotFoundError      = New(ErrUserNotFound, "用户不存在")
 	ErrInvalidPasswordError   = New(ErrInvalidCredentials, "密码错误")
 	ErrEmailExistsError       = New(ErrEmailExists, "邮箱已存在")
@@ -142,4 +143,90 @@ var (
 	ErrCaptchaInvalidError    = New(ErrCaptchaInvalid, "验证码错误")
 	ErrCaptchaRequiredError   = New(ErrCaptchaRequired, "需要验证码")
 	ErrRateLimitError         = New(ErrRateLimitExceeded, "请求过于频繁")
+
+	// 参数验证错误
+	ErrInvalidParameterError = New(ErrInvalidInput, "参数错误")
+	ErrMissingParameterError = New(ErrInvalidInput, "缺少必要参数")
+	ErrInvalidFormatError    = New(ErrInvalidInput, "参数格式错误")
+	ErrInvalidIDError        = New(ErrInvalidInput, "无效的ID")
+
+	// 权限相关错误
+	ErrUnauthorizedError     = New(ErrUnauthorized, "未授权")
+	ErrForbiddenError        = New(ErrForbidden, "权限不足")
+	ErrInsufficientPermError = New(ErrForbidden, "权限不足")
+
+	// 资源相关错误
+	ErrResourceNotFoundError = New(ErrNotFound, "资源不存在")
+	ErrResourceExistsError   = New(ErrConflict, "资源已存在")
+	ErrResourceLockedError   = New(ErrConflict, "资源被锁定")
+
+	// 业务逻辑错误
+	ErrOperationFailedError = New(ErrInternalServer, "操作失败")
+	ErrCreateFailedError    = New(ErrInternalServer, "创建失败")
+	ErrUpdateFailedError    = New(ErrInternalServer, "更新失败")
+	ErrDeleteFailedError    = New(ErrInternalServer, "删除失败")
+	ErrQueryFailedError     = New(ErrInternalServer, "查询失败")
+
+	// 文件相关错误
+	ErrFileNotFoundError     = New(ErrNotFound, "文件不存在")
+	ErrFileUploadFailedError = New(ErrInternalServer, "文件上传失败")
+	ErrFileFormatError       = New(ErrInvalidInput, "文件格式错误")
+	ErrFileSizeError         = New(ErrInvalidInput, "文件大小超限")
+
+	// 网络相关错误
+	ErrNetworkError            = New(ErrServiceUnavailable, "网络错误")
+	ErrTimeoutError            = New(ErrServiceUnavailable, "请求超时")
+	ErrServiceUnavailableError = New(ErrServiceUnavailable, "服务不可用")
+
+	// 数据库相关错误
+	ErrDatabaseError           = New(ErrInternalServer, "数据库错误")
+	ErrDatabaseConnectionError = New(ErrInternalServer, "数据库连接失败")
+	ErrRecordNotFoundError     = New(ErrNotFound, "记录不存在")
+	ErrDuplicateRecordError    = New(ErrConflict, "记录已存在")
+
+	// 配置相关错误
+	ErrConfigError         = New(ErrInternalServer, "配置错误")
+	ErrConfigNotFoundError = New(ErrNotFound, "配置不存在")
+	ErrConfigInvalidError  = New(ErrInvalidInput, "配置无效")
 )
+
+// 便捷的错误创建函数
+func NewUserNotFoundError(details ...string) *AppError {
+	err := New(ErrUserNotFound, "用户不存在")
+	if len(details) > 0 {
+		err = err.WithDetails("reason", details[0])
+	}
+	return err
+}
+
+func NewInvalidCredentialsError(details ...string) *AppError {
+	err := New(ErrInvalidCredentials, "认证失败")
+	if len(details) > 0 {
+		err = err.WithDetails("reason", details[0])
+	}
+	return err
+}
+
+func NewParameterError(field string, reason ...string) *AppError {
+	err := New(ErrInvalidInput, "参数错误").WithDetails("field", field)
+	if len(reason) > 0 {
+		err = err.WithDetails("reason", reason[0])
+	}
+	return err
+}
+
+func NewUnauthorizedError(reason ...string) *AppError {
+	err := New(ErrUnauthorized, "未授权")
+	if len(reason) > 0 {
+		err = err.WithDetails("reason", reason[0])
+	}
+	return err
+}
+
+func NewResourceNotFoundError(resource string, id ...string) *AppError {
+	err := New(ErrNotFound, "资源不存在").WithDetails("resource", resource)
+	if len(id) > 0 {
+		err = err.WithDetails("id", id[0])
+	}
+	return err
+}

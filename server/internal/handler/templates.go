@@ -230,7 +230,7 @@ func (h *Handlers) ListJSTemplates(c *gin.Context) {
 	}
 
 	if err := query.Find(&templates).Error; err != nil {
-		response.Fail(c, "Failed to get template list: "+err.Error(), nil)
+		apperrors.HandleError(c, apperrors.ErrQueryFailedError.WithCause(err))
 		return
 	}
 
@@ -243,7 +243,7 @@ func (h *Handlers) ListJSTemplates(c *gin.Context) {
 		countQuery = countQuery.Where("user_id = ?", userId)
 	}
 	if err := countQuery.Count(&total).Error; err != nil {
-		response.Fail(c, "Failed to get total template count: "+err.Error(), nil)
+		apperrors.HandleError(c, apperrors.ErrQueryFailedError.WithCause(err))
 		return
 	}
 
@@ -297,7 +297,7 @@ func (h *Handlers) UpdateJSTemplate(c *gin.Context) {
 
 	var updates map[string]interface{}
 	if err := c.ShouldBindJSON(&updates); err != nil {
-		response.Fail(c, "Invalid parameters: "+err.Error(), nil)
+		apperrors.HandleError(c, apperrors.NewParameterError("request_body", "invalid_json").WithCause(err))
 		return
 	}
 
@@ -307,9 +307,7 @@ func (h *Handlers) UpdateJSTemplate(c *gin.Context) {
 		whitelist := jsPkg.DefaultWhitelist
 		isValid, violations := jsPkg.ValidateAST(content, whitelist)
 		if !isValid {
-			response.Fail(c, "代码不符合安全规范", gin.H{
-				"violations": violations,
-			})
+			apperrors.HandleError(c, apperrors.NewParameterError("content", "security_violation").WithDetails("violations", violations))
 			return
 		}
 
@@ -329,9 +327,7 @@ func (h *Handlers) UpdateJSTemplate(c *gin.Context) {
 
 		isQuotaValid, quotaViolations := jsPkg.CheckResourceQuota(content, maxExecutionTime, maxMemoryMB, maxAPICalls)
 		if !isQuotaValid {
-			response.Fail(c, "代码超出资源配额限制", gin.H{
-				"violations": quotaViolations,
-			})
+			apperrors.HandleError(c, apperrors.NewParameterError("content", "quota_exceeded").WithDetails("violations", quotaViolations))
 			return
 		}
 	}
@@ -391,14 +387,14 @@ func (h *Handlers) UpdateJSTemplate(c *gin.Context) {
 	delete(updates, "created_at")
 
 	if err := models.UpdateJSTemplate(db, id, updates); err != nil {
-		response.Fail(c, "Failed to update template: "+err.Error(), nil)
+		apperrors.HandleError(c, apperrors.ErrUpdateFailedError.WithCause(err))
 		return
 	}
 
 	// Get updated template
 	updatedTemplate, err := models.GetJSTemplateByID(db, id)
 	if err != nil {
-		response.Fail(c, "Failed to get updated template: "+err.Error(), nil)
+		apperrors.HandleError(c, apperrors.ErrQueryFailedError.WithCause(err))
 		return
 	}
 
@@ -458,7 +454,7 @@ func (h *Handlers) DeleteJSTemplate(c *gin.Context) {
 	}
 
 	if err := models.DeleteJSTemplate(db, id); err != nil {
-		response.Fail(c, "Failed to delete template: "+err.Error(), nil)
+		apperrors.HandleError(c, apperrors.ErrDeleteFailedError.WithCause(err))
 		return
 	}
 
@@ -486,14 +482,14 @@ func (h *Handlers) ListDefaultJSTemplates(c *gin.Context) {
 
 	templates, err := models.ListJSTemplatesByType(db, "default", 0, offset, limitInt)
 	if err != nil {
-		response.Fail(c, "Failed to get default templates: "+err.Error(), nil)
+		apperrors.HandleError(c, apperrors.ErrQueryFailedError.WithCause(err))
 		return
 	}
 
 	// Get total count for pagination
 	total, err := models.GetJSTemplatesCount(db, "default", 0)
 	if err != nil {
-		response.Fail(c, "Failed to get total default templates count: "+err.Error(), nil)
+		apperrors.HandleError(c, apperrors.ErrQueryFailedError.WithCause(err))
 		return
 	}
 
@@ -532,14 +528,14 @@ func (h *Handlers) ListCustomJSTemplates(c *gin.Context) {
 
 	templates, err := models.ListJSTemplatesByType(db, "custom", userId, offset, limitInt)
 	if err != nil {
-		response.Fail(c, "Failed to get custom templates: "+err.Error(), nil)
+		apperrors.HandleError(c, apperrors.ErrQueryFailedError.WithCause(err))
 		return
 	}
 
 	// Get total count for pagination
 	total, err := models.GetJSTemplatesCount(db, "custom", userId)
 	if err != nil {
-		response.Fail(c, "Failed to get total custom templates count: "+err.Error(), nil)
+		apperrors.HandleError(c, apperrors.ErrQueryFailedError.WithCause(err))
 		return
 	}
 
@@ -579,14 +575,14 @@ func (h *Handlers) SearchJSTemplates(c *gin.Context) {
 
 	templates, err := models.SearchJSTemplates(db, keyword, userId, offset, limitInt)
 	if err != nil {
-		response.Fail(c, "Failed to search templates: "+err.Error(), nil)
+		apperrors.HandleError(c, apperrors.ErrQueryFailedError.WithCause(err))
 		return
 	}
 
 	// Get total count for pagination
 	total, err := models.GetJSTemplatesCount(db, "", userId)
 	if err != nil {
-		response.Fail(c, "Failed to get search results total count: "+err.Error(), nil)
+		apperrors.HandleError(c, apperrors.ErrQueryFailedError.WithCause(err))
 		return
 	}
 
@@ -752,14 +748,14 @@ func (h *Handlers) ListJSTemplateVersions(c *gin.Context) {
 
 	versions, err := models.GetJSTemplateVersions(db, templateID, offset, limitInt)
 	if err != nil {
-		response.Fail(c, "Failed to get versions: "+err.Error(), nil)
+		apperrors.HandleError(c, apperrors.ErrQueryFailedError.WithCause(err))
 		return
 	}
 
 	// 获取总数
 	var total int64
 	if err := db.Model(&models.JSTemplateVersion{}).Where("template_id = ?", templateID).Count(&total).Error; err != nil {
-		response.Fail(c, "Failed to get total count: "+err.Error(), nil)
+		apperrors.HandleError(c, apperrors.ErrQueryFailedError.WithCause(err))
 		return
 	}
 
@@ -857,7 +853,7 @@ func (h *Handlers) RollbackJSTemplateVersion(c *gin.Context) {
 	}
 
 	if err := models.RollbackJSTemplateVersion(db, templateID, versionID); err != nil {
-		response.Fail(c, "Failed to rollback: "+err.Error(), nil)
+		apperrors.HandleError(c, apperrors.ErrUpdateFailedError.WithCause(err))
 		return
 	}
 
@@ -872,7 +868,7 @@ func (h *Handlers) RollbackJSTemplateVersion(c *gin.Context) {
 	// 获取更新后的模板
 	updatedTemplate, err := models.GetJSTemplateByID(db, templateID)
 	if err != nil {
-		response.Fail(c, "Failed to get updated template: "+err.Error(), nil)
+		apperrors.HandleError(c, apperrors.ErrQueryFailedError.WithCause(err))
 		return
 	}
 
@@ -942,7 +938,7 @@ func (h *Handlers) PublishJSTemplateVersion(c *gin.Context) {
 		"grayscale": input.Grayscale,
 	}
 	if err := models.UpdateJSTemplateVersion(db, versionID, updates); err != nil {
-		response.Fail(c, "Failed to publish version: "+err.Error(), nil)
+		apperrors.HandleError(c, apperrors.ErrUpdateFailedError.WithCause(err))
 		return
 	}
 
@@ -953,7 +949,7 @@ func (h *Handlers) PublishJSTemplateVersion(c *gin.Context) {
 			"version": template.Version + 1,
 		}
 		if err := models.UpdateJSTemplate(db, templateID, templateUpdates); err != nil {
-			response.Fail(c, "Failed to update template: "+err.Error(), nil)
+			apperrors.HandleError(c, apperrors.ErrUpdateFailedError.WithCause(err))
 			return
 		}
 	}
