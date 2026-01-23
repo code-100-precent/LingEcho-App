@@ -102,7 +102,6 @@ func (h *Handlers) CreateUserQuota(c *gin.Context) {
 		return
 	}
 
-	// 检查是否已存在
 	var existing models.UserQuota
 	if err := h.db.Where("user_id = ? AND quota_type = ?", user.ID, req.QuotaType).First(&existing).Error; err == nil {
 		response.Fail(c, "配额已存在", "该类型的配额已配置，请使用更新接口")
@@ -224,10 +223,8 @@ func (h *Handlers) ListGroupQuotas(c *gin.Context) {
 		return
 	}
 
-	// 更新所有配额的使用量（从 UsageRecord 表实时统计）
 	for i := range quotas {
 		models.UpdateGroupQuotaUsage(h.db, uint(id), quotas[i].QuotaType)
-		// 重新获取更新后的配额
 		updatedQuota, _ := models.GetGroupQuota(h.db, uint(id), quotas[i].QuotaType)
 		if updatedQuota != nil {
 			quotas[i] = *updatedQuota
@@ -415,10 +412,7 @@ func (h *Handlers) DeleteGroupQuota(c *gin.Context) {
 		response.Fail(c, "参数错误", "无效的组织ID")
 		return
 	}
-
 	quotaType := models.QuotaType(c.Param("type"))
-
-	// 检查权限
 	var group models.Group
 	if err := h.db.First(&group, id).Error; err != nil {
 		response.Fail(c, "组织不存在", nil)
