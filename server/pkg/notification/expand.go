@@ -1,6 +1,6 @@
 package notification
 
-// 钉钉推送
+// DingTalk push notification
 type DingTalkConfig struct {
 	WebhookURL string
 	Secret     string
@@ -11,16 +11,16 @@ type DingTalkNotification struct {
 }
 
 func (d *DingTalkNotification) SendText(content string) error {
-	// TODO: 实现钉钉文本消息发送
+	// TODO: Implement DingTalk text message sending
 	return nil
 }
 
 func (d *DingTalkNotification) SendMarkdown(title, content string) error {
-	// TODO: 实现钉钉Markdown消息发送
+	// TODO: Implement DingTalk Markdown message sending
 	return nil
 }
 
-// 企业微信推送
+// WeChat Work push notification
 type WeChatWorkConfig struct {
 	CorpID  string
 	AgentID string
@@ -31,13 +31,13 @@ type WeChatWorkNotification struct {
 	config WeChatWorkConfig
 }
 
-// 飞书推送
+// Feishu push notification
 type FeishuConfig struct {
 	WebhookURL string
 	Secret     string
 }
 
-// 邮件模板引擎
+// Email template engine
 type EmailTemplate struct {
 	Name     string
 	Subject  string
@@ -50,6 +50,6 @@ type TemplateEngine struct {
 }
 
 func (t *TemplateEngine) Render(templateName string, data interface{}) (string, string, error) {
-	// TODO: 实现邮件模板渲染
+	// TODO: Implement email template rendering
 	return "", "", nil
 }

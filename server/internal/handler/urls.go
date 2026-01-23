@@ -88,10 +88,10 @@ func NewHandlers(db *gorm.DB) *Handlers {
 		}
 	}
 
-	// 初始化IP地理位置服务
+	// Initialize IP geolocation service
 	ipLocationService := utils.NewIPLocationService(logger.Lg)
 
-	// 初始化SIP handler（SipServer可以通过SetSipServer方法设置）
+	// Initialize SIP handler (SipServer can be set via SetSipServer method)
 	sipHandler := NewSipHandler(db, nil)
 
 	return &Handlers{
@@ -103,7 +103,7 @@ func NewHandlers(db *gorm.DB) *Handlers {
 	}
 }
 
-// SetSipServer 设置SIP服务器（用于依赖注入）
+// SetSipServer sets SIP server (for dependency injection)
 func (h *Handlers) SetSipServer(sipServer SipServerInterface) {
 	if h.sipHandler != nil {
 		h.sipHandler.sipServer = sipServer
@@ -358,28 +358,28 @@ func (h *Handlers) registerOTARoutes(r *gin.RouterGroup) {
 	}
 }
 
-// registerDeviceRoutes Device Module (与 xiaozhi-esp32 完全一致)
+// registerDeviceRoutes Device Module (completely consistent with xiaozhi-esp32)
 func (h *Handlers) registerDeviceRoutes(r *gin.RouterGroup) {
 	device := r.Group("device")
 
-	// 获取设备配置接口（不需要认证，供xiaozhi-server调用）
+	// Get device configuration interface (no authentication required, for xiaozhi-server calls)
 	device.GET("/config/:deviceId", h.GetDeviceConfig)
 
-	device.Use(models.AuthRequired) // 需要用户登录
+	device.Use(models.AuthRequired) // Requires user login
 	{
-		// 绑定设备（激活设备）- 与 xiaozhi-esp32 路径完全一致
+		// Bind device (activate device) - completely consistent with xiaozhi-esp32 path
 		device.POST("/bind/:agentId/:deviceCode", h.BindDevice)
 
-		// 获取已绑定设备
+		// Get bound devices
 		device.GET("/bind/:agentId", h.GetUserDevices)
 
-		// 解绑设备
+		// Unbind device
 		device.POST("/unbind", h.UnbindDevice)
 
-		// 更新设备信息
+		// Update device information
 		device.PUT("/update/:id", h.UpdateDeviceInfo)
 
-		// 手动添加设备
+		// Manually add device
 		device.POST("/manual-add", h.ManualAddDevice)
 	}
 }
@@ -389,61 +389,61 @@ func (h *Handlers) registerGroupRoutes(r *gin.RouterGroup) {
 	group := r.Group("group")
 	group.Use(models.AuthRequired)
 	{
-		// 组织管理
+		// Organization management
 		group.POST("", h.CreateGroup)
 		group.GET("", h.ListGroups)
 
-		// 搜索用户 - 必须在 /:id 之前
+		// Search users - must be before /:id
 		group.GET("/search-users", h.SearchUsers)
 
-		// 邀请管理 - 必须在 /:id 之前，否则会被匹配为 id=invitations
+		// Invitation management - must be before /:id, otherwise will be matched as id=invitations
 		group.GET("/invitations", h.ListInvitations)
 		group.POST("/invitations/:id/accept", h.AcceptInvitation)
 		group.POST("/invitations/:id/reject", h.RejectInvitation)
 
-		// 概览配置管理 - 必须在 /:id 之前注册，避免路由冲突
+		// Overview configuration management - must be registered before /:id to avoid route conflicts
 		group.GET("/:id/overview/config", h.GetOverviewConfig)
 		group.POST("/:id/overview/config", h.SaveOverviewConfig)
 		group.PUT("/:id/overview/config", h.SaveOverviewConfig)
 		group.DELETE("/:id/overview/config", h.DeleteOverviewConfig)
 
-		// 组织统计数据 - 必须在 /:id 之前注册
+		// Organization statistics - must be registered before /:id
 		group.GET("/:id/statistics", h.GetGroupStatistics)
 
-		// 组织成员管理 - 必须在 /:id 之前注册
+		// Organization member management - must be registered before /:id
 		group.POST("/:id/leave", h.LeaveGroup)
 		group.DELETE("/:id/members/:memberId", h.RemoveMember)
 		group.PUT("/:id/members/:memberId/role", h.UpdateMemberRole)
 
-		// 邀请用户 - 必须在 /:id 之前注册
+		// Invite users - must be registered before /:id
 		group.POST("/:id/invite", h.InviteUser)
 
-		// 获取组织共享的资源 - 必须在 /:id 之前注册
+		// Get organization shared resources - must be registered before /:id
 		group.GET("/:id/resources", h.GetGroupSharedResources)
 
-		// 上传组织头像 - 必须在 /:id 之前注册
+		// Upload organization avatar - must be registered before /:id
 		group.POST("/:id/avatar", h.UploadGroupAvatar)
 
-		// 组织详情和管理 - 参数路由放在最后
+		// Organization details and management - parameter routes at the end
 		group.GET("/:id", h.GetGroup)
 		group.PUT("/:id", h.UpdateGroup)
 		group.DELETE("/:id", h.DeleteGroup)
 	}
 }
 
-// registerQuotaRoutes 注册配额路由
+// registerQuotaRoutes registers quota routes
 func (h *Handlers) registerQuotaRoutes(r *gin.RouterGroup) {
 	quota := r.Group("quota")
 	quota.Use(models.AuthRequired)
 	{
-		// 用户配额管理
+		// User quota management
 		quota.GET("/user", h.ListUserQuotas)
 		quota.GET("/user/:type", h.GetUserQuota)
 		quota.POST("/user", h.CreateUserQuota)
 		quota.PUT("/user/:type", h.UpdateUserQuota)
 		quota.DELETE("/user/:type", h.DeleteUserQuota)
 
-		// 组织配额管理
+		// Organization quota management
 		quota.GET("/group/:id", h.ListGroupQuotas)
 		quota.GET("/group/:id/:type", h.GetGroupQuota)
 		quota.POST("/group/:id", h.CreateGroupQuota)
@@ -452,12 +452,12 @@ func (h *Handlers) registerQuotaRoutes(r *gin.RouterGroup) {
 	}
 }
 
-// registerAlertRoutes 注册告警路由
+// registerAlertRoutes registers alert routes
 func (h *Handlers) registerAlertRoutes(r *gin.RouterGroup) {
 	alert := r.Group("alert")
 	alert.Use(models.AuthRequired)
 	{
-		// 告警规则管理
+		// Alert rule management
 		alert.POST("/rules", h.CreateAlertRule)
 		alert.GET("/rules", h.ListAlertRules)
 		alert.GET("/rules/:id", h.GetAlertRule)

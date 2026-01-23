@@ -13,7 +13,7 @@ import (
 	"github.com/code-100-precent/LingEcho/pkg/utils"
 )
 
-// Config 主配置结构
+// Config main configuration structure
 type Config struct {
 	MachineID    int64              `env:"MACHINE_ID"`
 	Server       ServerConfig       `mapstructure:"server"`
@@ -27,7 +27,7 @@ type Config struct {
 	Middleware   MiddlewareConfig   `mapstructure:"middleware"`
 }
 
-// ServerConfig 服务器配置
+// ServerConfig server configuration
 type ServerConfig struct {
 	Name          string `env:"SERVER_NAME"`
 	Desc          string `env:"SERVER_DESC"`
@@ -46,13 +46,13 @@ type ServerConfig struct {
 	SSLKeyFile    string `env:"SSL_KEY_FILE"`
 }
 
-// DatabaseConfig 数据库配置
+// DatabaseConfig database configuration
 type DatabaseConfig struct {
 	Driver string `env:"DB_DRIVER"`
 	DSN    string `env:"DSN"`
 }
 
-// AuthConfig 认证配置
+// AuthConfig authentication configuration
 type AuthConfig struct {
 	Header           string `env:"AUTH_HEADER"`
 	SessionSecret    string `env:"SESSION_SECRET"`
@@ -60,7 +60,7 @@ type AuthConfig struct {
 	APISecretKey     string `env:"API_SECRET_KEY"`
 }
 
-// ServicesConfig 服务配置
+// ServicesConfig services configuration
 type ServicesConfig struct {
 	LLM           LLMConfig               `mapstructure:"llm"`
 	Mail          notification.MailConfig `mapstructure:"mail"`
@@ -69,14 +69,14 @@ type ServicesConfig struct {
 	Storage       StorageConfig           `mapstructure:"storage"`
 }
 
-// LLMConfig LLM服务配置
+// LLMConfig LLM service configuration
 type LLMConfig struct {
 	APIKey  string `env:"LLM_API_KEY"`
 	BaseURL string `env:"LLM_BASE_URL"`
 	Model   string `env:"LLM_MODEL"`
 }
 
-// KnowledgeBaseConfig 知识库配置
+// KnowledgeBaseConfig knowledge base configuration
 type KnowledgeBaseConfig struct {
 	Enabled       bool                `env:"KNOWLEDGE_BASE_ENABLED"`
 	Provider      string              `env:"KNOWLEDGE_BASE_PROVIDER"`
@@ -88,7 +88,7 @@ type KnowledgeBaseConfig struct {
 	Neo4j         Neo4jConfig         `mapstructure:"neo4j"`
 }
 
-// BailianConfig 百炼配置
+// BailianConfig Bailian configuration
 type BailianConfig struct {
 	AccessKeyId     string `env:"BAILIAN_ACCESS_KEY_ID"`
 	AccessKeySecret string `env:"BAILIAN_ACCESS_KEY_SECRET"`
@@ -101,7 +101,7 @@ type BailianConfig struct {
 	SinkType        string `env:"BAILIAN_SINK_TYPE"`
 }
 
-// MilvusConfig Milvus配置
+// MilvusConfig Milvus configuration
 type MilvusConfig struct {
 	Address    string `env:"MILVUS_ADDRESS"`
 	Username   string `env:"MILVUS_USERNAME"`
@@ -110,7 +110,7 @@ type MilvusConfig struct {
 	Dimension  int    `env:"MILVUS_DIMENSION"`
 }
 
-// QdrantConfig Qdrant配置
+// QdrantConfig Qdrant configuration
 type QdrantConfig struct {
 	BaseURL    string `env:"QDRANT_BASE_URL"`
 	APIKey     string `env:"QDRANT_API_KEY"`
@@ -118,7 +118,7 @@ type QdrantConfig struct {
 	Dimension  int    `env:"QDRANT_DIMENSION"`
 }
 
-// ElasticsearchConfig Elasticsearch配置
+// ElasticsearchConfig Elasticsearch configuration
 type ElasticsearchConfig struct {
 	BaseURL  string `env:"ELASTICSEARCH_BASE_URL"`
 	Username string `env:"ELASTICSEARCH_USERNAME"`
@@ -126,7 +126,7 @@ type ElasticsearchConfig struct {
 	Index    string `env:"ELASTICSEARCH_INDEX"`
 }
 
-// PineconeConfig Pinecone配置
+// PineconeConfig Pinecone configuration
 type PineconeConfig struct {
 	APIKey    string `env:"PINECONE_API_KEY"`
 	BaseURL   string `env:"PINECONE_BASE_URL"`
@@ -134,7 +134,7 @@ type PineconeConfig struct {
 	Dimension int    `env:"PINECONE_DIMENSION"`
 }
 
-// Neo4jConfig Neo4j配置
+// Neo4jConfig Neo4j configuration
 type Neo4jConfig struct {
 	Enabled  bool   `env:"NEO4J_ENABLED"`
 	URI      string `env:"NEO4J_URI"`
@@ -143,13 +143,13 @@ type Neo4jConfig struct {
 	Database string `env:"NEO4J_DATABASE"`
 }
 
-// VoiceConfig 语音服务配置
+// VoiceConfig voice service configuration
 type VoiceConfig struct {
 	Qiniu  QiniuVoiceConfig  `mapstructure:"qiniu"`
 	Xunfei XunfeiVoiceConfig `mapstructure:"xunfei"`
 }
 
-// QiniuVoiceConfig 七牛语音配置
+// QiniuVoiceConfig Qiniu voice configuration
 type QiniuVoiceConfig struct {
 	ASRAPIKey  string `env:"QINIU_ASR_API_KEY"`
 	ASRBaseURL string `env:"QINIU_ASR_BASE_URL"`
@@ -157,14 +157,14 @@ type QiniuVoiceConfig struct {
 	TTSBaseURL string `env:"QINIU_TTS_BASE_URL"`
 }
 
-// XunfeiVoiceConfig 讯飞语音配置
+// XunfeiVoiceConfig Xunfei voice configuration
 type XunfeiVoiceConfig struct {
 	WSAppId     string `env:"XUNFEI_WS_APP_ID"`
 	WSAPIKey    string `env:"XUNFEI_WS_API_KEY"`
 	WSAPISecret string `env:"XUNFEI_WS_API_SECRET"`
 }
 
-// StorageConfig 存储配置
+// StorageConfig storage configuration
 type StorageConfig struct {
 	BaseURL   string `env:"LINGSTORAGE_BASE_URL"`
 	APIKey    string `env:"LINGSTORAGE_API_KEY"`
@@ -172,12 +172,12 @@ type StorageConfig struct {
 	Bucket    string `env:"LINGSTORAGE_BUCKET"`
 }
 
-// IntegrationsConfig 集成配置
+// IntegrationsConfig integrations configuration
 type IntegrationsConfig struct {
-	// 可以在这里添加其他第三方集成配置
+	// Other third-party integration configurations can be added here
 }
 
-// FeaturesConfig 功能特性配置
+// FeaturesConfig feature flags configuration
 type FeaturesConfig struct {
 	SearchEnabled   bool   `env:"SEARCH_ENABLED"`
 	SearchPath      string `env:"SEARCH_PATH"`
@@ -188,41 +188,41 @@ type FeaturesConfig struct {
 	BackupSchedule  string `env:"BACKUP_SCHEDULE"`
 }
 
-// MiddlewareConfig 中间件配置
+// MiddlewareConfig middleware configuration
 type MiddlewareConfig struct {
-	// 限流配置
+	// Rate limiting configuration
 	RateLimit RateLimiterConfig
-	// 超时配置
+	// Timeout configuration
 	Timeout TimeoutConfig
-	// 熔断器配置
+	// Circuit breaker configuration
 	CircuitBreaker CircuitBreakerConfig
-	// 是否启用各个中间件
+	// Whether to enable each middleware
 	EnableRateLimit      bool `env:"ENABLE_RATE_LIMIT"`
 	EnableTimeout        bool `env:"ENABLE_TIMEOUT"`
 	EnableCircuitBreaker bool `env:"ENABLE_CIRCUIT_BREAKER"`
 	EnableOperationLog   bool `env:"ENABLE_OPERATION_LOG"`
 }
 
-// RateLimiterConfig 限流配置
+// RateLimiterConfig rate limiting configuration
 type RateLimiterConfig struct {
-	GlobalRPS    int           `env:"RATE_LIMIT_GLOBAL_RPS"`   // 全局每秒请求数
-	GlobalBurst  int           `env:"RATE_LIMIT_GLOBAL_BURST"` // 全局突发请求数
-	GlobalWindow time.Duration // 全局时间窗口
-	UserRPS      int           `env:"RATE_LIMIT_USER_RPS"`   // 用户每秒请求数
-	UserBurst    int           `env:"RATE_LIMIT_USER_BURST"` // 用户突发请求数
-	UserWindow   time.Duration // 用户时间窗口
-	IPRPS        int           `env:"RATE_LIMIT_IP_RPS"`   // IP每秒请求数
-	IPBurst      int           `env:"RATE_LIMIT_IP_BURST"` // IP突发请求数
-	IPWindow     time.Duration // IP时间窗口
+	GlobalRPS    int           `env:"RATE_LIMIT_GLOBAL_RPS"`   // Global requests per second
+	GlobalBurst  int           `env:"RATE_LIMIT_GLOBAL_BURST"` // Global burst requests
+	GlobalWindow time.Duration // Global time window
+	UserRPS      int           `env:"RATE_LIMIT_USER_RPS"`   // User requests per second
+	UserBurst    int           `env:"RATE_LIMIT_USER_BURST"` // User burst requests
+	UserWindow   time.Duration // User time window
+	IPRPS        int           `env:"RATE_LIMIT_IP_RPS"`   // IP requests per second
+	IPBurst      int           `env:"RATE_LIMIT_IP_BURST"` // IP burst requests
+	IPWindow     time.Duration // IP time window
 }
 
-// TimeoutConfig 超时配置
+// TimeoutConfig timeout configuration
 type TimeoutConfig struct {
 	DefaultTimeout   time.Duration `env:"DEFAULT_TIMEOUT"`
 	FallbackResponse interface{}
 }
 
-// CircuitBreakerConfig 熔断器配置
+// CircuitBreakerConfig circuit breaker configuration
 type CircuitBreakerConfig struct {
 	FailureThreshold      int           `env:"CIRCUIT_BREAKER_FAILURE_THRESHOLD"`
 	SuccessThreshold      int           `env:"CIRCUIT_BREAKER_SUCCESS_THRESHOLD"`
@@ -236,15 +236,15 @@ var GlobalConfig *Config
 var GlobalStore *lingstorage.Client
 
 func Load() error {
-	// 1. 根据环境加载 .env 文件（如果不存在也不报错，使用默认值）s
+	// 1. Load .env file based on environment (don't error if it doesn't exist, use default values)
 	env := os.Getenv("APP_ENV")
 	err := utils.LoadEnv(env)
 	if err != nil {
-		// .env文件不存在时只记录日志，不影响启动
+		// Only log when .env file doesn't exist, don't affect startup
 		log.Printf("Note: .env file not found or failed to load: %v (using default values)", err)
 	}
 
-	// 2. 加载全局配置
+	// 2. Load global configuration
 	GlobalConfig = &Config{
 		MachineID: utils.GetIntEnv("MACHINE_ID"),
 		Server: ServerConfig{
@@ -383,19 +383,19 @@ func Load() error {
 	return nil
 }
 
-// Validate 验证配置的有效性
+// Validate validates the configuration
 func (c *Config) Validate() error {
-	// 验证数据库配置
+	// Validate database configuration
 	if c.Database.DSN == "" {
 		return errors.New("database DSN is required")
 	}
 
-	// 验证服务器配置
+	// Validate server configuration
 	if c.Server.Addr == "" {
 		return errors.New("server address is required")
 	}
 
-	// 验证知识库配置
+	// Validate knowledge base configuration
 	if c.Services.KnowledgeBase.Enabled {
 		if c.Services.KnowledgeBase.Provider == "" {
 			return errors.New("knowledge base provider is required when enabled")
@@ -425,7 +425,7 @@ func (c *Config) Validate() error {
 		}
 	}
 
-	// 验证Neo4j配置
+	// Validate Neo4j configuration
 	if c.Services.KnowledgeBase.Neo4j.Enabled {
 		if c.Services.KnowledgeBase.Neo4j.URI == "" {
 			return errors.New("neo4j URI is required when enabled")
@@ -435,7 +435,7 @@ func (c *Config) Validate() error {
 	return nil
 }
 
-// getStringOrDefault 获取环境变量值，如果为空则返回默认值
+// getStringOrDefault gets environment variable value, returns default if empty
 func getStringOrDefault(key, defaultValue string) string {
 	value := utils.GetEnv(key)
 	if value == "" {
@@ -444,7 +444,7 @@ func getStringOrDefault(key, defaultValue string) string {
 	return value
 }
 
-// getBoolOrDefault 获取布尔环境变量值，如果为空则返回默认值
+// getBoolOrDefault gets boolean environment variable value, returns default if empty
 func getBoolOrDefault(key string, defaultValue bool) bool {
 	value := utils.GetEnv(key)
 	if value == "" {
@@ -453,7 +453,7 @@ func getBoolOrDefault(key string, defaultValue bool) bool {
 	return utils.GetBoolEnv(key)
 }
 
-// getIntOrDefault 获取整数环境变量值，如果为空则返回默认值
+// getIntOrDefault gets integer environment variable value, returns default if empty
 func getIntOrDefault(key string, defaultValue int) int {
 	value := utils.GetIntEnv(key)
 	if value == 0 {
@@ -462,7 +462,7 @@ func getIntOrDefault(key string, defaultValue int) int {
 	return int(value)
 }
 
-// generateDefaultSessionSecret 生成默认的会话密钥（仅用于开发环境）
+// generateDefaultSessionSecret generates default session secret (for development only)
 func generateDefaultSessionSecret() string {
 	if secret := utils.GetEnv("SESSION_SECRET"); secret != "" {
 		return secret
@@ -470,7 +470,7 @@ func generateDefaultSessionSecret() string {
 	return "default-secret-key-change-in-production-" + utils.RandText(16)
 }
 
-// loadCacheConfig 加载缓存配置，设置所有默认值
+// loadCacheConfig loads cache configuration with all default values
 func loadCacheConfig() cache.Config {
 	cacheType := utils.GetEnv("CACHE_TYPE")
 	if cacheType == "" {
@@ -529,7 +529,7 @@ func loadCacheConfig() cache.Config {
 	}
 }
 
-// loadMiddlewareConfig 加载中间件配置
+// loadMiddlewareConfig loads middleware configuration
 func loadMiddlewareConfig() MiddlewareConfig {
 	parseDuration := func(s string, defaultVal time.Duration) time.Duration {
 		if s == "" {
@@ -561,7 +561,7 @@ func loadMiddlewareConfig() MiddlewareConfig {
 				DefaultTimeout: 30 * time.Second,
 				FallbackResponse: map[string]interface{}{
 					"error":   "service_unavailable",
-					"message": "服务暂时不可用，请稍后重试",
+					"message": "Service temporarily unavailable, please try again later",
 					"code":    503,
 				},
 			},
@@ -594,7 +594,7 @@ func loadMiddlewareConfig() MiddlewareConfig {
 				DefaultTimeout: 60 * time.Second,
 				FallbackResponse: map[string]interface{}{
 					"error":   "service_unavailable",
-					"message": "服务暂时不可用，请稍后重试",
+					"message": "Service temporarily unavailable, please try again later",
 					"code":    503,
 				},
 			},

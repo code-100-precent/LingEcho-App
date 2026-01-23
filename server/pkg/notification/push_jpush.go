@@ -20,7 +20,7 @@ func NewJPush(cfg JPushConfig, cli JPushClient) *JPush { return &JPush{cfg: cfg,
 
 func (j *JPush) PushToAlias(ctx context.Context, alias []string, title, content string, extras map[string]interface{}) error {
 	if j.cli == nil {
-		return context.Canceled // 表示未配置客户端
+		return context.Canceled // Indicates client not configured
 	}
 	aud := map[string]interface{}{"alias": alias}
 	return j.cli.Push(ctx, title, content, aud, extras)

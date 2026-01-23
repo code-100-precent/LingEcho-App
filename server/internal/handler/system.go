@@ -92,7 +92,7 @@ func (h *Handlers) SystemInit(c *gin.Context) {
 	})
 }
 
-// getVoiceCloneConfig 获取音色克隆配置（先从数据库读，再从.env读）
+// getVoiceCloneConfig gets voice clone configuration (read from database first, then from .env)
 func (h *Handlers) getVoiceCloneConfig(provider string) map[string]interface{} {
 	var configKey string
 	var envConfig map[string]interface{}
@@ -100,7 +100,7 @@ func (h *Handlers) getVoiceCloneConfig(provider string) map[string]interface{} {
 	switch provider {
 	case "xunfei":
 		configKey = constants.KEY_VOICE_CLONE_XUNFEI_CONFIG
-		// 从 .env 读取配置
+		// Read configuration from .env
 		envConfig = map[string]interface{}{
 			"app_id":        utils.GetEnv("XUNFEI_APP_ID"),
 			"api_key":       utils.GetEnv("XUNFEI_API_KEY"),
@@ -114,7 +114,7 @@ func (h *Handlers) getVoiceCloneConfig(provider string) map[string]interface{} {
 		}
 	case "volcengine":
 		configKey = constants.KEY_VOICE_CLONE_VOLCENGINE_CONFIG
-		// 从 .env 读取配置
+		// Read configuration from .env
 		envConfig = map[string]interface{}{
 			"app_id":         utils.GetEnv("VOLCENGINE_CLONE_APP_ID"),
 			"token":          utils.GetEnv("VOLCENGINE_CLONE_TOKEN"),
@@ -145,19 +145,19 @@ func (h *Handlers) getVoiceCloneConfig(provider string) map[string]interface{} {
 		return nil
 	}
 
-	// 先从数据库读取
+	// Read from database first
 	dbConfigStr := utils.GetValue(h.db, configKey)
 	if dbConfigStr != "" {
 		var dbConfig map[string]interface{}
 		if err := json.Unmarshal([]byte(dbConfigStr), &dbConfig); err == nil {
-			// 检查是否配置完整（至少要有必需的字段）
+			// Check if configuration is complete (must have required fields)
 			if h.isConfigValid(provider, dbConfig) {
 				return dbConfig
 			}
 		}
 	}
 
-	// 如果数据库没有或配置不完整，从 .env 读取
+	// If database doesn't have it or configuration is incomplete, read from .env
 	if h.isConfigValid(provider, envConfig) {
 		return envConfig
 	}

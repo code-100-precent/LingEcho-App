@@ -10,19 +10,19 @@ import (
 	"github.com/hraban/opus"
 )
 
-// createOPUSDecode 创建 OPUS 解码器
-// OPUS 标准采样率为 48000Hz，但也支持 8000, 12000, 16000, 24000, 48000
+// createOPUSDecode creates OPUS decoder
+// OPUS standard sample rate is 48000Hz, but also supports 8000, 12000, 16000, 24000, 48000
 func createOPUSDecode(src, pcm media.CodecConfig) media.EncoderFunc {
-	// 使用配置的采样率，如果未设置则使用 OPUS 标准采样率 48000Hz
+	// Use configured sample rate, if not set use OPUS standard sample rate 48000Hz
 	sourceSampleRate := src.SampleRate
 	if sourceSampleRate == 0 {
-		sourceSampleRate = 48000 // OPUS 标准采样率
+		sourceSampleRate = 48000 // OPUS standard sample rate
 	}
 
-	// 确定声道数
+	// Determine number of channels
 	channels := src.Channels
 	if channels == 0 {
-		channels = 1 // 默认单声道
+		channels = 1 // Default mono
 	}
 
 	// 创建 OPUS 解码器

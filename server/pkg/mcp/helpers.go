@@ -10,49 +10,49 @@ import (
 	"go.uber.org/zap"
 )
 
-// SafeGetString 安全地从参数中获取字符串值
+// SafeGetString safely gets string value from arguments
 func SafeGetString(arguments map[string]any, key string, required bool) (string, error) {
 	value, exists := arguments[key]
 	if !exists {
 		if required {
-			return "", fmt.Errorf("缺少必需参数: %s", key)
+			return "", fmt.Errorf("missing required parameter: %s", key)
 		}
 		return "", nil
 	}
 
 	if value == nil {
 		if required {
-			return "", fmt.Errorf("参数 %s 不能为空", key)
+			return "", fmt.Errorf("parameter %s cannot be null", key)
 		}
 		return "", nil
 	}
 
 	strValue, ok := value.(string)
 	if !ok {
-		return "", fmt.Errorf("参数 %s 类型错误,期望 string,实际 %T", key, value)
+		return "", fmt.Errorf("parameter %s type error, expected string, got %T", key, value)
 	}
 
 	return strValue, nil
 }
 
-// SafeGetNumber 安全地从参数中获取数字值
+// SafeGetNumber safely gets number value from arguments
 func SafeGetNumber(arguments map[string]any, key string, required bool, defaultValue float64) (float64, error) {
 	value, exists := arguments[key]
 	if !exists {
 		if required {
-			return 0, fmt.Errorf("缺少必需参数: %s", key)
+			return 0, fmt.Errorf("missing required parameter: %s", key)
 		}
 		return defaultValue, nil
 	}
 
 	if value == nil {
 		if required {
-			return 0, fmt.Errorf("参数 %s 不能为空", key)
+			return 0, fmt.Errorf("parameter %s cannot be null", key)
 		}
 		return defaultValue, nil
 	}
 
-	// 尝试多种数字类型
+	// Try multiple number types
 	switch v := value.(type) {
 	case float64:
 		return v, nil
@@ -65,23 +65,23 @@ func SafeGetNumber(arguments map[string]any, key string, required bool, defaultV
 	case int32:
 		return float64(v), nil
 	default:
-		return 0, fmt.Errorf("参数 %s 类型错误,期望 number,实际 %T", key, value)
+		return 0, fmt.Errorf("parameter %s type error, expected number, actual %T", key, value)
 	}
 }
 
-// SafeGetBool 安全地从参数中获取布尔值
+// SafeGetBool safely gets boolean value from parameters
 func SafeGetBool(arguments map[string]any, key string, required bool, defaultValue bool) (bool, error) {
 	value, exists := arguments[key]
 	if !exists {
 		if required {
-			return false, fmt.Errorf("缺少必需参数: %s", key)
+			return false, fmt.Errorf("missing required parameter: %s", key)
 		}
 		return defaultValue, nil
 	}
 
 	if value == nil {
 		if required {
-			return false, fmt.Errorf("参数 %s 不能为空", key)
+			return false, fmt.Errorf("parameter %s cannot be null", key)
 		}
 		return defaultValue, nil
 	}

@@ -8,20 +8,20 @@ import (
 	"gorm.io/gorm"
 )
 
-// FlexibleInt 可以接受字符串或数字的整数类型
+// FlexibleInt integer type that can accept both string and number formats
 type FlexibleInt int
 
-// UnmarshalJSON 实现自定义JSON解析，支持字符串和数字两种格式
+// UnmarshalJSON implements custom JSON parsing, supporting both string and number formats
 func (fi *FlexibleInt) UnmarshalJSON(data []byte) error {
-	// 处理null值
+	// Handle null values
 	if string(data) == "null" {
 		return nil
 	}
 
-	// 尝试解析为字符串
+	// Try parsing as string
 	var str string
 	if err := json.Unmarshal(data, &str); err == nil {
-		// 如果是字符串，尝试转换为整数
+		// If it's a string, try converting to integer
 		if str == "" {
 			return nil
 		}

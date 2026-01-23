@@ -130,7 +130,7 @@ func main() {
 	utils.InitGlobalDistributedLock()
 
 	// Initialize global captcha manager
-	captcha.InitGlobalCaptchaManager(nil) // 使用内存存储，可以替换为Redis存储
+	captcha.InitGlobalCaptchaManager(nil) // Use memory storage, can be replaced with Redis storage
 
 	// Initialize global login security manager
 	utils.InitGlobalLoginSecurityManager(logger.Lg)
@@ -255,7 +255,7 @@ func main() {
 		} else {
 			logger.Info("Neo4j graph database initialized successfully")
 			task.InitGraphProcessor(graphStore, true)
-			// 设置全局默认的图存储实例，供实时助手等组件读取用户画像
+			// Set global default graph storage instance for real-time assistants and other components to read user profiles
 			graph.SetDefaultStore(graphStore)
 			defer func() {
 				if err := graphStore.Close(); err != nil {

@@ -121,7 +121,7 @@ func (s *SeedService) seedConfigs() error {
 }
 
 func (s *SeedService) seedAdminUsers() error {
-	// 超级管理员权限（所有权限）
+	// Super admin permissions (all permissions)
 	allPermissions := `["*"]`
 
 	defaultAdmins := []models.User{
