@@ -281,7 +281,7 @@ func (h *Handlers) handleUserSigninByEmail(c *gin.Context) {
 			securityURL := ""       // 可以设置为安全设置页面的URL
 			changePasswordURL := "" // 可以设置为修改密码页面的URL
 
-			err := notification.NewMailNotification(config.GlobalConfig.Mail).SendNewDeviceLoginAlert(
+			err := notification.NewMailNotification(config.GlobalConfig.Services.Mail).SendNewDeviceLoginAlert(
 				user.Email,
 				displayName,
 				loginTime,
@@ -703,7 +703,7 @@ func (h *Handlers) handleUserSigninByPassword(c *gin.Context) {
 			securityURL := ""       // 可以设置为安全设置页面的URL
 			changePasswordURL := "" // 可以设置为修改密码页面的URL
 
-			err := notification.NewMailNotification(config.GlobalConfig.Mail).SendNewDeviceLoginAlert(
+			err := notification.NewMailNotification(config.GlobalConfig.Services.Mail).SendNewDeviceLoginAlert(
 				user.Email,
 				displayName,
 				loginTime,
@@ -1643,7 +1643,7 @@ func (h *Handlers) handleSendDeviceVerificationCode(c *gin.Context) {
 
 	// 发送邮件
 	go func() {
-		err := notification.NewMailNotification(config.GlobalConfig.Mail).SendDeviceVerificationCode(user.Email, user.DisplayName, code, form.DeviceID)
+		err := notification.NewMailNotification(config.GlobalConfig.Services.Mail).SendDeviceVerificationCode(user.Email, user.DisplayName, code, form.DeviceID)
 		if err != nil {
 			logger.Error("Failed to send device verification email", zap.Error(err), zap.String("email", user.Email))
 		}
@@ -1996,7 +1996,7 @@ func (h *Handlers) handleUploadAvatar(c *gin.Context) {
 	//}
 	reader, err := config.GlobalStore.UploadFromReader(&lingstorage.UploadFromReaderRequest{
 		Reader:   file,
-		Bucket:   config.GlobalConfig.LingstorageBucket,
+		Bucket:   config.GlobalConfig.Services.Storage.Bucket,
 		Filename: fileName,
 		Key:      fileName,
 	})
@@ -2090,7 +2090,7 @@ func (h *Handlers) handleSendEmailCode(context *gin.Context) {
 	text := utils.RandNumberText(6)
 	utils.GlobalCache.Add(req.Email, text)
 	go func() {
-		err := notification.NewMailNotification(config.GlobalConfig.Mail).SendVerificationCode(req.Email, text)
+		err := notification.NewMailNotification(config.GlobalConfig.Services.Mail).SendVerificationCode(req.Email, text)
 		if err != nil {
 			LingEcho.AbortWithJSONError(context, http.StatusBadRequest, err)
 			return

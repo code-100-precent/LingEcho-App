@@ -33,7 +33,7 @@ func main() {
 	}
 
 	// 4. Initialize logging
-	err := logger.Init(&config.GlobalConfig.Log, config.GlobalConfig.Mode)
+	err := logger.Init(&config.GlobalConfig.Log, config.GlobalConfig.Server.Mode)
 	if err != nil {
 		panic(err)
 	}
@@ -43,7 +43,7 @@ func main() {
 	logger.Info("Starting MCP server",
 		zap.String("transport", transport),
 		zap.String("port", port),
-		zap.String("mode", config.GlobalConfig.Mode),
+		zap.String("mode", config.GlobalConfig.Server.Mode),
 	)
 
 	// 5. Create MCP server

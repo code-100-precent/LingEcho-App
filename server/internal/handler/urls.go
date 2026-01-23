@@ -41,13 +41,13 @@ func NewHandlers(db *gorm.DB) *Handlers {
 	searchEnabled := utils.GetBoolValue(db, constants.KEY_SEARCH_ENABLED)
 	// If not configured in config table, use environment variables
 	if !searchEnabled && config.GlobalConfig != nil {
-		searchEnabled = config.GlobalConfig.SearchEnabled
+		searchEnabled = config.GlobalConfig.Features.SearchEnabled
 	}
 
 	if searchEnabled {
 		searchPath := utils.GetValue(db, constants.KEY_SEARCH_PATH)
 		if searchPath == "" && config.GlobalConfig != nil {
-			searchPath = config.GlobalConfig.SearchPath
+			searchPath = config.GlobalConfig.Features.SearchPath
 		}
 		if searchPath == "" {
 			searchPath = "./search"
@@ -55,7 +55,7 @@ func NewHandlers(db *gorm.DB) *Handlers {
 
 		batchSize := utils.GetIntValue(db, constants.KEY_SEARCH_BATCH_SIZE, 100)
 		if batchSize == 0 && config.GlobalConfig != nil {
-			batchSize = config.GlobalConfig.SearchBatchSize
+			batchSize = config.GlobalConfig.Features.SearchBatchSize
 		}
 		if batchSize == 0 {
 			batchSize = 100
@@ -112,7 +112,7 @@ func (h *Handlers) SetSipServer(sipServer SipServerInterface) {
 
 func (h *Handlers) Register(engine *gin.Engine) {
 
-	r := engine.Group(config.GlobalConfig.APIPrefix)
+	r := engine.Group(config.GlobalConfig.Server.APIPrefix)
 
 	// Register Global Singleton DB
 	r.Use(middleware.InjectDB(h.db))
@@ -125,7 +125,7 @@ func (h *Handlers) Register(engine *gin.Engine) {
 	if h.searchHandler == nil {
 		searchPath := utils.GetValue(h.db, constants.KEY_SEARCH_PATH)
 		if searchPath == "" && config.GlobalConfig != nil {
-			searchPath = config.GlobalConfig.SearchPath
+			searchPath = config.GlobalConfig.Features.SearchPath
 		}
 		if searchPath == "" {
 			searchPath = "./search"
@@ -133,7 +133,7 @@ func (h *Handlers) Register(engine *gin.Engine) {
 
 		batchSize := utils.GetIntValue(h.db, constants.KEY_SEARCH_BATCH_SIZE, 100)
 		if batchSize == 0 && config.GlobalConfig != nil {
-			batchSize = config.GlobalConfig.SearchBatchSize
+			batchSize = config.GlobalConfig.Features.SearchBatchSize
 		}
 		if batchSize == 0 {
 			batchSize = 100
@@ -204,22 +204,22 @@ func (h *Handlers) Register(engine *gin.Engine) {
 	h.RegisterPublicWorkflowRoutes(r)
 	objs := h.GetObjs()
 	LingEcho.RegisterObjects(r, objs)
-	if config.GlobalConfig.DocsPrefix != "" {
+	if config.GlobalConfig.Server.DocsPrefix != "" {
 		var objDocs []apidocs.WebObjectDoc
 		for _, obj := range objs {
-			objDocs = append(objDocs, apidocs.GetWebObjectDocDefine(config.GlobalConfig.APIPrefix, obj))
+			objDocs = append(objDocs, apidocs.GetWebObjectDocDefine(config.GlobalConfig.Server.APIPrefix, obj))
 		}
-		apidocs.RegisterHandler(config.GlobalConfig.DocsPrefix, engine, h.GetDocs(), objDocs, h.db)
+		apidocs.RegisterHandler(config.GlobalConfig.Server.DocsPrefix, engine, h.GetDocs(), objDocs, h.db)
 	}
-	if config.GlobalConfig.AdminPrefix != "" {
-		admin := r.Group(config.GlobalConfig.AdminPrefix)
+	if config.GlobalConfig.Server.AdminPrefix != "" {
+		admin := r.Group(config.GlobalConfig.Server.AdminPrefix)
 		h.RegisterAdmin(admin)
 	}
 }
 
 // registerAuthRoutes User Module
 func (h *Handlers) registerAuthRoutes(r *gin.RouterGroup) {
-	auth := r.Group(config.GlobalConfig.AuthPrefix)
+	auth := r.Group(config.GlobalConfig.Server.AuthPrefix)
 	{
 		// register
 		auth.GET("/register", h.handleUserSignupPage)

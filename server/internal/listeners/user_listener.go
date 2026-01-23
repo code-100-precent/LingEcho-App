@@ -141,13 +141,13 @@ func InitUserListeners() {
 
 // sendWelcomeEmail sends welcome email
 func sendWelcomeEmail(user *models.User, db *gorm.DB) {
-	if config.GlobalConfig.Mail.Host == "" || config.GlobalConfig.Mail.From == "" || config.GlobalConfig.Mail.Username == "" {
+	if config.GlobalConfig.Services.Mail.Host == "" || config.GlobalConfig.Services.Mail.From == "" || config.GlobalConfig.Services.Mail.Username == "" {
 		logger.Warn("Mail configuration not set, skipping sending login notification")
 		return
 	}
 
 	if user.EmailNotifications {
-		mailer := notification.NewMailNotification(config.GlobalConfig.Mail)
+		mailer := notification.NewMailNotification(config.GlobalConfig.Services.Mail)
 		err := mailer.SendWelcomeEmail(
 			user.Email,
 			user.DisplayName,
@@ -168,7 +168,7 @@ func sendEmailVerification(user *models.User, hash, clientIp, userAgent string, 
 		zap.String("email", user.Email),
 		zap.String("hash", hash))
 
-	if config.GlobalConfig.Mail.Host == "" {
+	if config.GlobalConfig.Services.Mail.Host == "" {
 		logger.Warn("Mail configuration not set, skipping sending email verification")
 		return
 	}
@@ -185,9 +185,9 @@ func sendEmailVerification(user *models.User, hash, clientIp, userAgent string, 
 	logger.Info("Preparing to send email verification",
 		zap.String("email", user.Email),
 		zap.String("verifyUrl", verifyUrl),
-		zap.String("mailHost", config.GlobalConfig.Mail.Host))
+		zap.String("mailHost", config.GlobalConfig.Services.Mail.Host))
 
-	mailer := notification.NewMailNotification(config.GlobalConfig.Mail)
+	mailer := notification.NewMailNotification(config.GlobalConfig.Services.Mail)
 	err := mailer.SendVerificationEmail(user.Email, user.DisplayName, verifyUrl)
 	if err != nil {
 		logger.Error("Failed to send email verification", zap.Error(err), zap.String("email", user.Email))
@@ -198,7 +198,7 @@ func sendEmailVerification(user *models.User, hash, clientIp, userAgent string, 
 
 // sendPasswordResetEmail sends password reset email
 func sendPasswordResetEmail(user *models.User, hash, clientIp, userAgent string, db *gorm.DB) {
-	if config.GlobalConfig.Mail.Host == "" {
+	if config.GlobalConfig.Services.Mail.Host == "" {
 		logger.Warn("Mail configuration not set, skipping sending password reset email")
 		return
 	}
@@ -212,7 +212,7 @@ func sendPasswordResetEmail(user *models.User, hash, clientIp, userAgent string,
 	// 构建重置密码 URL
 	resetUrl := siteURL + "/reset-password?token=" + hash
 
-	mailer := notification.NewMailNotification(config.GlobalConfig.Mail)
+	mailer := notification.NewMailNotification(config.GlobalConfig.Services.Mail)
 	err := mailer.SendPasswordResetEmail(user.Email, user.DisplayName, resetUrl)
 	if err != nil {
 		logger.Error("Failed to send password reset email", zap.Error(err), zap.String("email", user.Email))

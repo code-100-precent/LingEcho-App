@@ -197,7 +197,7 @@ func AuthRequired(c *gin.Context) {
 		c.Next()
 		return
 	}
-	token := c.GetHeader(config.GlobalConfig.AuthHeader)
+	token := c.GetHeader(config.GlobalConfig.Auth.Header)
 	if token == "" {
 		token = c.Query("token")
 	}
@@ -411,7 +411,7 @@ func AuthApiRequired(c *gin.Context) {
 		return
 	}
 
-	token := c.GetHeader(config.GlobalConfig.AuthHeader)
+	token := c.GetHeader(config.GlobalConfig.Auth.Header)
 	if token == "" {
 		token = c.Query("token")
 	}

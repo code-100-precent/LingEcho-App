@@ -1294,7 +1294,7 @@ func (h *Handlers) OneShotText(c *gin.Context) {
 		}
 
 		// 如果开启了图记忆功能，则尝试从 Neo4j 中获取该用户的长期偏好主题，并拼接到系统提示词中
-		if config.GlobalConfig.Neo4jEnabled && assistant.EnableGraphMemory {
+		if config.GlobalConfig.Services.KnowledgeBase.Neo4j.Enabled && assistant.EnableGraphMemory {
 			if store := graph.GetDefaultStore(); store != nil {
 				ctx := c.Request.Context()
 				if userCtx, err := store.GetUserContext(ctx, user.ID, int64(req.AssistantID)); err == nil {
@@ -1471,7 +1471,7 @@ func (h *Handlers) PlainText(c *gin.Context) {
 		}
 
 		// 如果开启了图记忆功能，则尝试从 Neo4j 中获取该用户的长期偏好主题，并拼接到系统提示词中
-		if config.GlobalConfig.Neo4jEnabled && assistant.EnableGraphMemory {
+		if config.GlobalConfig.Services.KnowledgeBase.Neo4j.Enabled && assistant.EnableGraphMemory {
 			if store := graph.GetDefaultStore(); store != nil {
 				ctx := c.Request.Context()
 				if userCtx, err := store.GetUserContext(ctx, user.ID, int64(req.AssistantID)); err == nil {
@@ -1743,7 +1743,7 @@ func (h *Handlers) processAudioAsyncV2(ctx context.Context, credential *models.U
 
 					ttsKey := fmt.Sprintf("oneshot/v2_voiceclone_%d_%d.wav", userID, time.Now().Unix())
 					reader, err := config.GlobalStore.UploadBytes(&lingstorage.UploadBytesRequest{
-						Bucket:   config.GlobalConfig.LingstorageBucket,
+						Bucket:   config.GlobalConfig.Services.Storage.Bucket,
 						Data:     wavData,
 						Filename: ttsKey,
 						Key:      ttsKey,
@@ -1946,7 +1946,7 @@ func (h *Handlers) processAudioAsyncV2(ctx context.Context, credential *models.U
 
 	ttsKey := fmt.Sprintf("oneshot/v2_tts_%d_%d.wav", userID, time.Now().Unix())
 	reader, err := config.GlobalStore.UploadBytes(&lingstorage.UploadBytesRequest{
-		Bucket:   config.GlobalConfig.LingstorageBucket,
+		Bucket:   config.GlobalConfig.Services.Storage.Bucket,
 		Data:     wavData,
 		Filename: ttsKey,
 		Key:      ttsKey,

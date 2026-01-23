@@ -25,7 +25,7 @@ func generateSignature(data, secretKey string) string {
 // API 签名验证中间件
 func SignVerifyMiddleware() gin.HandlerFunc {
 	return func(c *gin.Context) {
-		secret := config.GlobalConfig.APISecretKey
+		secret := config.GlobalConfig.Auth.APISecretKey
 		if secret == "" {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": "server misconfigured"})
 			c.Abort()
@@ -117,7 +117,7 @@ func SignVerifyMiddleware() gin.HandlerFunc {
 		}
 
 		// 生成期望的签名
-		expectedSignature := generateSignature(signatureData.String(), config.GlobalConfig.APISecretKey)
+		expectedSignature := generateSignature(signatureData.String(), config.GlobalConfig.Auth.APISecretKey)
 
 		// 使用时间常数比较防止时序攻击
 		if !hmac.Equal([]byte(signature), []byte(expectedSignature)) {

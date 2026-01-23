@@ -26,15 +26,15 @@ import (
 func getAliyunConfig() map[string]interface{} {
 	cfg := config.GlobalConfig
 	return map[string]interface{}{
-		knowledge.ConfigKeyAliyunAccessKeyID:     cfg.BailianAccessKeyId,
-		knowledge.ConfigKeyAliyunAccessKeySecret: cfg.BailianAccessKeySecret,
-		knowledge.ConfigKeyAliyunEndpoint:        models.GetStringOrDefault(cfg.BailianEndpoint, knowledge.DefaultAliyunEndpoint),
-		knowledge.ConfigKeyAliyunWorkspaceID:     cfg.BailianWorkspaceId,
-		knowledge.ConfigKeyAliyunCategoryID:      cfg.BailianCategoryId,
-		knowledge.ConfigKeyAliyunSourceType:      models.GetStringOrDefault(cfg.BailianSourceType, knowledge.DefaultAliyunSourceType),
-		knowledge.ConfigKeyAliyunParser:          models.GetStringOrDefault(cfg.BailianParser, knowledge.DefaultAliyunParser),
-		knowledge.ConfigKeyAliyunStructType:      models.GetStringOrDefault(cfg.BailianStructType, knowledge.DefaultAliyunStructType),
-		knowledge.ConfigKeyAliyunSinkType:        models.GetStringOrDefault(cfg.BailianSinkType, knowledge.DefaultAliyunSinkType),
+		knowledge.ConfigKeyAliyunAccessKeyID:     cfg.Services.KnowledgeBase.Bailian.AccessKeyId,
+		knowledge.ConfigKeyAliyunAccessKeySecret: cfg.Services.KnowledgeBase.Bailian.AccessKeySecret,
+		knowledge.ConfigKeyAliyunEndpoint:        models.GetStringOrDefault(cfg.Services.KnowledgeBase.Bailian.Endpoint, knowledge.DefaultAliyunEndpoint),
+		knowledge.ConfigKeyAliyunWorkspaceID:     cfg.Services.KnowledgeBase.Bailian.WorkspaceId,
+		knowledge.ConfigKeyAliyunCategoryID:      cfg.Services.KnowledgeBase.Bailian.CategoryId,
+		knowledge.ConfigKeyAliyunSourceType:      models.GetStringOrDefault(cfg.Services.KnowledgeBase.Bailian.SourceType, knowledge.DefaultAliyunSourceType),
+		knowledge.ConfigKeyAliyunParser:          models.GetStringOrDefault(cfg.Services.KnowledgeBase.Bailian.Parser, knowledge.DefaultAliyunParser),
+		knowledge.ConfigKeyAliyunStructType:      models.GetStringOrDefault(cfg.Services.KnowledgeBase.Bailian.StructType, knowledge.DefaultAliyunStructType),
+		knowledge.ConfigKeyAliyunSinkType:        models.GetStringOrDefault(cfg.Services.KnowledgeBase.Bailian.SinkType, knowledge.DefaultAliyunSinkType),
 	}
 }
 
@@ -42,11 +42,11 @@ func getAliyunConfig() map[string]interface{} {
 func getMilvusConfig() map[string]interface{} {
 	cfg := config.GlobalConfig
 	return map[string]interface{}{
-		knowledge.ConfigKeyMilvusAddress:        cfg.MilvusAddress,
-		knowledge.ConfigKeyMilvusUsername:       cfg.MilvusUsername,
-		knowledge.ConfigKeyMilvusPassword:       cfg.MilvusPassword,
-		knowledge.ConfigKeyMilvusCollectionName: cfg.MilvusCollection,
-		knowledge.ConfigKeyMilvusDimension:      cfg.MilvusDimension,
+		knowledge.ConfigKeyMilvusAddress:        cfg.Services.KnowledgeBase.Milvus.Address,
+		knowledge.ConfigKeyMilvusUsername:       cfg.Services.KnowledgeBase.Milvus.Username,
+		knowledge.ConfigKeyMilvusPassword:       cfg.Services.KnowledgeBase.Milvus.Password,
+		knowledge.ConfigKeyMilvusCollectionName: cfg.Services.KnowledgeBase.Milvus.Collection,
+		knowledge.ConfigKeyMilvusDimension:      cfg.Services.KnowledgeBase.Milvus.Dimension,
 	}
 }
 
@@ -54,10 +54,10 @@ func getMilvusConfig() map[string]interface{} {
 func getQdrantConfig() map[string]interface{} {
 	cfg := config.GlobalConfig
 	return map[string]interface{}{
-		knowledge.ConfigKeyQdrantBaseURL:        cfg.QdrantBaseURL,
-		knowledge.ConfigKeyQdrantApiKey:         cfg.QdrantApiKey,
-		knowledge.ConfigKeyQdrantCollectionName: cfg.QdrantCollection,
-		knowledge.ConfigKeyQdrantDimension:      cfg.QdrantDimension,
+		knowledge.ConfigKeyQdrantBaseURL:        cfg.Services.KnowledgeBase.Qdrant.BaseURL,
+		knowledge.ConfigKeyQdrantApiKey:         cfg.Services.KnowledgeBase.Qdrant.APIKey,
+		knowledge.ConfigKeyQdrantCollectionName: cfg.Services.KnowledgeBase.Qdrant.Collection,
+		knowledge.ConfigKeyQdrantDimension:      cfg.Services.KnowledgeBase.Qdrant.Dimension,
 	}
 }
 
@@ -65,10 +65,10 @@ func getQdrantConfig() map[string]interface{} {
 func getElasticsearchConfig() map[string]interface{} {
 	cfg := config.GlobalConfig
 	return map[string]interface{}{
-		knowledge.ConfigKeyElasticsearchBaseURL:   cfg.ElasticsearchBaseURL,
-		knowledge.ConfigKeyElasticsearchUsername:  cfg.ElasticsearchUsername,
-		knowledge.ConfigKeyElasticsearchPassword:  cfg.ElasticsearchPassword,
-		knowledge.ConfigKeyElasticsearchIndexName: cfg.ElasticsearchIndex,
+		knowledge.ConfigKeyElasticsearchBaseURL:   cfg.Services.KnowledgeBase.Elasticsearch.BaseURL,
+		knowledge.ConfigKeyElasticsearchUsername:  cfg.Services.KnowledgeBase.Elasticsearch.Username,
+		knowledge.ConfigKeyElasticsearchPassword:  cfg.Services.KnowledgeBase.Elasticsearch.Password,
+		knowledge.ConfigKeyElasticsearchIndexName: cfg.Services.KnowledgeBase.Elasticsearch.Index,
 	}
 }
 
@@ -76,10 +76,10 @@ func getElasticsearchConfig() map[string]interface{} {
 func getPineconeConfig() map[string]interface{} {
 	cfg := config.GlobalConfig
 	return map[string]interface{}{
-		knowledge.ConfigKeyPineconeApiKey:    cfg.PineconeApiKey,
-		knowledge.ConfigKeyPineconeBaseURL:   cfg.PineconeBaseURL,
-		knowledge.ConfigKeyPineconeIndexName: cfg.PineconeIndexName,
-		knowledge.ConfigKeyPineconeDimension: cfg.PineconeDimension,
+		knowledge.ConfigKeyPineconeApiKey:    cfg.Services.KnowledgeBase.Pinecone.APIKey,
+		knowledge.ConfigKeyPineconeBaseURL:   cfg.Services.KnowledgeBase.Pinecone.BaseURL,
+		knowledge.ConfigKeyPineconeIndexName: cfg.Services.KnowledgeBase.Pinecone.IndexName,
+		knowledge.ConfigKeyPineconeDimension: cfg.Services.KnowledgeBase.Pinecone.Dimension,
 	}
 }
 
@@ -106,13 +106,13 @@ func getKnowledgeBase(provider string) (knowledge.KnowledgeBase, error) {
 	cfg := config.GlobalConfig
 
 	// Return error if knowledge base feature is not enabled
-	if !cfg.KnowledgeBaseEnabled {
+	if !cfg.Services.KnowledgeBase.Enabled {
 		return nil, fmt.Errorf(knowledge.ErrKnowledgeBaseDisabled)
 	}
 
 	// Use provider from config if not specified
 	if provider == "" {
-		provider = cfg.KnowledgeBaseProvider
+		provider = cfg.Services.KnowledgeBase.Provider
 		if provider == "" {
 			provider = knowledge.DefaultProvider // default to Aliyun
 		}

@@ -374,7 +374,7 @@ func (h *Handlers) GetDocs() []apidocs.UriDoc {
 		// ==================== User Authorization ====================
 		{
 			Group:   "User Authorization",
-			Path:    config.GlobalConfig.APIPrefix + "/auth/login",
+			Path:    config.GlobalConfig.Server.APIPrefix + "/auth/login",
 			Method:  http.MethodPost,
 			Desc:    "User login with email and password",
 			Request: apidocs.GetDocDefine(models.LoginForm{}),
@@ -388,14 +388,14 @@ func (h *Handlers) GetDocs() []apidocs.UriDoc {
 		},
 		{
 			Group:        "User Authorization",
-			Path:         config.GlobalConfig.APIPrefix + "/auth/logout",
+			Path:         config.GlobalConfig.Server.APIPrefix + "/auth/logout",
 			Method:       http.MethodGet,
 			AuthRequired: true,
 			Desc:         "User logout, if `?next={NEXT_URL}`is not empty, redirect to {NEXT_URL}",
 		},
 		{
 			Group:        "User Authorization",
-			Path:         config.GlobalConfig.APIPrefix + "/auth/register",
+			Path:         config.GlobalConfig.Server.APIPrefix + "/auth/register",
 			Method:       http.MethodPost,
 			AuthRequired: false,
 			Desc:         "User register with email and password",
@@ -411,7 +411,7 @@ func (h *Handlers) GetDocs() []apidocs.UriDoc {
 		},
 		{
 			Group:        "User Authorization",
-			Path:         config.GlobalConfig.APIPrefix + "/auth/register/email",
+			Path:         config.GlobalConfig.Server.APIPrefix + "/auth/register/email",
 			Method:       http.MethodPost,
 			AuthRequired: false,
 			Desc:         "User register with email verification code",
@@ -419,7 +419,7 @@ func (h *Handlers) GetDocs() []apidocs.UriDoc {
 		},
 		{
 			Group:        "User Authorization",
-			Path:         config.GlobalConfig.APIPrefix + "/auth/login/password",
+			Path:         config.GlobalConfig.Server.APIPrefix + "/auth/login/password",
 			Method:       http.MethodPost,
 			AuthRequired: false,
 			Desc:         "User login with password",
@@ -427,7 +427,7 @@ func (h *Handlers) GetDocs() []apidocs.UriDoc {
 		},
 		{
 			Group:        "User Authorization",
-			Path:         config.GlobalConfig.APIPrefix + "/auth/login/email",
+			Path:         config.GlobalConfig.Server.APIPrefix + "/auth/login/email",
 			Method:       http.MethodPost,
 			AuthRequired: false,
 			Desc:         "User login with email verification code",
@@ -435,7 +435,7 @@ func (h *Handlers) GetDocs() []apidocs.UriDoc {
 		},
 		{
 			Group:        "User Authorization",
-			Path:         config.GlobalConfig.APIPrefix + "/auth/info",
+			Path:         config.GlobalConfig.Server.APIPrefix + "/auth/info",
 			Method:       http.MethodGet,
 			AuthRequired: true,
 			Desc:         "Get current user information",
@@ -446,7 +446,7 @@ func (h *Handlers) GetDocs() []apidocs.UriDoc {
 		},
 		{
 			Group:        "User Authorization",
-			Path:         config.GlobalConfig.APIPrefix + "/auth/reset-password",
+			Path:         config.GlobalConfig.Server.APIPrefix + "/auth/reset-password",
 			Method:       http.MethodPost,
 			AuthRequired: false,
 			Desc:         "Send a verification code to the email address to reset password",
@@ -460,7 +460,7 @@ func (h *Handlers) GetDocs() []apidocs.UriDoc {
 		},
 		{
 			Group:        "User Authorization",
-			Path:         config.GlobalConfig.APIPrefix + "/auth/reset-password/confirm",
+			Path:         config.GlobalConfig.Server.APIPrefix + "/auth/reset-password/confirm",
 			Method:       http.MethodPost,
 			AuthRequired: false,
 			Desc:         "Confirm password reset with token",
@@ -468,7 +468,7 @@ func (h *Handlers) GetDocs() []apidocs.UriDoc {
 		},
 		{
 			Group:        "User Authorization",
-			Path:         config.GlobalConfig.APIPrefix + "/auth/change-password",
+			Path:         config.GlobalConfig.Server.APIPrefix + "/auth/change-password",
 			Method:       http.MethodPost,
 			AuthRequired: true,
 			Desc:         "Change password when user is logged in",
@@ -480,7 +480,7 @@ func (h *Handlers) GetDocs() []apidocs.UriDoc {
 		},
 		{
 			Group:        "User Authorization",
-			Path:         config.GlobalConfig.APIPrefix + "/auth/send/email",
+			Path:         config.GlobalConfig.Server.APIPrefix + "/auth/send/email",
 			Method:       http.MethodPost,
 			AuthRequired: false,
 			Desc:         "Send email verification code",
@@ -494,35 +494,35 @@ func (h *Handlers) GetDocs() []apidocs.UriDoc {
 		},
 		{
 			Group:        "User Authorization",
-			Path:         config.GlobalConfig.APIPrefix + "/auth/verify-email",
+			Path:         config.GlobalConfig.Server.APIPrefix + "/auth/verify-email",
 			Method:       http.MethodGet,
 			AuthRequired: false,
 			Desc:         "Verify email address with token",
 		},
 		{
 			Group:        "User Authorization",
-			Path:         config.GlobalConfig.APIPrefix + "/auth/send-email-verification",
+			Path:         config.GlobalConfig.Server.APIPrefix + "/auth/send-email-verification",
 			Method:       http.MethodPost,
 			AuthRequired: true,
 			Desc:         "Send email verification code to current user",
 		},
 		{
 			Group:        "User Authorization",
-			Path:         config.GlobalConfig.APIPrefix + "/auth/verify-phone",
+			Path:         config.GlobalConfig.Server.APIPrefix + "/auth/verify-phone",
 			Method:       http.MethodPost,
 			AuthRequired: true,
 			Desc:         "Verify phone number",
 		},
 		{
 			Group:        "User Authorization",
-			Path:         config.GlobalConfig.APIPrefix + "/auth/send-phone-verification",
+			Path:         config.GlobalConfig.Server.APIPrefix + "/auth/send-phone-verification",
 			Method:       http.MethodPost,
 			AuthRequired: true,
 			Desc:         "Send phone verification code",
 		},
 		{
 			Group:        "User Authorization",
-			Path:         config.GlobalConfig.APIPrefix + "/auth/update",
+			Path:         config.GlobalConfig.Server.APIPrefix + "/auth/update",
 			Method:       http.MethodPut,
 			AuthRequired: true,
 			Desc:         "Update user profile",
@@ -530,14 +530,14 @@ func (h *Handlers) GetDocs() []apidocs.UriDoc {
 		},
 		{
 			Group:        "User Authorization",
-			Path:         config.GlobalConfig.APIPrefix + "/auth/update/preferences",
+			Path:         config.GlobalConfig.Server.APIPrefix + "/auth/update/preferences",
 			Method:       http.MethodPut,
 			AuthRequired: true,
 			Desc:         "Update user preferences",
 		},
 		{
 			Group:        "User Authorization",
-			Path:         config.GlobalConfig.APIPrefix + "/auth/update/basic/info",
+			Path:         config.GlobalConfig.Server.APIPrefix + "/auth/update/basic/info",
 			Method:       http.MethodPost,
 			AuthRequired: true,
 			Desc:         "Update user basic information",
@@ -545,63 +545,63 @@ func (h *Handlers) GetDocs() []apidocs.UriDoc {
 		},
 		{
 			Group:        "User Authorization",
-			Path:         config.GlobalConfig.APIPrefix + "/auth/notification-settings",
+			Path:         config.GlobalConfig.Server.APIPrefix + "/auth/notification-settings",
 			Method:       http.MethodPut,
 			AuthRequired: true,
 			Desc:         "Update notification settings",
 		},
 		{
 			Group:        "User Authorization",
-			Path:         config.GlobalConfig.APIPrefix + "/auth/user-preferences",
+			Path:         config.GlobalConfig.Server.APIPrefix + "/auth/user-preferences",
 			Method:       http.MethodPut,
 			AuthRequired: true,
 			Desc:         "Update user preferences",
 		},
 		{
 			Group:        "User Authorization",
-			Path:         config.GlobalConfig.APIPrefix + "/auth/stats",
+			Path:         config.GlobalConfig.Server.APIPrefix + "/auth/stats",
 			Method:       http.MethodGet,
 			AuthRequired: true,
 			Desc:         "Get user statistics",
 		},
 		{
 			Group:        "User Authorization",
-			Path:         config.GlobalConfig.APIPrefix + "/auth/avatar/upload",
+			Path:         config.GlobalConfig.Server.APIPrefix + "/auth/avatar/upload",
 			Method:       http.MethodPost,
 			AuthRequired: true,
 			Desc:         "Upload user avatar",
 		},
 		{
 			Group:        "User Authorization",
-			Path:         config.GlobalConfig.APIPrefix + "/auth/two-factor/setup",
+			Path:         config.GlobalConfig.Server.APIPrefix + "/auth/two-factor/setup",
 			Method:       http.MethodPost,
 			AuthRequired: true,
 			Desc:         "Setup two-factor authentication",
 		},
 		{
 			Group:        "User Authorization",
-			Path:         config.GlobalConfig.APIPrefix + "/auth/two-factor/enable",
+			Path:         config.GlobalConfig.Server.APIPrefix + "/auth/two-factor/enable",
 			Method:       http.MethodPost,
 			AuthRequired: true,
 			Desc:         "Enable two-factor authentication",
 		},
 		{
 			Group:        "User Authorization",
-			Path:         config.GlobalConfig.APIPrefix + "/auth/two-factor/disable",
+			Path:         config.GlobalConfig.Server.APIPrefix + "/auth/two-factor/disable",
 			Method:       http.MethodPost,
 			AuthRequired: true,
 			Desc:         "Disable two-factor authentication",
 		},
 		{
 			Group:        "User Authorization",
-			Path:         config.GlobalConfig.APIPrefix + "/auth/two-factor/status",
+			Path:         config.GlobalConfig.Server.APIPrefix + "/auth/two-factor/status",
 			Method:       http.MethodGet,
 			AuthRequired: true,
 			Desc:         "Get two-factor authentication status",
 		},
 		{
 			Group:        "User Authorization",
-			Path:         config.GlobalConfig.APIPrefix + "/auth/activity",
+			Path:         config.GlobalConfig.Server.APIPrefix + "/auth/activity",
 			Method:       http.MethodGet,
 			AuthRequired: true,
 			Desc:         "Get user activity logs",
@@ -610,7 +610,7 @@ func (h *Handlers) GetDocs() []apidocs.UriDoc {
 		// ==================== System Module ====================
 		{
 			Group:        "System Module",
-			Path:         config.GlobalConfig.APIPrefix + "/system/health",
+			Path:         config.GlobalConfig.Server.APIPrefix + "/system/health",
 			Method:       http.MethodGet,
 			Summary:      "数据库健康状态",
 			AuthRequired: false,
@@ -624,7 +624,7 @@ func (h *Handlers) GetDocs() []apidocs.UriDoc {
 		},
 		{
 			Group:        "System Module",
-			Path:         config.GlobalConfig.APIPrefix + "/system/init",
+			Path:         config.GlobalConfig.Server.APIPrefix + "/system/init",
 			Method:       http.MethodGet,
 			AuthRequired: false,
 			Desc:         "System initialization endpoint, returns basic configuration information",
@@ -651,14 +651,14 @@ func (h *Handlers) GetDocs() []apidocs.UriDoc {
 		},
 		{
 			Group:        "System Module",
-			Path:         config.GlobalConfig.APIPrefix + "/system/rate-limiter/config",
+			Path:         config.GlobalConfig.Server.APIPrefix + "/system/rate-limiter/config",
 			Method:       http.MethodPost,
 			AuthRequired: false,
 			Desc:         "Update rate limiter configuration",
 		},
 		{
 			Group:        "System Module",
-			Path:         config.GlobalConfig.APIPrefix + "/system/search/status",
+			Path:         config.GlobalConfig.Server.APIPrefix + "/system/search/status",
 			Method:       http.MethodGet,
 			AuthRequired: false,
 			Desc:         "Get search feature status and configuration",
@@ -674,7 +674,7 @@ func (h *Handlers) GetDocs() []apidocs.UriDoc {
 		},
 		{
 			Group:        "System Module",
-			Path:         config.GlobalConfig.APIPrefix + "/system/search/config",
+			Path:         config.GlobalConfig.Server.APIPrefix + "/system/search/config",
 			Method:       http.MethodPut,
 			AuthRequired: true,
 			Desc:         "Update search configuration (admin only)",
@@ -690,14 +690,14 @@ func (h *Handlers) GetDocs() []apidocs.UriDoc {
 		},
 		{
 			Group:        "System Module",
-			Path:         config.GlobalConfig.APIPrefix + "/system/search/enable",
+			Path:         config.GlobalConfig.Server.APIPrefix + "/system/search/enable",
 			Method:       http.MethodPost,
 			AuthRequired: true,
 			Desc:         "Enable search feature (admin only)",
 		},
 		{
 			Group:        "System Module",
-			Path:         config.GlobalConfig.APIPrefix + "/system/search/disable",
+			Path:         config.GlobalConfig.Server.APIPrefix + "/system/search/disable",
 			Method:       http.MethodPost,
 			AuthRequired: true,
 			Desc:         "Disable search feature (admin only)",
@@ -706,7 +706,7 @@ func (h *Handlers) GetDocs() []apidocs.UriDoc {
 		// ==================== Notifications ====================
 		{
 			Group:        "Notifications",
-			Path:         config.GlobalConfig.APIPrefix + "/notification/unread-count",
+			Path:         config.GlobalConfig.Server.APIPrefix + "/notification/unread-count",
 			Method:       http.MethodGet,
 			AuthRequired: true,
 			Desc:         "Get unread notification count",
@@ -717,7 +717,7 @@ func (h *Handlers) GetDocs() []apidocs.UriDoc {
 		},
 		{
 			Group:        "Notifications",
-			Path:         config.GlobalConfig.APIPrefix + "/notification",
+			Path:         config.GlobalConfig.Server.APIPrefix + "/notification",
 			Method:       http.MethodGet,
 			AuthRequired: true,
 			Desc:         "List user notifications with pagination",
@@ -735,28 +735,28 @@ func (h *Handlers) GetDocs() []apidocs.UriDoc {
 		},
 		{
 			Group:        "Notifications",
-			Path:         config.GlobalConfig.APIPrefix + "/notification/readAll",
+			Path:         config.GlobalConfig.Server.APIPrefix + "/notification/readAll",
 			Method:       http.MethodPost,
 			AuthRequired: true,
 			Desc:         "Mark all notifications as read",
 		},
 		{
 			Group:        "Notifications",
-			Path:         config.GlobalConfig.APIPrefix + "/notification/read/:id",
+			Path:         config.GlobalConfig.Server.APIPrefix + "/notification/read/:id",
 			Method:       http.MethodPut,
 			AuthRequired: true,
 			Desc:         "Mark a notification as read",
 		},
 		{
 			Group:        "Notifications",
-			Path:         config.GlobalConfig.APIPrefix + "/notification/:id",
+			Path:         config.GlobalConfig.Server.APIPrefix + "/notification/:id",
 			Method:       http.MethodDelete,
 			AuthRequired: true,
 			Desc:         "Delete a notification",
 		},
 		{
 			Group:        "Notifications",
-			Path:         config.GlobalConfig.APIPrefix + "/notification/batch-delete",
+			Path:         config.GlobalConfig.Server.APIPrefix + "/notification/batch-delete",
 			Method:       http.MethodPost,
 			AuthRequired: true,
 			Desc:         "Batch delete notifications",
@@ -765,7 +765,7 @@ func (h *Handlers) GetDocs() []apidocs.UriDoc {
 		// ==================== Groups ====================
 		{
 			Group:        "Groups",
-			Path:         config.GlobalConfig.APIPrefix + "/group",
+			Path:         config.GlobalConfig.Server.APIPrefix + "/group",
 			Method:       http.MethodPost,
 			AuthRequired: true,
 			Desc:         "Create a new group",
@@ -781,7 +781,7 @@ func (h *Handlers) GetDocs() []apidocs.UriDoc {
 		},
 		{
 			Group:        "Groups",
-			Path:         config.GlobalConfig.APIPrefix + "/group",
+			Path:         config.GlobalConfig.Server.APIPrefix + "/group",
 			Method:       http.MethodGet,
 			AuthRequired: true,
 			Desc:         "List all groups",
@@ -792,7 +792,7 @@ func (h *Handlers) GetDocs() []apidocs.UriDoc {
 		},
 		{
 			Group:        "Groups",
-			Path:         config.GlobalConfig.APIPrefix + "/group/:id",
+			Path:         config.GlobalConfig.Server.APIPrefix + "/group/:id",
 			Method:       http.MethodGet,
 			AuthRequired: true,
 			Desc:         "Get a group by ID",
@@ -803,14 +803,14 @@ func (h *Handlers) GetDocs() []apidocs.UriDoc {
 		},
 		{
 			Group:        "Groups",
-			Path:         config.GlobalConfig.APIPrefix + "/group/:id",
+			Path:         config.GlobalConfig.Server.APIPrefix + "/group/:id",
 			Method:       http.MethodPut,
 			AuthRequired: true,
 			Desc:         "Update a group",
 		},
 		{
 			Group:        "Groups",
-			Path:         config.GlobalConfig.APIPrefix + "/group/:id",
+			Path:         config.GlobalConfig.Server.APIPrefix + "/group/:id",
 			Method:       http.MethodDelete,
 			AuthRequired: true,
 			Desc:         "Delete a group",
@@ -819,7 +819,7 @@ func (h *Handlers) GetDocs() []apidocs.UriDoc {
 		// ==================== Assistants ====================
 		{
 			Group:        "Assistants",
-			Path:         config.GlobalConfig.APIPrefix + "/assistant/add",
+			Path:         config.GlobalConfig.Server.APIPrefix + "/assistant/add",
 			Method:       http.MethodPost,
 			AuthRequired: true,
 			Desc:         "Create a new AI assistant",
@@ -838,7 +838,7 @@ func (h *Handlers) GetDocs() []apidocs.UriDoc {
 		},
 		{
 			Group:        "Assistants",
-			Path:         config.GlobalConfig.APIPrefix + "/assistant",
+			Path:         config.GlobalConfig.Server.APIPrefix + "/assistant",
 			Method:       http.MethodGet,
 			AuthRequired: true,
 			Desc:         "List user's assistants",
@@ -849,7 +849,7 @@ func (h *Handlers) GetDocs() []apidocs.UriDoc {
 		},
 		{
 			Group:        "Assistants",
-			Path:         config.GlobalConfig.APIPrefix + "/assistant/:id",
+			Path:         config.GlobalConfig.Server.APIPrefix + "/assistant/:id",
 			Method:       http.MethodGet,
 			AuthRequired: true,
 			Desc:         "Get an assistant by ID",
@@ -860,7 +860,7 @@ func (h *Handlers) GetDocs() []apidocs.UriDoc {
 		},
 		{
 			Group:        "Assistants",
-			Path:         config.GlobalConfig.APIPrefix + "/assistant/:id",
+			Path:         config.GlobalConfig.Server.APIPrefix + "/assistant/:id",
 			Method:       http.MethodPut,
 			AuthRequired: true,
 			Desc:         "Update an assistant",
@@ -871,28 +871,28 @@ func (h *Handlers) GetDocs() []apidocs.UriDoc {
 		},
 		{
 			Group:        "Assistants",
-			Path:         config.GlobalConfig.APIPrefix + "/assistant/:id",
+			Path:         config.GlobalConfig.Server.APIPrefix + "/assistant/:id",
 			Method:       http.MethodDelete,
 			AuthRequired: true,
 			Desc:         "Delete an assistant",
 		},
 		{
 			Group:        "Assistants",
-			Path:         config.GlobalConfig.APIPrefix + "/assistant/:id/js",
+			Path:         config.GlobalConfig.Server.APIPrefix + "/assistant/:id/js",
 			Method:       http.MethodPut,
 			AuthRequired: true,
 			Desc:         "Update assistant's JavaScript template",
 		},
 		{
 			Group:        "Assistants",
-			Path:         config.GlobalConfig.APIPrefix + "/assistant/lingecho/client/:id/loader.js",
+			Path:         config.GlobalConfig.Server.APIPrefix + "/assistant/lingecho/client/:id/loader.js",
 			Method:       http.MethodGet,
 			AuthRequired: false,
 			Desc:         "Get Voice Sculptor loader JavaScript for assistant",
 		},
 		{
 			Group:        "Assistants",
-			Path:         config.GlobalConfig.APIPrefix + "/assistant/:id/tools",
+			Path:         config.GlobalConfig.Server.APIPrefix + "/assistant/:id/tools",
 			Method:       http.MethodGet,
 			AuthRequired: true,
 			Desc:         "List all tools for an assistant",
@@ -903,7 +903,7 @@ func (h *Handlers) GetDocs() []apidocs.UriDoc {
 		},
 		{
 			Group:        "Assistants",
-			Path:         config.GlobalConfig.APIPrefix + "/assistant/:id/tools",
+			Path:         config.GlobalConfig.Server.APIPrefix + "/assistant/:id/tools",
 			Method:       http.MethodPost,
 			AuthRequired: true,
 			Desc:         "Create a new tool for an assistant",
@@ -925,7 +925,7 @@ func (h *Handlers) GetDocs() []apidocs.UriDoc {
 		},
 		{
 			Group:        "Assistants",
-			Path:         config.GlobalConfig.APIPrefix + "/assistant/:id/tools/:toolId",
+			Path:         config.GlobalConfig.Server.APIPrefix + "/assistant/:id/tools/:toolId",
 			Method:       http.MethodPut,
 			AuthRequired: true,
 			Desc:         "Update an assistant tool",
@@ -947,14 +947,14 @@ func (h *Handlers) GetDocs() []apidocs.UriDoc {
 		},
 		{
 			Group:        "Assistants",
-			Path:         config.GlobalConfig.APIPrefix + "/assistant/:id/tools/:toolId",
+			Path:         config.GlobalConfig.Server.APIPrefix + "/assistant/:id/tools/:toolId",
 			Method:       http.MethodDelete,
 			AuthRequired: true,
 			Desc:         "Delete an assistant tool",
 		},
 		{
 			Group:        "Assistants",
-			Path:         config.GlobalConfig.APIPrefix + "/assistant/:id/tools/:toolId/test",
+			Path:         config.GlobalConfig.Server.APIPrefix + "/assistant/:id/tools/:toolId/test",
 			Method:       http.MethodPost,
 			AuthRequired: true,
 			Desc:         "Test tool execution with sample parameters",
@@ -976,7 +976,7 @@ func (h *Handlers) GetDocs() []apidocs.UriDoc {
 		// ==================== JS Templates ====================
 		{
 			Group:        "JS Templates",
-			Path:         config.GlobalConfig.APIPrefix + "/js-templates",
+			Path:         config.GlobalConfig.Server.APIPrefix + "/js-templates",
 			Method:       http.MethodPost,
 			AuthRequired: true,
 			Desc:         "Create a new JS template",
@@ -984,7 +984,7 @@ func (h *Handlers) GetDocs() []apidocs.UriDoc {
 		},
 		{
 			Group:        "JS Templates",
-			Path:         config.GlobalConfig.APIPrefix + "/js-templates/:id",
+			Path:         config.GlobalConfig.Server.APIPrefix + "/js-templates/:id",
 			Method:       http.MethodGet,
 			AuthRequired: true,
 			Desc:         "Get a JS template by ID",
@@ -995,7 +995,7 @@ func (h *Handlers) GetDocs() []apidocs.UriDoc {
 		},
 		{
 			Group:        "JS Templates",
-			Path:         config.GlobalConfig.APIPrefix + "/js-templates/name/:name",
+			Path:         config.GlobalConfig.Server.APIPrefix + "/js-templates/name/:name",
 			Method:       http.MethodGet,
 			AuthRequired: true,
 			Desc:         "Get JS templates by name",
@@ -1006,42 +1006,42 @@ func (h *Handlers) GetDocs() []apidocs.UriDoc {
 		},
 		{
 			Group:        "JS Templates",
-			Path:         config.GlobalConfig.APIPrefix + "/js-templates",
+			Path:         config.GlobalConfig.Server.APIPrefix + "/js-templates",
 			Method:       http.MethodGet,
 			AuthRequired: true,
 			Desc:         "List JS templates",
 		},
 		{
 			Group:        "JS Templates",
-			Path:         config.GlobalConfig.APIPrefix + "/js-templates/:id",
+			Path:         config.GlobalConfig.Server.APIPrefix + "/js-templates/:id",
 			Method:       http.MethodPut,
 			AuthRequired: true,
 			Desc:         "Update a JS template",
 		},
 		{
 			Group:        "JS Templates",
-			Path:         config.GlobalConfig.APIPrefix + "/js-templates/:id",
+			Path:         config.GlobalConfig.Server.APIPrefix + "/js-templates/:id",
 			Method:       http.MethodDelete,
 			AuthRequired: true,
 			Desc:         "Delete a JS template",
 		},
 		{
 			Group:        "JS Templates",
-			Path:         config.GlobalConfig.APIPrefix + "/js-templates/default",
+			Path:         config.GlobalConfig.Server.APIPrefix + "/js-templates/default",
 			Method:       http.MethodGet,
 			AuthRequired: true,
 			Desc:         "List default JS templates",
 		},
 		{
 			Group:        "JS Templates",
-			Path:         config.GlobalConfig.APIPrefix + "/js-templates/custom",
+			Path:         config.GlobalConfig.Server.APIPrefix + "/js-templates/custom",
 			Method:       http.MethodGet,
 			AuthRequired: true,
 			Desc:         "List custom JS templates",
 		},
 		{
 			Group:        "JS Templates",
-			Path:         config.GlobalConfig.APIPrefix + "/js-templates/search",
+			Path:         config.GlobalConfig.Server.APIPrefix + "/js-templates/search",
 			Method:       http.MethodGet,
 			AuthRequired: true,
 			Desc:         "Search JS templates",
@@ -1050,14 +1050,14 @@ func (h *Handlers) GetDocs() []apidocs.UriDoc {
 		// ==================== Chat ====================
 		{
 			Group:        "Chat",
-			Path:         config.GlobalConfig.APIPrefix + "/chat/chat-session-log",
+			Path:         config.GlobalConfig.Server.APIPrefix + "/chat/chat-session-log",
 			Method:       http.MethodGet,
 			AuthRequired: true,
 			Desc:         "Get chat session logs",
 		},
 		{
 			Group:        "Chat",
-			Path:         config.GlobalConfig.APIPrefix + "/chat/chat-session-log/:id",
+			Path:         config.GlobalConfig.Server.APIPrefix + "/chat/chat-session-log/:id",
 			Method:       http.MethodGet,
 			AuthRequired: true,
 			Desc:         "Get chat session log detail",
@@ -1068,7 +1068,7 @@ func (h *Handlers) GetDocs() []apidocs.UriDoc {
 		},
 		{
 			Group:        "Chat",
-			Path:         config.GlobalConfig.APIPrefix + "/chat/chat-session-log/by-session/:sessionId",
+			Path:         config.GlobalConfig.Server.APIPrefix + "/chat/chat-session-log/by-session/:sessionId",
 			Method:       http.MethodGet,
 			AuthRequired: true,
 			Desc:         "Get all chat logs for a specific session",
@@ -1079,14 +1079,14 @@ func (h *Handlers) GetDocs() []apidocs.UriDoc {
 		},
 		{
 			Group:        "Chat",
-			Path:         config.GlobalConfig.APIPrefix + "/chat/chat-session-log/by-assistant/:assistantId",
+			Path:         config.GlobalConfig.Server.APIPrefix + "/chat/chat-session-log/by-assistant/:assistantId",
 			Method:       http.MethodGet,
 			AuthRequired: true,
 			Desc:         "Get chat session logs by assistant ID",
 		},
 		{
 			Group:        "Chat",
-			Path:         config.GlobalConfig.APIPrefix + "/chat/call",
+			Path:         config.GlobalConfig.Server.APIPrefix + "/chat/call",
 			Method:       http.MethodGet,
 			AuthRequired: true,
 			Desc:         "Handle WebRTC connection for real-time voice chat",
@@ -1095,7 +1095,7 @@ func (h *Handlers) GetDocs() []apidocs.UriDoc {
 		// ==================== Credentials ====================
 		{
 			Group:        "Credentials",
-			Path:         config.GlobalConfig.APIPrefix + "/credentials",
+			Path:         config.GlobalConfig.Server.APIPrefix + "/credentials",
 			Method:       http.MethodPost,
 			AuthRequired: true,
 			Desc:         "Create a new user credential",
@@ -1111,7 +1111,7 @@ func (h *Handlers) GetDocs() []apidocs.UriDoc {
 		},
 		{
 			Group:        "Credentials",
-			Path:         config.GlobalConfig.APIPrefix + "/credentials",
+			Path:         config.GlobalConfig.Server.APIPrefix + "/credentials",
 			Method:       http.MethodGet,
 			AuthRequired: true,
 			Desc:         "Get user credentials",
@@ -1122,7 +1122,7 @@ func (h *Handlers) GetDocs() []apidocs.UriDoc {
 		},
 		{
 			Group:        "Credentials",
-			Path:         config.GlobalConfig.APIPrefix + "/credentials/:id",
+			Path:         config.GlobalConfig.Server.APIPrefix + "/credentials/:id",
 			Method:       http.MethodDelete,
 			AuthRequired: true,
 			Desc:         "Delete a credential",
@@ -1131,7 +1131,7 @@ func (h *Handlers) GetDocs() []apidocs.UriDoc {
 		// ==================== Knowledge Base ====================
 		{
 			Group:        "Knowledge Base",
-			Path:         config.GlobalConfig.APIPrefix + "/knowledge/create",
+			Path:         config.GlobalConfig.Server.APIPrefix + "/knowledge/create",
 			Method:       http.MethodPost,
 			AuthRequired: true,
 			Desc:         "Create a knowledge base",
@@ -1145,7 +1145,7 @@ func (h *Handlers) GetDocs() []apidocs.UriDoc {
 		},
 		{
 			Group:        "Knowledge Base",
-			Path:         config.GlobalConfig.APIPrefix + "/knowledge/get",
+			Path:         config.GlobalConfig.Server.APIPrefix + "/knowledge/get",
 			Method:       http.MethodGet,
 			AuthRequired: true,
 			Desc:         "Get user's knowledge bases",
@@ -1156,7 +1156,7 @@ func (h *Handlers) GetDocs() []apidocs.UriDoc {
 		},
 		{
 			Group:        "Knowledge Base",
-			Path:         config.GlobalConfig.APIPrefix + "/knowledge/delete",
+			Path:         config.GlobalConfig.Server.APIPrefix + "/knowledge/delete",
 			Method:       http.MethodDelete,
 			AuthRequired: true,
 			Desc:         "Delete a knowledge base",
@@ -1169,7 +1169,7 @@ func (h *Handlers) GetDocs() []apidocs.UriDoc {
 		},
 		{
 			Group:        "Knowledge Base",
-			Path:         config.GlobalConfig.APIPrefix + "/knowledge/upload",
+			Path:         config.GlobalConfig.Server.APIPrefix + "/knowledge/upload",
 			Method:       http.MethodPost,
 			AuthRequired: true,
 			Desc:         "Upload file to knowledge base",
@@ -1178,7 +1178,7 @@ func (h *Handlers) GetDocs() []apidocs.UriDoc {
 		// ==================== Xunfei TTS ====================
 		{
 			Group:        "Xunfei TTS",
-			Path:         config.GlobalConfig.APIPrefix + "/xunfei/synthesize",
+			Path:         config.GlobalConfig.Server.APIPrefix + "/xunfei/synthesize",
 			Method:       http.MethodPost,
 			AuthRequired: true,
 			Desc:         "Xunfei text-to-speech synthesis",
@@ -1200,7 +1200,7 @@ func (h *Handlers) GetDocs() []apidocs.UriDoc {
 		},
 		{
 			Group:        "Xunfei TTS",
-			Path:         config.GlobalConfig.APIPrefix + "/xunfei/task/create",
+			Path:         config.GlobalConfig.Server.APIPrefix + "/xunfei/task/create",
 			Method:       http.MethodPost,
 			AuthRequired: true,
 			Desc:         "Create Xunfei voice training task",
@@ -1222,14 +1222,14 @@ func (h *Handlers) GetDocs() []apidocs.UriDoc {
 		},
 		{
 			Group:        "Xunfei TTS",
-			Path:         config.GlobalConfig.APIPrefix + "/xunfei/task/submit-audio",
+			Path:         config.GlobalConfig.Server.APIPrefix + "/xunfei/task/submit-audio",
 			Method:       http.MethodPost,
 			AuthRequired: true,
 			Desc:         "Submit audio file for Xunfei training",
 		},
 		{
 			Group:        "Xunfei TTS",
-			Path:         config.GlobalConfig.APIPrefix + "/xunfei/task/query",
+			Path:         config.GlobalConfig.Server.APIPrefix + "/xunfei/task/query",
 			Method:       http.MethodPost,
 			AuthRequired: true,
 			Desc:         "Query Xunfei training task status",
@@ -1242,7 +1242,7 @@ func (h *Handlers) GetDocs() []apidocs.UriDoc {
 		},
 		{
 			Group:        "Xunfei TTS",
-			Path:         config.GlobalConfig.APIPrefix + "/xunfei/training-texts",
+			Path:         config.GlobalConfig.Server.APIPrefix + "/xunfei/training-texts",
 			Method:       http.MethodGet,
 			AuthRequired: true,
 			Desc:         "Get Xunfei training texts",
@@ -1251,7 +1251,7 @@ func (h *Handlers) GetDocs() []apidocs.UriDoc {
 		// ==================== Voice Training ====================
 		{
 			Group:        "Voice Training",
-			Path:         config.GlobalConfig.APIPrefix + "/voice/training/create",
+			Path:         config.GlobalConfig.Server.APIPrefix + "/voice/training/create",
 			Method:       http.MethodPost,
 			AuthRequired: true,
 			Desc:         "Create voice training task",
@@ -1267,14 +1267,14 @@ func (h *Handlers) GetDocs() []apidocs.UriDoc {
 		},
 		{
 			Group:        "Voice Training",
-			Path:         config.GlobalConfig.APIPrefix + "/voice/training/submit-audio",
+			Path:         config.GlobalConfig.Server.APIPrefix + "/voice/training/submit-audio",
 			Method:       http.MethodPost,
 			AuthRequired: true,
 			Desc:         "Submit audio file for voice training",
 		},
 		{
 			Group:        "Voice Training",
-			Path:         config.GlobalConfig.APIPrefix + "/voice/training/query",
+			Path:         config.GlobalConfig.Server.APIPrefix + "/voice/training/query",
 			Method:       http.MethodPost,
 			AuthRequired: true,
 			Desc:         "Query voice training task status",
@@ -1287,7 +1287,7 @@ func (h *Handlers) GetDocs() []apidocs.UriDoc {
 		},
 		{
 			Group:        "Voice Training",
-			Path:         config.GlobalConfig.APIPrefix + "/voice/clones",
+			Path:         config.GlobalConfig.Server.APIPrefix + "/voice/clones",
 			Method:       http.MethodGet,
 			AuthRequired: true,
 			Desc:         "Get user's voice clones",
@@ -1297,14 +1297,14 @@ func (h *Handlers) GetDocs() []apidocs.UriDoc {
 		},
 		{
 			Group:        "Voice Training",
-			Path:         config.GlobalConfig.APIPrefix + "/voice/clones/:id",
+			Path:         config.GlobalConfig.Server.APIPrefix + "/voice/clones/:id",
 			Method:       http.MethodGet,
 			AuthRequired: true,
 			Desc:         "Get a voice clone by ID",
 		},
 		{
 			Group:        "Voice Training",
-			Path:         config.GlobalConfig.APIPrefix + "/voice/clones/update",
+			Path:         config.GlobalConfig.Server.APIPrefix + "/voice/clones/update",
 			Method:       http.MethodPost,
 			AuthRequired: true,
 			Desc:         "Update a voice clone",
@@ -1319,14 +1319,14 @@ func (h *Handlers) GetDocs() []apidocs.UriDoc {
 		},
 		{
 			Group:        "Voice Training",
-			Path:         config.GlobalConfig.APIPrefix + "/voice/clones/delete",
+			Path:         config.GlobalConfig.Server.APIPrefix + "/voice/clones/delete",
 			Method:       http.MethodPost,
 			AuthRequired: true,
 			Desc:         "Delete a voice clone",
 		},
 		{
 			Group:        "Voice Training",
-			Path:         config.GlobalConfig.APIPrefix + "/voice/synthesize",
+			Path:         config.GlobalConfig.Server.APIPrefix + "/voice/synthesize",
 			Method:       http.MethodPost,
 			AuthRequired: true,
 			Desc:         "Synthesize speech with trained voice",
@@ -1342,42 +1342,42 @@ func (h *Handlers) GetDocs() []apidocs.UriDoc {
 		},
 		{
 			Group:        "Voice Training",
-			Path:         config.GlobalConfig.APIPrefix + "/voice/synthesis/history",
+			Path:         config.GlobalConfig.Server.APIPrefix + "/voice/synthesis/history",
 			Method:       http.MethodGet,
 			AuthRequired: true,
 			Desc:         "Get synthesis history",
 		},
 		{
 			Group:        "Voice Training",
-			Path:         config.GlobalConfig.APIPrefix + "/voice/synthesis/delete",
+			Path:         config.GlobalConfig.Server.APIPrefix + "/voice/synthesis/delete",
 			Method:       http.MethodPost,
 			AuthRequired: true,
 			Desc:         "Delete a synthesis record",
 		},
 		{
 			Group:        "Voice Training",
-			Path:         config.GlobalConfig.APIPrefix + "/voice/training-texts",
+			Path:         config.GlobalConfig.Server.APIPrefix + "/voice/training-texts",
 			Method:       http.MethodGet,
 			AuthRequired: true,
 			Desc:         "Get training texts",
 		},
 		{
 			Group:        "Voice Training",
-			Path:         config.GlobalConfig.APIPrefix + "/voice/oneshot_text",
+			Path:         config.GlobalConfig.Server.APIPrefix + "/voice/oneshot_text",
 			Method:       http.MethodPost,
 			AuthRequired: true,
 			Desc:         "One-shot text synthesis",
 		},
 		{
 			Group:        "Voice Training",
-			Path:         config.GlobalConfig.APIPrefix + "/voice/audio_status",
+			Path:         config.GlobalConfig.Server.APIPrefix + "/voice/audio_status",
 			Method:       http.MethodGet,
 			AuthRequired: true,
 			Desc:         "Get audio processing status",
 		},
 		{
 			Group:        "Voice Training",
-			Path:         config.GlobalConfig.APIPrefix + "/voice/options",
+			Path:         config.GlobalConfig.Server.APIPrefix + "/voice/options",
 			Method:       http.MethodGet,
 			AuthRequired: true,
 			Desc:         "Get voice options list based on TTS provider",
@@ -1386,70 +1386,70 @@ func (h *Handlers) GetDocs() []apidocs.UriDoc {
 		// ==================== WebSocket ====================
 		{
 			Group:        "WebSocket",
-			Path:         config.GlobalConfig.APIPrefix + "/ws",
+			Path:         config.GlobalConfig.Server.APIPrefix + "/ws",
 			Method:       "GET",
 			AuthRequired: true,
 			Desc:         "WebSocket connection endpoint",
 		},
 		{
 			Group:        "WebSocket",
-			Path:         config.GlobalConfig.APIPrefix + "/voice/websocket",
+			Path:         config.GlobalConfig.Server.APIPrefix + "/voice/websocket",
 			Method:       "GET",
 			AuthRequired: true,
 			Desc:         "WebSocket voice connection endpoint (supports multiple providers)",
 		},
 		{
 			Group:        "WebSocket",
-			Path:         config.GlobalConfig.APIPrefix + "/ws/stats",
+			Path:         config.GlobalConfig.Server.APIPrefix + "/ws/stats",
 			Method:       http.MethodGet,
 			AuthRequired: true,
 			Desc:         "Get WebSocket statistics",
 		},
 		{
 			Group:        "WebSocket",
-			Path:         config.GlobalConfig.APIPrefix + "/ws/health",
+			Path:         config.GlobalConfig.Server.APIPrefix + "/ws/health",
 			Method:       http.MethodGet,
 			AuthRequired: true,
 			Desc:         "WebSocket health check",
 		},
 		{
 			Group:        "WebSocket",
-			Path:         config.GlobalConfig.APIPrefix + "/ws/user/:user_id",
+			Path:         config.GlobalConfig.Server.APIPrefix + "/ws/user/:user_id",
 			Method:       http.MethodGet,
 			AuthRequired: true,
 			Desc:         "Get user WebSocket statistics",
 		},
 		{
 			Group:        "WebSocket",
-			Path:         config.GlobalConfig.APIPrefix + "/ws/group/:group",
+			Path:         config.GlobalConfig.Server.APIPrefix + "/ws/group/:group",
 			Method:       http.MethodGet,
 			AuthRequired: true,
 			Desc:         "Get group WebSocket statistics",
 		},
 		{
 			Group:        "WebSocket",
-			Path:         config.GlobalConfig.APIPrefix + "/ws/message",
+			Path:         config.GlobalConfig.Server.APIPrefix + "/ws/message",
 			Method:       http.MethodPost,
 			AuthRequired: true,
 			Desc:         "Send WebSocket message",
 		},
 		{
 			Group:        "WebSocket",
-			Path:         config.GlobalConfig.APIPrefix + "/ws/broadcast",
+			Path:         config.GlobalConfig.Server.APIPrefix + "/ws/broadcast",
 			Method:       http.MethodPost,
 			AuthRequired: true,
 			Desc:         "Broadcast WebSocket message",
 		},
 		{
 			Group:        "WebSocket",
-			Path:         config.GlobalConfig.APIPrefix + "/ws/user/:user_id",
+			Path:         config.GlobalConfig.Server.APIPrefix + "/ws/user/:user_id",
 			Method:       http.MethodDelete,
 			AuthRequired: true,
 			Desc:         "Disconnect user from WebSocket",
 		},
 		{
 			Group:        "WebSocket",
-			Path:         config.GlobalConfig.APIPrefix + "/ws/group/:group",
+			Path:         config.GlobalConfig.Server.APIPrefix + "/ws/group/:group",
 			Method:       http.MethodDelete,
 			AuthRequired: true,
 			Desc:         "Disconnect group from WebSocket",
@@ -1459,14 +1459,14 @@ func (h *Handlers) GetDocs() []apidocs.UriDoc {
 	// 从数据库读取搜索配置，如果数据库中没有则使用配置文件
 	searchEnabled := utils.GetBoolValue(h.db, constants.KEY_SEARCH_ENABLED)
 	if !searchEnabled && config.GlobalConfig != nil {
-		searchEnabled = config.GlobalConfig.SearchEnabled
+		searchEnabled = config.GlobalConfig.Features.SearchEnabled
 	}
 
 	if searchEnabled {
 		uriDocs = append(uriDocs, []apidocs.UriDoc{
 			{
 				Group:   "Search",
-				Path:    config.GlobalConfig.APIPrefix + "/search",
+				Path:    config.GlobalConfig.Server.APIPrefix + "/search",
 				Method:  http.MethodPost,
 				Desc:    "Execute a search query",
 				Request: apidocs.GetDocDefine(search.SearchRequest{}),
@@ -1485,7 +1485,7 @@ func (h *Handlers) GetDocs() []apidocs.UriDoc {
 			},
 			{
 				Group:        "Search",
-				Path:         config.GlobalConfig.APIPrefix + "/search/index",
+				Path:         config.GlobalConfig.Server.APIPrefix + "/search/index",
 				Method:       http.MethodPost,
 				AuthRequired: true,
 				Desc:         "Index a new document",
@@ -1497,7 +1497,7 @@ func (h *Handlers) GetDocs() []apidocs.UriDoc {
 			},
 			{
 				Group:        "Search",
-				Path:         config.GlobalConfig.APIPrefix + "/search/delete",
+				Path:         config.GlobalConfig.Server.APIPrefix + "/search/delete",
 				Method:       http.MethodPost,
 				AuthRequired: true,
 				Desc:         "Delete a document by its ID",
@@ -1514,7 +1514,7 @@ func (h *Handlers) GetDocs() []apidocs.UriDoc {
 			},
 			{
 				Group:        "Search",
-				Path:         config.GlobalConfig.APIPrefix + "/search/auto-complete",
+				Path:         config.GlobalConfig.Server.APIPrefix + "/search/auto-complete",
 				Method:       http.MethodPost,
 				AuthRequired: false,
 				Desc:         "Get search query auto-completion suggestions",
@@ -1535,7 +1535,7 @@ func (h *Handlers) GetDocs() []apidocs.UriDoc {
 			},
 			{
 				Group:        "Search",
-				Path:         config.GlobalConfig.APIPrefix + "/search/suggest",
+				Path:         config.GlobalConfig.Server.APIPrefix + "/search/suggest",
 				Method:       http.MethodPost,
 				AuthRequired: false,
 				Desc:         "Get search suggestions based on the keyword",

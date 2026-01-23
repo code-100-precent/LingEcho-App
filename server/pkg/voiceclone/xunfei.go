@@ -728,7 +728,7 @@ func (s *XunfeiService) SynthesizeToStorage(ctx context.Context, req *Synthesize
 	result, err := config.GlobalStore.UploadBytes(&lingstorage.UploadBytesRequest{
 		Data:     mp3Data,
 		Filename: storageKey,
-		Bucket:   config.GlobalConfig.LingstorageBucket,
+		Bucket:   config.GlobalConfig.Services.Storage.Bucket,
 		Key:      storageKey,
 	})
 

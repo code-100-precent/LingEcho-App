@@ -22,7 +22,7 @@ func main() {
 		panic("config load failed: " + err.Error())
 	}
 	// Load Log Configuration
-	err := logger.Init(&config.GlobalConfig.Log, config.GlobalConfig.Mode)
+	err := logger.Init(&config.GlobalConfig.Log, config.GlobalConfig.Server.Mode)
 	if err != nil {
 		panic(err)
 	}

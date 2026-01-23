@@ -49,7 +49,7 @@ func (h *Handlers) HealthCheck(c *gin.Context) {
 // SystemInit system initialization endpoint, returns basic configuration information
 func (h *Handlers) SystemInit(c *gin.Context) {
 	// Get database type
-	dbDriver := config.GlobalConfig.DBDriver
+	dbDriver := config.GlobalConfig.Database.Driver
 	if dbDriver == "" {
 		dbDriver = "sqlite"
 	}
@@ -59,7 +59,7 @@ func (h *Handlers) SystemInit(c *gin.Context) {
 	isMemoryDB := strings.ToLower(dbDriver) == "sqlite"
 
 	// Check if email configuration is complete
-	mailConfig := config.GlobalConfig.Mail
+	mailConfig := config.GlobalConfig.Services.Mail
 	emailConfigured := mailConfig.Host != "" &&
 		mailConfig.Port > 0 &&
 		mailConfig.Username != "" &&

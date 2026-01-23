@@ -56,8 +56,8 @@ func SetupDatabase(logWriter io.Writer, opts *Options) (*gorm.DB, error) {
 			return nil, err
 		}
 		logger.Info("migration success",
-			zap.String("database", config.GlobalConfig.DBDriver),
-			zap.String("dsn", config.GlobalConfig.DSN),
+			zap.String("database", config.GlobalConfig.Database.Driver),
+			zap.String("dsn", config.GlobalConfig.Database.DSN),
 		)
 	}
 
@@ -78,8 +78,8 @@ func SetupDatabase(logWriter io.Writer, opts *Options) (*gorm.DB, error) {
 
 // initDBConn creates *gorm.DB based on global configuration
 func initDBConn(logWriter io.Writer) (*gorm.DB, error) {
-	dbDriver := config.GlobalConfig.DBDriver
-	dsn := config.GlobalConfig.DSN
+	dbDriver := config.GlobalConfig.Database.Driver
+	dsn := config.GlobalConfig.Database.DSN
 	return utils.InitDatabase(logWriter, dbDriver, dsn)
 }
 

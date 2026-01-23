@@ -401,11 +401,11 @@ func HandleAdminJson(c *gin.Context, objects []*AdminObject, buildContext AdminB
 	}
 
 	// 添加监控页面路径（动态获取）
-	apiPrefix := config.GlobalConfig.APIPrefix
+	apiPrefix := config.GlobalConfig.Server.APIPrefix
 	if apiPrefix == "" {
 		apiPrefix = "/api"
 	}
-	monitorPrefix := config.GlobalConfig.MonitorPrefix
+	monitorPrefix := config.GlobalConfig.Server.MonitorPrefix
 	if monitorPrefix == "" {
 		monitorPrefix = "/metrics"
 	}

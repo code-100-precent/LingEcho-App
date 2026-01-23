@@ -81,7 +81,7 @@ func setupTestRouter() *gin.Engine {
 			SearchEnabled: true,
 		}
 	} else {
-		config.GlobalConfig.SearchEnabled = true
+		config.GlobalConfig.Features.SearchEnabled = true
 	}
 	return gin.New()
 }
