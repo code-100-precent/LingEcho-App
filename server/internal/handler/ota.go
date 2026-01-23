@@ -206,8 +206,8 @@ func (h *Handlers) buildOTAResponse(deviceID, clientID string, req *models.Devic
 		if wsURL == "" || wsURL == "null" {
 			// Use default WebSocket URL based on config
 			// 实际路由路径：/api/voice/lingecho/v1/
-			if config.GlobalConfig.ServerUrl != "" {
-				baseURL := strings.TrimSuffix(config.GlobalConfig.ServerUrl, "/")
+			if config.GlobalConfig.Server.URL != "" {
+				baseURL := strings.TrimSuffix(config.GlobalConfig.Server.URL, "/")
 				// 保留 API prefix，因为路由在 /api 下
 				wsURL = strings.Replace(baseURL, "http://", "ws://", 1)
 				wsURL = strings.Replace(wsURL, "https://", "wss://", 1)

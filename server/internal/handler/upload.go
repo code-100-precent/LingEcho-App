@@ -52,7 +52,7 @@ func (h *UploadHandler) UploadAudio(c *gin.Context) {
 	storageKey := fmt.Sprintf("audio/%s", fileName)
 	reader, err := config.GlobalStore.UploadFromReader(&lingstorage.UploadFromReaderRequest{
 		Reader:   file,
-		Bucket:   config.GlobalConfig.LingstorageBucket,
+		Bucket:   config.GlobalConfig.Services.Storage.Bucket,
 		Filename: storageKey,
 		Key:      storageKey,
 	})

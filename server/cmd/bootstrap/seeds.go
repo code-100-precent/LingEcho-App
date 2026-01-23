@@ -40,35 +40,35 @@ func (s *SeedService) SeedAll() error {
 }
 
 func (s *SeedService) seedConfigs() error {
-	apiPrefix := config.GlobalConfig.APIPrefix
+	apiPrefix := config.GlobalConfig.Server.APIPrefix
 	defaults := []utils.Config{
 		{Key: constants.KEY_SITE_URL, Desc: "Site URL", Autoload: true, Public: true, Format: "text", Value: func() string {
-			if config.GlobalConfig.ServerUrl != "" {
-				return config.GlobalConfig.ServerUrl
+			if config.GlobalConfig.Server.URL != "" {
+				return config.GlobalConfig.Server.URL
 			}
 			return "https://lingecho.com"
 		}()},
 		{Key: constants.KEY_SITE_NAME, Desc: "Site Name", Autoload: true, Public: true, Format: "text", Value: func() string {
-			if config.GlobalConfig.ServerName != "" {
-				return config.GlobalConfig.ServerName
+			if config.GlobalConfig.Server.Name != "" {
+				return config.GlobalConfig.Server.Name
 			}
 			return "LingEcho"
 		}()},
 		{Key: constants.KEY_SITE_LOGO_URL, Desc: "Site Logo", Autoload: true, Public: true, Format: "text", Value: func() string {
-			if config.GlobalConfig.ServerLogo != "" {
-				return config.GlobalConfig.ServerLogo
+			if config.GlobalConfig.Server.Logo != "" {
+				return config.GlobalConfig.Server.Logo
 			}
 			return "/static/img/favicon.png"
 		}()},
 		{Key: constants.KEY_SITE_DESCRIPTION, Desc: "Site Description", Autoload: true, Public: true, Format: "text", Value: func() string {
-			if config.GlobalConfig.ServerDesc != "" {
-				return config.GlobalConfig.ServerDesc
+			if config.GlobalConfig.Server.Desc != "" {
+				return config.GlobalConfig.Server.Desc
 			}
 			return "LingEcho - Intelligent Voice Customer Service Platform"
 		}()},
 		{Key: constants.KEY_SITE_TERMS_URL, Desc: "Terms of Service", Autoload: true, Public: true, Format: "text", Value: func() string {
-			if config.GlobalConfig.ServerTermsUrl != "" {
-				return config.GlobalConfig.ServerTermsUrl
+			if config.GlobalConfig.Server.TermsURL != "" {
+				return config.GlobalConfig.Server.TermsURL
 			}
 			return "https://lingecho.com"
 		}()},
@@ -84,20 +84,20 @@ func (s *SeedService) seedConfigs() error {
 		{Key: constants.KEY_SITE_USER_ID_TYPE, Desc: "User ID Type", Autoload: true, Public: true, Format: "text", Value: "email"},
 		// Search configuration
 		{Key: constants.KEY_SEARCH_ENABLED, Desc: "Search Feature Enabled", Autoload: true, Public: true, Format: "bool", Value: func() string {
-			if config.GlobalConfig.SearchEnabled {
+			if config.GlobalConfig.Features.SearchEnabled {
 				return "true"
 			}
 			return "false"
 		}()},
 		{Key: constants.KEY_SEARCH_PATH, Desc: "Search Index Path", Autoload: true, Public: false, Format: "text", Value: func() string {
-			if config.GlobalConfig.SearchPath != "" {
-				return config.GlobalConfig.SearchPath
+			if config.GlobalConfig.Features.SearchPath != "" {
+				return config.GlobalConfig.Features.SearchPath
 			}
 			return "./search"
 		}()},
 		{Key: constants.KEY_SEARCH_BATCH_SIZE, Desc: "Search Batch Size", Autoload: true, Public: false, Format: "int", Value: func() string {
-			if config.GlobalConfig.SearchBatchSize > 0 {
-				return strconv.Itoa(config.GlobalConfig.SearchBatchSize)
+			if config.GlobalConfig.Features.SearchBatchSize > 0 {
+				return strconv.Itoa(config.GlobalConfig.Features.SearchBatchSize)
 			}
 			return "100"
 		}()},

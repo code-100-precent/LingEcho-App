@@ -74,7 +74,7 @@ func main() {
 	}
 
 	// 5. Load Log Configuration
-	err := logger.Init(&config.GlobalConfig.Log, config.GlobalConfig.Mode)
+	err := logger.Init(&config.GlobalConfig.Log, config.GlobalConfig.Server.Mode)
 	if err != nil {
 		panic(err)
 	}
@@ -94,17 +94,17 @@ func main() {
 	}
 
 	// 8. Load Base Configs
-	var addr = config.GlobalConfig.Addr
+	var addr = config.GlobalConfig.Server.Addr
 	if addr == "" {
 		addr = ":7072"
 	}
 
-	var DBDriver = config.GlobalConfig.DBDriver
+	var DBDriver = config.GlobalConfig.Database.Driver
 	if DBDriver == "" {
 		DBDriver = "sqlite"
 	}
 
-	var DSN = config.GlobalConfig.DSN
+	var DSN = config.GlobalConfig.Database.DSN
 	if DSN == "" {
 		DSN = "file::memory:?cache=shared"
 	}
@@ -114,7 +114,7 @@ func main() {
 
 	logger.Info("checked config -- addr: ", zap.String("addr", addr))
 	logger.Info("checked config -- db-driver: ", zap.String("db-driver", DBDriver), zap.String("dsn", DSN))
-	logger.Info("checked config -- mode: ", zap.String("mode", config.GlobalConfig.Mode))
+	logger.Info("checked config -- mode: ", zap.String("mode", config.GlobalConfig.Server.Mode))
 
 	// 9. Load Global Cache (new cache system)
 	if err := cache.InitGlobalCache(config.GlobalConfig.Cache); err != nil {
@@ -240,12 +240,12 @@ func main() {
 		zap.Bool("operationLog", config.GlobalConfig.Middleware.EnableOperationLog))
 
 	// 14. Initialize Neo4j Graph Database (if enabled)
-	if config.GlobalConfig.Neo4jEnabled {
+	if config.GlobalConfig.Services.KnowledgeBase.Neo4j.Enabled {
 		graphStore, err := graph.NewNeo4jStore(
-			config.GlobalConfig.Neo4jURI,
-			config.GlobalConfig.Neo4jUsername,
-			config.GlobalConfig.Neo4jPassword,
-			config.GlobalConfig.Neo4jDatabase,
+			config.GlobalConfig.Services.KnowledgeBase.Neo4j.URI,
+			config.GlobalConfig.Services.KnowledgeBase.Neo4j.Username,
+			config.GlobalConfig.Services.KnowledgeBase.Neo4j.Password,
+			config.GlobalConfig.Services.KnowledgeBase.Neo4j.Database,
 		)
 		if err != nil {
 			logger.Error("Failed to initialize Neo4j", zap.Error(err))
@@ -276,7 +276,7 @@ func main() {
 	// Start Quota Alert Checker
 	task.StartQuotaAlertChecker(db)
 	// Start Backup Data
-	if config.GlobalConfig.BackupEnabled {
+	if config.GlobalConfig.Features.BackupEnabled {
 		backup.StartBackupScheduler()
 	}
 
@@ -329,7 +329,7 @@ func main() {
 	// 注册 /uploads（主路径）并保留 /media 兼容历史
 	r.Static("/uploads", uploadDir)
 	r.Static("/media", uploadDir)
-	apiPrefix := config.GlobalConfig.APIPrefix
+	apiPrefix := config.GlobalConfig.Server.APIPrefix
 	if apiPrefix == "" {
 		apiPrefix = "/api"
 	}
@@ -343,7 +343,7 @@ func main() {
 		staticRootDir = "static"
 	}
 	staticAssets := LingEcho.NewCombineEmbedFS(LingEcho.HintAssetsRoot(staticRootDir), LingEcho.EmbedFS{"static", LingEcho.EmbedStaticAssets})
-	apiPrefix = config.GlobalConfig.APIPrefix
+	apiPrefix = config.GlobalConfig.Server.APIPrefix
 	if apiPrefix == "" {
 		apiPrefix = "/api"
 	}
@@ -354,12 +354,12 @@ func main() {
 
 	// 18.6. Register Metrics Monitor Routes
 	// Get API prefix from config (default: /api)
-	apiPrefix = config.GlobalConfig.APIPrefix
+	apiPrefix = config.GlobalConfig.Server.APIPrefix
 	if apiPrefix == "" {
 		apiPrefix = "/api"
 	}
 	// Get monitor prefix from config (default: /metrics)
-	monitorPrefix := config.GlobalConfig.MonitorPrefix
+	monitorPrefix := config.GlobalConfig.Server.MonitorPrefix
 	if monitorPrefix == "" {
 		monitorPrefix = "/metrics"
 	}
@@ -379,7 +379,7 @@ func main() {
 	// 20. Start Search Indexer (if enabled)
 	searchEnabled := utils.GetBoolValue(db, constants.KEY_SEARCH_ENABLED)
 	if !searchEnabled && config.GlobalConfig != nil {
-		searchEnabled = config.GlobalConfig.SearchEnabled
+		searchEnabled = config.GlobalConfig.Features.SearchEnabled
 	}
 
 	if searchEnabled {
@@ -438,7 +438,7 @@ func main() {
 	}
 
 	// Check if SSL is enabled
-	if config.GlobalConfig.SSLEnabled && listeners.IsSSLEnabled() {
+	if config.GlobalConfig.Server.SSLEnabled && listeners.IsSSLEnabled() {
 		tlsConfig, err := listeners.GetTLSConfig()
 		if err != nil {
 			logger.Error("failed to get TLS config", zap.Error(err))

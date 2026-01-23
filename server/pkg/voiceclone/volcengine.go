@@ -790,7 +790,7 @@ func (s *VolcengineService) SynthesizeToStorage(ctx context.Context, req *Synthe
 	result, err := config.GlobalStore.UploadBytes(&lingstorage.UploadBytesRequest{
 		Data:     wavData,
 		Filename: storageKey,
-		Bucket:   config.GlobalConfig.LingstorageBucket,
+		Bucket:   config.GlobalConfig.Services.Storage.Bucket,
 		Key:      storageKey,
 	})
 
