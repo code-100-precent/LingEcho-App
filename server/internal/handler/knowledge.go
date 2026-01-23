@@ -154,7 +154,7 @@ func (h *Handlers) CreateKnowledgeBase(c *gin.Context) {
 		provider = knowledge.DefaultProvider
 	}
 
-	// 获取组织ID（可选）
+	// Get organization ID (optional)
 	var groupID *uint
 	if groupIDStr := c.PostForm("group_id"); groupIDStr != "" {
 		if parsedID, err := strconv.ParseUint(groupIDStr, 10, 32); err == nil {
@@ -167,18 +167,18 @@ func (h *Handlers) CreateKnowledgeBase(c *gin.Context) {
 	user := models.CurrentUser(c)
 	userId := int(user.ID)
 
-	// 如果指定了组织ID，验证用户是否有权限在该组织创建共享知识库
+	// If organization ID is specified, verify user has permission to create shared knowledge base in that organization
 	if groupID != nil {
 		var group models.Group
 		if err := h.db.First(&group, *groupID).Error; err != nil {
-			response.Fail(c, "组织不存在", nil)
+			response.Fail(c, "Organization not found", nil)
 			return
 		}
-		// 检查用户是否是组织的创建者或管理员
+		// Check if user is the creator or admin of the organization
 		if group.CreatorID != user.ID {
 			var member models.GroupMember
 			if err := h.db.Where("group_id = ? AND user_id = ? AND role = ?", *groupID, user.ID, models.GroupRoleAdmin).First(&member).Error; err != nil {
-				response.Fail(c, "权限不足", "只有创建者或管理员可以创建组织共享的知识库")
+				response.Fail(c, "Insufficient permissions", "Only creator or admin can create organization-shared knowledge base")
 				return
 			}
 		}

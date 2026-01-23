@@ -12,7 +12,7 @@ import (
 
 var GlobalPromptManager *promptManager
 
-// promptManager 管理提示模板
+// promptManager manages prompt templates
 type promptManager struct {
 	// Prompt mapping table
 	prompts map[string]*registeredPrompt
@@ -27,13 +27,13 @@ type promptManager struct {
 func InitPromptSystem(db *gorm.DB) error {
 	GlobalPromptManager = newPromptManager()
 
-	// 第一步：加载所有模板
+	// Step 1: Load all templates
 	var promptModels []models.PromptModel
 	if err := db.Find(&promptModels).Error; err != nil {
 		return err
 	}
 
-	// 第二步：加载所有参数（按 PromptID 分组）
+	// Step 2: Load all parameters (grouped by PromptID)
 	var allArgs []models.PromptArgModel
 	if err := db.Find(&allArgs).Error; err != nil {
 		return err
@@ -48,12 +48,12 @@ func InitPromptSystem(db *gorm.DB) error {
 		})
 	}
 
-	// 第三步：注册 Prompt
+	// Step 3: Register Prompts
 	for _, model := range promptModels {
 		runtimePrompt := &Prompt{
 			Name:        model.Name,
 			Description: model.Description,
-			Arguments:   argMap[model.ID], // 根据 PromptID 映射
+			Arguments:   argMap[model.ID], // Map by PromptID
 		}
 
 		GlobalPromptManager.registerPrompt(runtimePrompt, nil)
@@ -152,7 +152,7 @@ func (m *promptManager) getPrompts() []*Prompt {
 	return prompts
 }
 
-// handleListPrompts 于处理列出所有提示（prompts）的请求。它从 promptManager 中获取提示列表，将 []*mcp.Prompt 类型转换为 []mcp.Prompt 类型，并封装到 ListPromptsResult 结构中返回
+// handleListPrompts handles requests to list all prompts. It gets the prompt list from promptManager, converts []*mcp.Prompt type to []mcp.Prompt type, and returns it wrapped in ListPromptsResult structure
 func (m *promptManager) handleListPrompts(ctx context.Context, req *JSONRPCRequest) (JSONRPCMessage, error) {
 	prompts := m.getPrompts()
 

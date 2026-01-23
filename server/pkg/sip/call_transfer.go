@@ -9,20 +9,20 @@ import (
 	"gorm.io/gorm"
 )
 
-// CallTransfer 呼叫转移处理器
+// CallTransfer call transfer handler
 type CallTransfer struct {
 	sipServer *SipServer
 	db        *gorm.DB
 }
 
-// TransferRequest 转移请求
+// TransferRequest transfer request
 type TransferRequest struct {
-	CallID       string `json:"callId"`       // 当前通话的Call-ID
-	TargetURI    string `json:"targetUri"`    // 转移目标URI
-	TransferType string `json:"transferType"` // blind (盲转) 或 attended (协商转)
+	CallID       string `json:"callId"`       // Current call's Call-ID
+	TargetURI    string `json:"targetUri"`    // Transfer target URI
+	TransferType string `json:"transferType"` // blind (blind transfer) or attended (consultative transfer)
 }
 
-// NewCallTransfer 创建呼叫转移处理器
+// NewCallTransfer creates call transfer handler
 func NewCallTransfer(sipServer *SipServer, db *gorm.DB) *CallTransfer {
 	return &CallTransfer{
 		sipServer: sipServer,
@@ -30,7 +30,7 @@ func NewCallTransfer(sipServer *SipServer, db *gorm.DB) *CallTransfer {
 	}
 }
 
-// HandleRefer 处理REFER请求（呼叫转移）
+// HandleRefer handles REFER requests (call transfer)
 func (ct *CallTransfer) HandleRefer(req *sip.Request, tx sip.ServerTransaction) {
 	callID := req.CallID().Value()
 	logrus.WithFields(logrus.Fields{

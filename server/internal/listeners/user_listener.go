@@ -173,13 +173,13 @@ func sendEmailVerification(user *models.User, hash, clientIp, userAgent string, 
 		return
 	}
 
-	// 获取站点 URL
+	// Get site URL
 	siteURL := utils.GetValue(db, constants.KEY_SITE_URL)
 	if siteURL == "" {
-		siteURL = "http://localhost:3000" // 默认值
+		siteURL = "http://localhost:3000" // Default value
 	}
 
-	// 构建验证 URL
+	// Build verification URL
 	verifyUrl := siteURL + "/verify-email?token=" + hash
 
 	logger.Info("Preparing to send email verification",
@@ -203,13 +203,13 @@ func sendPasswordResetEmail(user *models.User, hash, clientIp, userAgent string,
 		return
 	}
 
-	// 获取站点 URL
+	// Get site URL
 	siteURL := utils.GetValue(db, constants.KEY_SITE_URL)
 	if siteURL == "" {
-		siteURL = "http://localhost:3000" // 默认值
+		siteURL = "http://localhost:3000" // Default value
 	}
 
-	// 构建重置密码 URL
+	// Build password reset URL
 	resetUrl := siteURL + "/reset-password?token=" + hash
 
 	mailer := notification.NewMailNotification(config.GlobalConfig.Services.Mail)

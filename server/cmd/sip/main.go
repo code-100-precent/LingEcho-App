@@ -41,10 +41,10 @@ func main() {
 	server := sip.NewSipServer(10000)
 	server.SetDBConfig(db)
 	defer server.Close()
-	// 检查命令行参数，如果有 -call 参数则发起呼叫
+	// Check command line arguments, if there's -call parameter then initiate call
 	if len(os.Args) > 2 && os.Args[1] == "-call" {
 		targetURI := os.Args[2]
-		log.Printf("准备发起呼叫到: %s", targetURI)
+		log.Printf("Preparing to initiate call to: %s", targetURI)
 		server.Start(5060, targetURI)
 	}
 	server.Start(5060, "")

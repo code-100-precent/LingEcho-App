@@ -10,40 +10,40 @@ import (
 	"github.com/code-100-precent/LingEcho"
 )
 
-// MailConfig 邮件配置
+// MailConfig email configuration
 type MailConfig struct {
-	Host     string `json:"host"`     // SMTP 服务器地址
-	Port     int64  `json:"port"`     // SMTP 服务器端口
-	Username string `json:"username"` // SMTP 用户名
-	Password string `json:"password"` // SMTP 密码
-	From     string `json:"from"`     // 发件人邮箱
+	Host     string `json:"host"`     // SMTP server address
+	Port     int64  `json:"port"`     // SMTP server port
+	Username string `json:"username"` // SMTP username
+	Password string `json:"password"` // SMTP password
+	From     string `json:"from"`     // Sender email address
 }
 
-// MailNotification 邮件通知
+// MailNotification email notification service
 type MailNotification struct {
 	Config MailConfig
 }
 
-// NewMailNotification 创建邮件通知实例
+// NewMailNotification creates email notification instance
 func NewMailNotification(config MailConfig) *MailNotification {
 	return &MailNotification{Config: config}
 }
 
-// Send 发送邮件
+// Send sends email
 func (m *MailNotification) Send(to, subject, body string) error {
-	// 邮件内容
+	// Email content
 	msg := fmt.Sprintf("To: %s\r\nSubject: %s\r\n\r\n%s", to, subject, body)
 
-	// SMTP 认证
+	// SMTP authentication
 	auth := smtp.PlainAuth("", m.Config.Username, m.Config.Password, m.Config.Host)
 
-	// 配置 TLS
+	// Configure TLS
 	tlsConfig := &tls.Config{
-		ServerName:         m.Config.Host, // 服务器名称
-		InsecureSkipVerify: false,         // 不跳过证书验证
+		ServerName:         m.Config.Host, // Server name
+		InsecureSkipVerify: false,         // Don't skip certificate verification
 	}
 
-	// 连接 SMTP 服务器
+	// Connect to SMTP server
 	addr := fmt.Sprintf("%s:%d", m.Config.Host, m.Config.Port)
 	conn, err := tls.Dial("tcp", addr, tlsConfig)
 	if err != nil {
@@ -51,19 +51,19 @@ func (m *MailNotification) Send(to, subject, body string) error {
 	}
 	defer conn.Close()
 
-	// 创建 SMTP 客户端
+	// Create SMTP client
 	client, err := smtp.NewClient(conn, m.Config.Host)
 	if err != nil {
 		return fmt.Errorf("failed to create SMTP client: %v", err)
 	}
 	defer client.Close()
 
-	// 认证
+	// Authentication
 	if err = client.Auth(auth); err != nil {
 		return fmt.Errorf("failed to authenticate: %v", err)
 	}
 
-	// 设置发件人和收件人
+	// Set sender and recipient
 	if err = client.Mail(m.Config.From); err != nil {
 		return fmt.Errorf("failed to set sender: %v", err)
 	}
@@ -71,7 +71,7 @@ func (m *MailNotification) Send(to, subject, body string) error {
 		return fmt.Errorf("failed to set recipient: %v", err)
 	}
 
-	// 发送邮件内容
+	// Send email content
 	w, err := client.Data()
 	if err != nil {
 		return fmt.Errorf("failed to prepare data: %v", err)
@@ -98,7 +98,7 @@ func (m *MailNotification) SendHTML(to, subject, htmlBody string) error {
 
 	auth := smtp.PlainAuth("", m.Config.Username, m.Config.Password, m.Config.Host)
 
-	// smtp.SendMail 不支持 465（SSL），只能发给 STARTTLS 服务，或使用第三方库
+	// smtp.SendMail doesn't support 465 (SSL), can only send to STARTTLS services, or use third-party libraries
 	return smtp.SendMail(addr, auth, m.Config.From, []string{to}, []byte(msg))
 }
 
@@ -166,9 +166,9 @@ func (m *MailNotification) SendVerificationCode(to, code string) error {
 	return smtp.SendMail(addr, auth, m.Config.From, []string{to}, []byte(msg))
 }
 
-// SendVerificationEmail 发送邮箱验证邮件
+// SendVerificationEmail sends email verification email
 func (m *MailNotification) SendVerificationEmail(to, username, verifyURL string) error {
-	// 使用嵌入的模板
+	// Use embedded template
 	tmpl, err := template.New("email_verification").Parse(LingEcho.EmailVerificationHTML)
 	if err != nil {
 		return fmt.Errorf("failed to parse email verification template: %w", err)
@@ -190,9 +190,9 @@ func (m *MailNotification) SendVerificationEmail(to, username, verifyURL string)
 	return m.SendHTML(to, "请验证您的邮箱地址", body.String())
 }
 
-// SendPasswordResetEmail 发送密码重置邮件
+// SendPasswordResetEmail sends password reset email
 func (m *MailNotification) SendPasswordResetEmail(to, username, resetURL string) error {
-	// 使用嵌入的模板
+	// Use embedded template
 	tmpl, err := template.New("password_reset").Parse(LingEcho.PasswordResetHTML)
 	if err != nil {
 		return fmt.Errorf("failed to parse password reset template: %w", err)
@@ -214,9 +214,9 @@ func (m *MailNotification) SendPasswordResetEmail(to, username, resetURL string)
 	return m.SendHTML(to, "密码重置请求", body.String())
 }
 
-// SendDeviceVerificationCode 发送设备验证码邮件
+// SendDeviceVerificationCode sends device verification code email
 func (m *MailNotification) SendDeviceVerificationCode(to, username, code, deviceID string) error {
-	// 使用嵌入的模板
+	// Use embedded template
 	tmpl, err := template.New("device_verification").Parse(LingEcho.DeviceVerificationHTML)
 	if err != nil {
 		return fmt.Errorf("failed to parse device verification template: %w", err)
@@ -240,7 +240,7 @@ func (m *MailNotification) SendDeviceVerificationCode(to, username, code, device
 	return m.SendHTML(to, "设备验证码", body.String())
 }
 
-// SendGroupInvitationEmail 发送组织邀请邮件
+// SendGroupInvitationEmail sends organization invitation email
 func (m *MailNotification) SendGroupInvitationEmail(to, inviteeName, inviterName, groupName, groupType, groupDescription, acceptURL string) error {
 	// Parse the embedded template
 	tmpl, err := template.New("group_invitation").Parse(LingEcho.GroupInvitationHTML)
@@ -283,9 +283,9 @@ func (m *MailNotification) SendGroupInvitationEmail(to, inviteeName, inviterName
 	return smtp.SendMail(addr, auth, m.Config.From, []string{to}, []byte(msg))
 }
 
-// SendNewDeviceLoginAlert 发送新设备登录警告邮件
+// SendNewDeviceLoginAlert sends new device login alert email
 func (m *MailNotification) SendNewDeviceLoginAlert(to, username, loginTime, ipAddress, location, deviceType, os, browser string, isSuspicious bool, securityURL, changePasswordURL string) error {
-	// 使用嵌入的模板
+	// Use embedded template
 	tmpl, err := template.New("new_device_login").Parse(LingEcho.NewDeviceLoginHTML)
 	if err != nil {
 		return fmt.Errorf("failed to parse new device login template: %w", err)

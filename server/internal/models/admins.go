@@ -400,7 +400,7 @@ func HandleAdminJson(c *gin.Context, objects []*AdminObject, buildContext AdminB
 		siteCtx = buildContext(c, siteCtx)
 	}
 
-	// 添加监控页面路径（动态获取）
+	// Add monitoring page path (dynamically obtained)
 	apiPrefix := config.GlobalConfig.Server.APIPrefix
 	if apiPrefix == "" {
 		apiPrefix = "/api"
@@ -409,8 +409,8 @@ func HandleAdminJson(c *gin.Context, objects []*AdminObject, buildContext AdminB
 	if monitorPrefix == "" {
 		monitorPrefix = "/metrics"
 	}
-	// 组合完整的监控URL路径：/api/metrics/ui
-	// 将 monitor_url 添加到 Site 对象中，因为前端访问的是 site.Site.monitor_url
+	// Combine complete monitoring URL path: /api/metrics/ui
+	// Add monitor_url to Site object, as frontend accesses site.Site.monitor_url
 	if siteMap, ok := siteCtx["Site"].(map[string]any); ok {
 		siteMap["monitor_url"] = apiPrefix + monitorPrefix + "/ui"
 	}
@@ -425,7 +425,7 @@ func HandleAdminJson(c *gin.Context, objects []*AdminObject, buildContext AdminB
 func (obj *AdminObject) BuildPermissions(db *gorm.DB, user *User) {
 	obj.Permissions = map[string]bool{}
 
-	// 超级管理员或管理员拥有所有权限
+	// Super admin or admin has all permissions
 	if user.IsAdmin() {
 		obj.Permissions["can_create"] = true
 		obj.Permissions["can_update"] = true
@@ -434,15 +434,15 @@ func (obj *AdminObject) BuildPermissions(db *gorm.DB, user *User) {
 		return
 	}
 
-	// 根据权限列表设置权限
-	// 检查是否有 admin.write 权限
+	// Set permissions based on permission list
+	// Check if has admin.write permission
 	if user.HasPermission("admin.write") {
 		obj.Permissions["can_create"] = true
 		obj.Permissions["can_update"] = true
 		obj.Permissions["can_delete"] = true
 		obj.Permissions["can_action"] = true
 	} else {
-		// 默认普通用户只有读取权限
+		// Default regular users only have read permissions
 		obj.Permissions["can_create"] = false
 		obj.Permissions["can_update"] = false
 		obj.Permissions["can_delete"] = false

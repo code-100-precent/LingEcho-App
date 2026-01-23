@@ -10,7 +10,7 @@ type AliyunSMSConfig struct {
 	AccessKeySecret string
 	SignName        string
 	TemplateCode    string
-	Endpoint        string // 默认 cn-hangzhou
+	Endpoint        string // Default cn-hangzhou
 }
 
 type AliyunSMS struct {
@@ -18,7 +18,7 @@ type AliyunSMS struct {
 	cli AliyunSMSClient
 }
 
-// AliyunSMSClient 便于替换/注入的发送接口（适配真实 SDK）
+// AliyunSMSClient interface for easy replacement/injection (adapts to real SDK)
 type AliyunSMSClient interface {
 	Send(ctx context.Context, phone, sign, template string, params map[string]string) error
 }
