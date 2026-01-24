@@ -66,39 +66,19 @@ func (v *VADDetector) CheckBargeIn(pcmData []byte, ttsPlaying bool) bool {
 	// 计算音频能量 (RMS)
 	rms := calculateRMS(pcmData)
 
-	// 更新噪音水平（使用滑动平均，只记录低能量的样本作为噪音）
-	if rms < 200 { // 只将低能量样本作为噪音
-		v.noiseSamples = append(v.noiseSamples, rms)
-		if len(v.noiseSamples) > v.maxNoiseSamples {
-			v.noiseSamples = v.noiseSamples[1:]
-		}
-		// 计算平均噪音
-		var sum float64
-		for _, sample := range v.noiseSamples {
-			sum += sample
-		}
-		if len(v.noiseSamples) > 0 {
-			v.noiseLevel = sum / float64(len(v.noiseSamples))
-			// 自适应阈值 = 噪音水平的 3 倍，但至少为 50，最多为绝对值阈值
-			v.adaptiveThreshold = v.noiseLevel * 3.0
-			if v.adaptiveThreshold < 50 {
-				v.adaptiveThreshold = 50
-			}
-			if v.adaptiveThreshold > v.threshold {
-				v.adaptiveThreshold = v.threshold
-			}
-		}
-	}
+	// 参考xiaozhi-server的实现：TTS播放时大幅提高阈值避免误触发
+	// 基础阈值设为800（正常语音通常在500-5000之间）
+	baseThreshold := 800.0
+	// TTS播放时阈值提高3倍，避免TTS回音误触发barge-in
+	ttsThresholdMultiplier := 3.0
+	effectiveThreshold := baseThreshold * ttsThresholdMultiplier // 2400
 
-	// 使用自适应阈值（如果已初始化）或绝对值阈值
-	effectiveThreshold := v.threshold
-	if v.adaptiveThreshold > 0 {
-		effectiveThreshold = v.adaptiveThreshold
-	}
+	// 需要连续8帧超过阈值才触发，进一步减少误触发
+	requiredFrames := 8
 
-	// 限流日志：每秒最多记录一次
+	// 限流日志：每2秒最多记录一次
 	now := time.Now()
-	shouldLog := v.logger != nil && now.Sub(v.lastLogTime) >= time.Second
+	shouldLog := v.logger != nil && now.Sub(v.lastLogTime) >= 2*time.Second
 
 	// 检查能量是否超过阈值
 	if rms > effectiveThreshold {
@@ -107,22 +87,19 @@ func (v *VADDetector) CheckBargeIn(pcmData []byte, ttsPlaying bool) bool {
 			v.lastLogTime = now
 			v.logger.Debug("VAD检测：音频能量超过阈值",
 				zap.Float64("rms", rms),
+				zap.Float64("baseThreshold", baseThreshold),
 				zap.Float64("effectiveThreshold", effectiveThreshold),
-				zap.Float64("absoluteThreshold", v.threshold),
-				zap.Float64("adaptiveThreshold", v.adaptiveThreshold),
-				zap.Float64("noiseLevel", v.noiseLevel),
+				zap.Float64("multiplier", ttsThresholdMultiplier),
 				zap.Int("frameCounter", v.frameCounter),
-				zap.Int("framesNeeded", v.consecutiveFramesNeeded),
+				zap.Int("framesNeeded", requiredFrames),
 			)
 		}
 		// 达到连续帧数要求，触发 barge-in
-		if v.frameCounter >= v.consecutiveFramesNeeded {
+		if v.frameCounter >= requiredFrames {
 			if v.logger != nil {
 				v.logger.Info("VAD触发barge-in",
 					zap.Float64("rms", rms),
 					zap.Float64("effectiveThreshold", effectiveThreshold),
-					zap.Float64("adaptiveThreshold", v.adaptiveThreshold),
-					zap.Float64("noiseLevel", v.noiseLevel),
 					zap.Int("frames", v.frameCounter),
 				)
 			}
@@ -136,8 +113,6 @@ func (v *VADDetector) CheckBargeIn(pcmData []byte, ttsPlaying bool) bool {
 			v.logger.Debug("VAD检测：音频能量低于阈值，重置计数器",
 				zap.Float64("rms", rms),
 				zap.Float64("effectiveThreshold", effectiveThreshold),
-				zap.Float64("adaptiveThreshold", v.adaptiveThreshold),
-				zap.Float64("noiseLevel", v.noiseLevel),
 				zap.Int("previousFrameCounter", v.frameCounter),
 			)
 		}

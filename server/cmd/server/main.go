@@ -431,7 +431,7 @@ func main() {
 	httpServer := &http.Server{
 		Addr:           addr,
 		Handler:        r,
-		ReadTimeout:    30 * time.Second,
+		ReadTimeout:    300 * time.Second, // 5分钟，适合语音会话的长静音期
 		WriteTimeout:   30 * time.Second,
 		IdleTimeout:    120 * time.Second,
 		MaxHeaderBytes: 1 << 20, // 1MB

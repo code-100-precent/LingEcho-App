@@ -95,10 +95,9 @@ func (p *Processor) ProcessASRResult(ctx context.Context, text string) {
 		p.logger.Info("ASR检测到用户说话，中断TTS播放",
 			zap.String("user_text", text),
 		)
-		// 先取消 TTS context，停止音频合成和发送
-		p.stateManager.CancelTTS()
-		// 然后设置 TTS 播放状态为 false
+		// 优雅地取消 TTS：先设置状态，再取消context，最后发送结束消息
 		p.stateManager.SetTTSPlaying(false)
+		p.stateManager.CancelTTS()
 		// 发送 TTS 结束消息，通知前端停止播放
 		if err := p.writer.SendTTSEnd(); err != nil {
 			p.logger.Warn("发送TTS结束消息失败", zap.Error(err))
@@ -190,8 +189,7 @@ func (p *Processor) processText(ctx context.Context, text string) {
 	p.mu.Unlock()
 
 	// 发送LLM响应给前端（在锁外执行）
-	// 添加"。。。。。。"以保持与hardware包的一致性
-	if err := p.writer.SendLLMResponse(response + "。。。。。。"); err != nil {
+	if err := p.writer.SendLLMResponse(response); err != nil {
 		p.logger.Error("发送LLM响应失败", zap.Error(err))
 	}
 
@@ -255,12 +253,9 @@ func (p *Processor) synthesizeTTS(ctx context.Context, text string) {
 	p.stateManager.SetTTSCtx(ttsCtx, ttsCancel)
 
 	// 合成语音
-	// 在文本末尾添加"。。。。。。"（6个中文句号），让TTS生成更多音频数据
-	// 这样可以确保硬件端有足够的音频数据，避免提前停止
-	ttsText := text + "。。。。。。"
-	p.logger.Debug("TTS合成文本", zap.String("original", text), zap.String("withPadding", ttsText))
+	p.logger.Debug("TTS合成文本", zap.String("text", text))
 
-	audioChan, err := p.ttsService.Synthesize(ttsCtx, ttsText)
+	audioChan, err := p.ttsService.Synthesize(ttsCtx, text)
 	if err != nil {
 		p.logger.Error("TTS合成失败", zap.Error(err))
 		p.handleServiceError(err, "TTS")
@@ -281,6 +276,13 @@ func (p *Processor) synthesizeTTS(ctx context.Context, text string) {
 	var totalBytesReceived int
 	var frameCount int
 
+	// 使用defer确保在任何情况下都能正确清理
+	defer func() {
+		if r := recover(); r != nil {
+			p.logger.Error("TTS合成发生panic", zap.Any("panic", r))
+		}
+	}()
+
 	for {
 		select {
 		case <-ttsCtx.Done():
@@ -295,18 +297,35 @@ func (p *Processor) synthesizeTTS(ctx context.Context, text string) {
 				)
 				// 发送缓冲区剩余数据
 				if audioFormat == "opus" && opusEncoder != nil && len(pcmBuffer) > 0 {
-					p.sendRemainingOPUSFrames(pcmBuffer, opusEncoder, sampleRate, channels)
+					// 检查context状态再发送剩余帧
+					select {
+					case <-ttsCtx.Done():
+						p.logger.Info("TTS合成被取消，跳过发送剩余帧")
+						return
+					default:
+						p.sendRemainingOPUSFrames(pcmBuffer, opusEncoder, sampleRate, channels)
+					}
 				}
-				// 发送填充帧，确保硬件播放完整
-				if audioFormat == "opus" && opusEncoder != nil {
-					p.logger.Info("发送填充帧，确保硬件播放完整")
-					p.sendPaddingFrames(opusEncoder, sampleRate, channels)
+
+				// 智能等待硬件播放完成
+				// 1. 等待所有音频包发送完成（如果有流控器）
+				// 2. 计算预缓冲包播放时间并等待
+				waitDuration := p.calculatePlaybackWaitTime(frameCount, audioFormat, totalBytesReceived)
+				p.logger.Info("等待硬件播放完缓冲区",
+					zap.Duration("wait", waitDuration),
+					zap.Int("frameCount", frameCount),
+					zap.String("audioFormat", audioFormat),
+				)
+
+				// 在等待前检查context状态
+				select {
+				case <-ttsCtx.Done():
+					p.logger.Info("TTS合成被取消，跳过播放等待")
+					return
+				default:
+					time.Sleep(waitDuration)
 				}
-				// 等待硬件播放完缓冲区
-				// 1800ms (1.8秒) 确保硬件端有足够时间播放完所有音频
-				waitDuration := 300 * time.Millisecond
-				p.logger.Info("等待硬件播放完缓冲区", zap.Duration("wait", waitDuration))
-				time.Sleep(waitDuration)
+
 				p.logger.Info("TTS合成完成")
 				return
 			}
@@ -345,8 +364,7 @@ func (p *Processor) synthesizeTTS(ctx context.Context, text string) {
 					frameData := pcmBuffer[:frameSize]
 					pcmBuffer = pcmBuffer[frameSize:]
 
-					// 检测静音帧并处理
-					frameData = p.processSilentFrame(frameData)
+					// 直接使用原始帧数据，不处理静音帧
 
 					// 编码这一帧
 					audioFrame := &media.AudioPacket{Payload: frameData}
@@ -361,9 +379,24 @@ func (p *Processor) synthesizeTTS(ctx context.Context, text string) {
 							// 发送编码后的OPUS数据（带流控）
 							frameCount++
 							// 使用固定延迟（60ms）发送，避免长时间播放时时间同步累积误差导致发送过快
-							if err := p.writer.SendTTSAudioWithFlowControl(af.Payload, 60, 60); err != nil {
-								p.logger.Error("发送TTS音频失败", zap.Error(err))
+							// 在发送前再次检查context状态
+							select {
+							case <-ttsCtx.Done():
+								p.logger.Info("TTS合成被取消，停止发送音频帧")
 								return
+							default:
+							}
+
+							if err := p.writer.SendTTSAudioWithFlowControl(af.Payload, 60, 60); err != nil {
+								// 检查是否是因为context取消导致的错误
+								select {
+								case <-ttsCtx.Done():
+									p.logger.Info("TTS合成被取消，发送音频失败是正常的")
+									return
+								default:
+									p.logger.Error("发送TTS音频失败", zap.Error(err))
+									return
+								}
 							}
 							// 每10帧记录一次
 							if frameCount%10 == 0 {
@@ -385,54 +418,47 @@ func (p *Processor) synthesizeTTS(ctx context.Context, text string) {
 					return
 				default:
 				}
+
 				// 使用固定延迟（60ms）发送，避免长时间播放时时间同步累积误差导致发送过快
 				if err := p.writer.SendTTSAudioWithFlowControl(data, 60, 60); err != nil {
-					p.logger.Error("发送TTS音频失败", zap.Error(err))
-					return
+					// 检查是否是因为context取消导致的错误
+					select {
+					case <-ttsCtx.Done():
+						p.logger.Info("TTS合成被取消，发送音频失败是正常的")
+						return
+					default:
+						p.logger.Error("发送TTS音频失败", zap.Error(err))
+						return
+					}
 				}
 			}
 		}
 	}
 }
 
-// processSilentFrame 处理静音帧（替换为低音量白噪声，避免DTX包）
-func (p *Processor) processSilentFrame(frameData []byte) []byte {
-	// 计算音频能量
-	var energy int64
-	for i := 0; i < len(frameData); i += 2 {
-		sample := int16(frameData[i]) | (int16(frameData[i+1]) << 8)
-		energy += int64(sample) * int64(sample)
-	}
-	avgEnergy := energy / int64(len(frameData)/2)
-
-	// 如果是完全静音，替换为中等音量白噪声（±500范围）
-	// 这样可以确保硬件端不会认为是静音而提前停止
-	if avgEnergy == 0 {
-		noiseData := make([]byte, len(frameData))
-		seed := len(frameData)*7919 + 3571
-		for i := 0; i < len(frameData); i += 2 {
-			// 使用线性同余生成器生成高质量伪随机数
-			seed = (seed*1103515245 + 12345) & 0x7fffffff
-			noise := int16((seed % 1001) - 500) // ±500 范围，与填充帧一致
-			noiseData[i] = byte(noise & 0xFF)
-			noiseData[i+1] = byte((noise >> 8) & 0xFF)
-		}
-		return noiseData
-	}
-
-	return frameData
-}
-
 // sendRemainingOPUSFrames 发送缓冲区剩余的OPUS帧
 func (p *Processor) sendRemainingOPUSFrames(pcmBuffer []byte, opusEncoder media.EncoderFunc, sampleRate, channels int) {
 	frameSize := sampleRate * 60 / 1000 * channels * 2
 
+	// 获取当前TTS context
+	ttsCtx := p.stateManager.GetTTSCtx()
+	if ttsCtx == nil {
+		p.logger.Warn("TTS context为空，跳过发送剩余帧")
+		return
+	}
+
 	// 处理完整的帧
 	for len(pcmBuffer) >= frameSize {
+		// 检查context状态
+		select {
+		case <-ttsCtx.Done():
+			p.logger.Info("TTS合成被取消，停止发送剩余帧")
+			return
+		default:
+		}
+
 		frameData := pcmBuffer[:frameSize]
 		pcmBuffer = pcmBuffer[frameSize:]
-
-		frameData = p.processSilentFrame(frameData)
 
 		audioFrame := &media.AudioPacket{Payload: frameData}
 		frames, err := opusEncoder(audioFrame)
@@ -445,7 +471,15 @@ func (p *Processor) sendRemainingOPUSFrames(pcmBuffer []byte, opusEncoder media.
 			if af, ok := frames[0].(*media.AudioPacket); ok {
 				// 使用固定延迟（60ms）发送剩余帧，确保时序正确
 				if err := p.writer.SendTTSAudioWithFlowControl(af.Payload, 60, 60); err != nil {
-					p.logger.Error("发送剩余帧失败", zap.Error(err))
+					// 检查是否是因为context取消导致的错误
+					select {
+					case <-ttsCtx.Done():
+						p.logger.Info("TTS合成被取消，发送剩余帧失败是正常的")
+						return
+					default:
+						p.logger.Error("发送剩余帧失败", zap.Error(err))
+						return
+					}
 				}
 			}
 		}
@@ -453,6 +487,14 @@ func (p *Processor) sendRemainingOPUSFrames(pcmBuffer []byte, opusEncoder media.
 
 	// 处理最后的不完整帧（如果足够大）
 	if len(pcmBuffer) >= 100 {
+		// 检查context状态
+		select {
+		case <-ttsCtx.Done():
+			p.logger.Info("TTS合成被取消，跳过发送不完整帧")
+			return
+		default:
+		}
+
 		// 填充到完整帧
 		paddedBuffer := make([]byte, frameSize)
 		copy(paddedBuffer, pcmBuffer)
@@ -473,52 +515,82 @@ func (p *Processor) sendRemainingOPUSFrames(pcmBuffer []byte, opusEncoder media.
 		if err == nil && len(frames) > 0 {
 			if af, ok := frames[0].(*media.AudioPacket); ok {
 				// 使用固定延迟（60ms）发送不完整帧，确保时序正确
-				p.writer.SendTTSAudioWithFlowControl(af.Payload, 60, 60)
+				if err := p.writer.SendTTSAudioWithFlowControl(af.Payload, 60, 60); err != nil {
+					// 检查是否是因为context取消导致的错误
+					select {
+					case <-ttsCtx.Done():
+						p.logger.Info("TTS合成被取消，发送不完整帧失败是正常的")
+					default:
+						p.logger.Error("发送不完整帧失败", zap.Error(err))
+					}
+				}
 			}
 		}
 	}
 }
 
-// sendPaddingFrames 发送填充帧，确保硬件播放完整
-func (p *Processor) sendPaddingFrames(opusEncoder media.EncoderFunc, sampleRate, channels int) {
-	frameSize := sampleRate * 60 / 1000 * channels * 2
+// calculatePlaybackWaitTime 计算播放等待时间
+func (p *Processor) calculatePlaybackWaitTime(frameCount int, audioFormat string, totalBytesReceived int) time.Duration {
+	// 基础等待时间：确保最后几帧音频播放完成
+	baseWaitMs := 300 // 300ms基础等待
 
-	p.logger.Info("发送填充帧，确保音频完整播放", zap.Int("frameCount", 5))
+	if audioFormat == "opus" {
+		// OPUS格式：计算预缓冲包播放时间
+		// 参考xiaozhi-server的实现：(PRE_BUFFER_COUNT + 2) * frame_duration
+		frameDurationMs := 60    // OPUS帧时长60ms
+		preBufferCount := 5      // 预缓冲包数量
+		networkJitterFrames := 2 // 网络抖动补偿帧数
 
-	// 发送5帧填充帧（与hardware包保持一致）
-	for i := 0; i < 5; i++ {
-		// 生成中等音量白噪声帧（±500 范围）
-		// 这个音量足够让硬件端识别为有效音频，不会提前停止
-		paddingFrame := make([]byte, frameSize)
-		for j := 0; j < frameSize; j += 2 {
-			// 使用伪随机数生成白噪声（±500 范围）
-			// 使用线性同余生成器生成高质量伪随机数，避免周期性模式
-			seed := j*7919 + i*3571
-			seed = (seed*1103515245 + 12345) & 0x7fffffff
-			noise := int16((seed % 1001) - 500) // ±500 范围
-			paddingFrame[j] = byte(noise & 0xFF)
-			paddingFrame[j+1] = byte((noise >> 8) & 0xFF)
-		}
+		// 预缓冲包播放时间
+		preBufferPlaybackMs := (preBufferCount + networkJitterFrames) * frameDurationMs
 
-		// 编码并发送
-		audioFrame := &media.AudioPacket{Payload: paddingFrame}
-		frames, err := opusEncoder(audioFrame)
-		if err != nil {
-			p.logger.Error("编码填充帧失败", zap.Error(err))
-			break
-		}
+		// 根据音频数据量和帧数动态调整
+		if frameCount <= preBufferCount {
+			// 音频较短，主要是预缓冲包，需要等待它们播放完
+			baseWaitMs = preBufferPlaybackMs
+		} else {
+			// 音频较长，计算基于帧数的播放时间
+			estimatedPlaybackMs := frameCount * frameDurationMs
 
-		if len(frames) > 0 {
-			if af, ok := frames[0].(*media.AudioPacket); ok {
-				// 使用固定延迟（60ms）发送填充帧，确保时序正确，避免声音混杂快速
-				if err := p.writer.SendTTSAudioWithFlowControl(af.Payload, 60, 60); err != nil {
-					p.logger.Error("发送填充帧失败", zap.Error(err))
-					break
-				}
-				p.logger.Debug("填充帧已发送", zap.Int("frameIndex", i), zap.Int("opusSize", len(af.Payload)))
+			// 使用预缓冲播放时间作为最小等待时间
+			if estimatedPlaybackMs < preBufferPlaybackMs {
+				baseWaitMs = preBufferPlaybackMs
+			} else {
+				// 对于长音频，等待时间不需要太长，使用预缓冲时间即可
+				baseWaitMs = preBufferPlaybackMs
 			}
 		}
+
+		p.logger.Debug("计算OPUS播放等待时间",
+			zap.Int("frameCount", frameCount),
+			zap.Int("totalBytes", totalBytesReceived),
+			zap.Int("preBufferPlaybackMs", preBufferPlaybackMs),
+			zap.Int("finalWaitMs", baseWaitMs),
+		)
+	} else {
+		// PCM格式：基于数据量估算播放时间
+		if totalBytesReceived > 0 {
+			// 假设16-bit PCM, 16kHz采样率
+			sampleRate := 16000
+			bytesPerSecond := sampleRate * 2 // 16-bit = 2 bytes per sample
+			estimatedDurationMs := (totalBytesReceived * 1000) / bytesPerSecond
+
+			// 使用估算时间，但不超过1秒，不少于300ms
+			if estimatedDurationMs > 1000 {
+				baseWaitMs = 1000
+			} else if estimatedDurationMs > baseWaitMs {
+				baseWaitMs = estimatedDurationMs
+			}
+		}
+
+		p.logger.Debug("计算PCM播放等待时间",
+			zap.Int("frameCount", frameCount),
+			zap.Int("totalBytes", totalBytesReceived),
+			zap.Int("baseWaitMs", baseWaitMs),
+		)
 	}
+
+	return time.Duration(baseWaitMs) * time.Millisecond
 }
 
 // HandleTextMessage 处理文本消息
@@ -544,8 +616,12 @@ func (p *Processor) HandleTextMessage(ctx context.Context, data []byte) {
 		p.logger.Info("新会话开始")
 
 	case "ping":
-		// 心跳消息，发送pong
-		// 注意：这里不发送pong，由writer处理
+		// 心跳消息，发送pong响应
+		if err := p.writer.SendPong(); err != nil {
+			p.logger.Warn("发送pong响应失败", zap.Error(err))
+		} else {
+			p.logger.Debug("收到ping，已发送pong响应")
+		}
 
 	case "hello":
 		// xiaozhi协议hello消息，由session处理
