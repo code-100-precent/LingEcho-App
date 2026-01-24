@@ -89,8 +89,18 @@ func (f *ServiceFactory) CreateASR(credential *models.UserCredential, language s
 func (f *ServiceFactory) CreateTTS(credential *models.UserCredential, speaker string, sampleRate, channels int) (synthesizer.SynthesisService, error) {
 	ttsProvider := credential.GetTTSProvider()
 	if ttsProvider == "" {
+		f.logger.Error("TTS provider未配置",
+			zap.Any("ttsConfig", credential.TtsConfig),
+		)
 		return nil, errhandler.NewRecoverableError("Factory", "TTS provider未配置", nil)
 	}
+
+	f.logger.Info("创建TTS服务",
+		zap.String("provider", ttsProvider),
+		zap.String("speaker", speaker),
+		zap.Int("sampleRate", sampleRate),
+		zap.Int("channels", channels),
+	)
 
 	normalizedProvider := recognizer.NormalizeProvider(ttsProvider)
 
@@ -100,6 +110,7 @@ func (f *ServiceFactory) CreateTTS(credential *models.UserCredential, speaker st
 	if credential.TtsConfig != nil {
 		for key, value := range credential.TtsConfig {
 			ttsConfig[key] = value
+			f.logger.Debug("TTS配置项", zap.String("key", key), zap.Any("value", value))
 		}
 	}
 
@@ -122,11 +133,19 @@ func (f *ServiceFactory) CreateTTS(credential *models.UserCredential, speaker st
 	// 设置默认语速
 	setDefaultTTSSpeed(ttsConfig, normalizedProvider)
 
+	f.logger.Info("最终TTS配置", zap.Any("config", ttsConfig))
+
 	ttsService, err := synthesizer.NewSynthesisServiceFromCredential(ttsConfig)
 	if err != nil {
+		f.logger.Error("创建TTS服务失败",
+			zap.Error(err),
+			zap.String("provider", normalizedProvider),
+			zap.Any("config", ttsConfig),
+		)
 		return nil, errhandler.NewRecoverableError("Factory", "创建TTS服务失败", err)
 	}
 
+	f.logger.Info("TTS服务创建成功", zap.String("provider", normalizedProvider))
 	return ttsService, nil
 }
 
