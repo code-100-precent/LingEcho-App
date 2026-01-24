@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/code-100-precent/LingEcho/internal/models"
 	"github.com/code-100-precent/LingEcho/pkg/hardware/errhandler"
@@ -111,8 +112,46 @@ func (s *Service) Query(ctx context.Context, text string) (string, error) {
 		options.MaxTokens = intPtr(s.maxTokens)
 	}
 
-	// 调用LLM
-	response, err := provider.QueryWithOptions(text, options)
+	// 创建带超时的上下文，防止LLM查询阻塞过久
+	queryCtx, cancel := context.WithTimeout(ctx, 15*time.Second)
+	defer cancel()
+
+	// 在独立的goroutine中执行LLM查询，支持超时控制
+	type queryResult struct {
+		response string
+		err      error
+	}
+
+	resultChan := make(chan queryResult, 1)
+	go func() {
+		defer func() {
+			if r := recover(); r != nil {
+				s.logger.Error("LLM查询发生panic", zap.Any("panic", r))
+				resultChan <- queryResult{"", fmt.Errorf("LLM查询内部错误")}
+			}
+		}()
+
+		response, err := provider.QueryWithOptions(text, options)
+		resultChan <- queryResult{response, err}
+	}()
+
+	// 等待查询结果或超时
+	var response string
+	var err error
+
+	select {
+	case <-queryCtx.Done():
+		s.logger.Warn("LLM查询超时",
+			zap.String("text", text),
+			zap.Duration("timeout", 15*time.Second),
+		)
+		return "", errhandler.NewRecoverableError("LLM", "查询超时，请稍后重试", queryCtx.Err())
+
+	case result := <-resultChan:
+		response = result.response
+		err = result.err
+	}
+
 	if err != nil {
 		classified := s.errorHandler.Classify(err, "LLM")
 		s.logger.Error("LLM查询失败", zap.Error(classified))
