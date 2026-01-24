@@ -261,6 +261,13 @@ func (s *Session) Stop() error {
 		return nil
 	}
 
+	// 先取消所有TTS操作，避免在关闭过程中产生panic
+	if s.stateManager != nil {
+		s.stateManager.SetTTSPlaying(false)
+		s.stateManager.CancelTTS()
+	}
+
+	// 取消session context，这会停止所有相关的goroutine
 	s.cancel()
 
 	// 断开ASR服务
@@ -344,10 +351,15 @@ func (s *Session) HandleAudio(data []byte) error {
 		// 检测用户是否说话（barge-in）
 		if vadDetector.CheckBargeIn(pcmData, true) {
 			s.config.Logger.Info("检测到用户说话，中断 TTS")
-			// 取消 TTS 播放
-			s.stateManager.CancelTTS()
-			// 设置 TTS 播放状态为 false
+			// 优雅地取消 TTS 播放：先设置状态，再取消context
 			s.stateManager.SetTTSPlaying(false)
+			s.stateManager.CancelTTS()
+
+			// 发送TTS结束消息给前端
+			if err := s.messageWriter.SendTTSEnd(); err != nil {
+				s.config.Logger.Warn("发送TTS结束消息失败", zap.Error(err))
+			}
+
 			// 继续处理音频（用户开始说话了）
 			// 使用音频管理器处理输入音频
 			processedData, shouldProcess := audioManager.ProcessInputAudio(pcmData, false)
@@ -410,7 +422,12 @@ func (s *Session) HandleText(data []byte) error {
 		s.config.Logger.Info("新会话开始")
 
 	case MessageTypePing:
-		// 心跳消息，发送pong（由writer处理）
+		// 心跳消息，发送pong响应
+		if err := s.messageWriter.SendPong(); err != nil {
+			s.config.Logger.Warn("发送pong响应失败", zap.Error(err))
+		} else {
+			s.config.Logger.Debug("收到ping，已发送pong响应")
+		}
 
 	case "hello":
 		// xiaozhi协议hello消息处理
@@ -650,7 +667,10 @@ func (s *Session) messageLoop() {
 	defer func() {
 		// 当消息循环退出时，触发优雅关闭
 		s.config.Logger.Info("消息循环退出，触发会话关闭")
-		s.cancel()
+		// 调用Stop方法确保所有资源正确清理
+		if err := s.Stop(); err != nil {
+			s.config.Logger.Error("会话关闭失败", zap.Error(err))
+		}
 	}()
 
 	for {
@@ -669,8 +689,7 @@ func (s *Session) messageLoop() {
 			} else {
 				s.config.Logger.Debug("读取WebSocket消息失败", zap.Error(err))
 			}
-			// 取消context，触发优雅关闭
-			s.cancel()
+			// 直接返回，defer中的Stop会处理清理
 			return
 		}
 
