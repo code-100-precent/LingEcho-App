@@ -285,6 +285,27 @@ func (w *Writer) SendPong() error {
 	})
 }
 
+// SendChangeSpeakerResult 发送切换发音人结果
+func (w *Writer) SendChangeSpeakerResult(speakerID string, success bool, message string) error {
+	if w.isXiaozhi {
+		// xiaozhi协议格式
+		return w.sendJSON(map[string]interface{}{
+			"type":       "speaker_changed",
+			"speaker_id": speakerID,
+			"success":    success,
+			"message":    message,
+			"session_id": w.sessionID,
+		})
+	}
+	// 通用格式
+	return w.sendJSON(map[string]interface{}{
+		"type":       "speaker_changed",
+		"speaker_id": speakerID,
+		"success":    success,
+		"message":    message,
+	})
+}
+
 // SendLLMResponse 发送LLM响应
 func (w *Writer) SendLLMResponse(text string) error {
 	return w.sendJSON(map[string]interface{}{

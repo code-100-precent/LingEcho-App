@@ -278,6 +278,26 @@ func TestValidatePasswordFormat(t *testing.T) {
 			password: string(make([]byte, 129)),
 			wantErr:  true,
 		},
+		{
+			name:     "valid encrypted password",
+			password: "240be518fabd2724ddb6f04eeb1da5967448d7e831c08c8fa822809f74c720a9:4a20cc8aaaa750866250adcacd9a64545696c8ce6783e9239f1b5f96d158d994:gFiCOOXx1-jRvDDrRu6uHJb52qvgkNq5:1769268563405",
+			wantErr:  false,
+		},
+		{
+			name:     "invalid encrypted password - wrong hash length",
+			password: "240be518fabd2724ddb6f04eeb1da5967448d7e831c08c8fa822809f74c720:4a20cc8aaaa750866250adcacd9a64545696c8ce6783e9239f1b5f96d158d994:gFiCOOXx1-jRvDDrRu6uHJb52qvgkNq5:1769268563405",
+			wantErr:  true,
+		},
+		{
+			name:     "invalid encrypted password - non-hex characters",
+			password: "240be518fabd2724ddb6f04eeb1da5967448d7e831c08c8fa822809f74c720zz:4a20cc8aaaa750866250adcacd9a64545696c8ce6783e9239f1b5f96d158d994:gFiCOOXx1-jRvDDrRu6uHJb52qvgkNq5:1769268563405",
+			wantErr:  true,
+		},
+		{
+			name:     "invalid encrypted password - wrong format",
+			password: "240be518fabd2724ddb6f04eeb1da5967448d7e831c08c8fa822809f74c720a9:4a20cc8aaaa750866250adcacd9a64545696c8ce6783e9239f1b5f96d158d994:gFiCOOXx1-jRvDDrRu6uHJb52qvgkNq5",
+			wantErr:  true,
+		},
 	}
 
 	for _, tt := range tests {
