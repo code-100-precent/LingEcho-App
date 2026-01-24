@@ -3,34 +3,42 @@ package message
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"sync"
 	"time"
 
+	"github.com/code-100-precent/LingEcho/internal/models"
 	"github.com/code-100-precent/LingEcho/pkg/hardware/audio"
 	"github.com/code-100-precent/LingEcho/pkg/hardware/errhandler"
+	"github.com/code-100-precent/LingEcho/pkg/hardware/factory"
 	"github.com/code-100-precent/LingEcho/pkg/hardware/filter"
 	llmv2 "github.com/code-100-precent/LingEcho/pkg/hardware/llm"
+	"github.com/code-100-precent/LingEcho/pkg/hardware/speaker"
 	"github.com/code-100-precent/LingEcho/pkg/hardware/state"
 	"github.com/code-100-precent/LingEcho/pkg/hardware/tts"
 	"github.com/code-100-precent/LingEcho/pkg/llm"
 	"github.com/code-100-precent/LingEcho/pkg/media"
+	"github.com/code-100-precent/LingEcho/pkg/recognizer"
 	"github.com/code-100-precent/LingEcho/pkg/synthesizer"
 	"go.uber.org/zap"
 )
 
 // Processor 消息处理器
 type Processor struct {
-	stateManager  *state.Manager
-	llmService    *llmv2.Service
-	ttsService    *tts.Service
-	writer        *Writer
-	errorHandler  *errhandler.Handler
-	filterManager *filter.Manager
-	audioManager  *audio.Manager
-	logger        *zap.Logger
-	mu            sync.RWMutex
-	messages      []llm.Message
-	synthesizer   synthesizer.SynthesisService // 用于获取音频格式
+	stateManager   *state.Manager
+	llmService     *llmv2.Service
+	ttsService     *tts.Service
+	writer         *Writer
+	errorHandler   *errhandler.Handler
+	filterManager  *filter.Manager
+	audioManager   *audio.Manager
+	speakerManager *speaker.Manager // 新增：发音人管理器
+	logger         *zap.Logger
+	mu             sync.RWMutex
+	messages       []llm.Message
+	synthesizer    synthesizer.SynthesisService // 用于获取音频格式
+	credential     *models.UserCredential       // 新增：用于重新创建TTS服务
+	serviceFactory *factory.ServiceFactory      // 新增：服务工厂
 
 	// OPUS编码相关（用于硬件协议）
 	audioFormat string
@@ -50,22 +58,43 @@ func NewProcessor(
 	synthesizer synthesizer.SynthesisService,
 	filterManager *filter.Manager,
 	audioManager *audio.Manager,
+	credential *models.UserCredential, // 新增参数
 ) *Processor {
-	return &Processor{
-		stateManager:  stateManager,
-		llmService:    llmService,
-		ttsService:    ttsService,
-		writer:        writer,
-		errorHandler:  errorHandler,
-		filterManager: filterManager,
-		audioManager:  audioManager,
-		logger:        logger,
-		messages:      make([]llm.Message, 0),
-		synthesizer:   synthesizer,
-		audioFormat:   "opus",
-		sampleRate:    16000,
-		channels:      1,
+	// 创建服务工厂
+	transcriberFactory := recognizer.GetGlobalFactory()
+	serviceFactory := factory.NewServiceFactory(transcriberFactory, logger)
+
+	// 创建发音人管理器
+	speakerManager := speaker.NewManager(logger)
+
+	processor := &Processor{
+		stateManager:   stateManager,
+		llmService:     llmService,
+		ttsService:     ttsService,
+		writer:         writer,
+		errorHandler:   errorHandler,
+		filterManager:  filterManager,
+		audioManager:   audioManager,
+		speakerManager: speakerManager,
+		logger:         logger,
+		messages:       make([]llm.Message, 0),
+		synthesizer:    synthesizer,
+		credential:     credential,
+		serviceFactory: serviceFactory,
+		audioFormat:    "opus",
+		sampleRate:     16000,
+		channels:       1,
 	}
+
+	// 设置LLM服务的发音人管理器和切换回调
+	llmService.SetSpeakerManager(speakerManager, processor.switchSpeaker)
+
+	processor.logger.Info("已设置LLM服务的发音人管理器",
+		zap.String("speakerManagerType", fmt.Sprintf("%T", speakerManager)),
+		zap.String("currentSpeaker", speakerManager.GetCurrentSpeaker()),
+	)
+
+	return processor
 }
 
 // SetAudioConfig 设置音频配置（用于OPUS编码）
@@ -192,6 +221,8 @@ func (p *Processor) processText(ctx context.Context, text string) {
 	if err := p.writer.SendLLMResponse(response); err != nil {
 		p.logger.Error("发送LLM响应失败", zap.Error(err))
 	}
+
+	// 注意：发音人切换现在由LLM的Function Calling自动处理，无需手动分析
 
 	// 合成TTS（在goroutine中异步执行，不阻塞）
 	p.logger.Info("准备启动TTS合成", zap.String("text", response))
@@ -387,7 +418,8 @@ func (p *Processor) synthesizeTTS(ctx context.Context, text string) {
 							default:
 							}
 
-							if err := p.writer.SendTTSAudioWithFlowControl(af.Payload, 60, 60); err != nil {
+							// 使用安全的发送方法，避免panic
+							if err := p.safeSendTTSAudio(af.Payload, ttsCtx); err != nil {
 								// 检查是否是因为context取消导致的错误
 								select {
 								case <-ttsCtx.Done():
@@ -419,8 +451,8 @@ func (p *Processor) synthesizeTTS(ctx context.Context, text string) {
 				default:
 				}
 
-				// 使用固定延迟（60ms）发送，避免长时间播放时时间同步累积误差导致发送过快
-				if err := p.writer.SendTTSAudioWithFlowControl(data, 60, 60); err != nil {
+				// 使用安全的发送方法，避免panic
+				if err := p.safeSendTTSAudio(data, ttsCtx); err != nil {
 					// 检查是否是因为context取消导致的错误
 					select {
 					case <-ttsCtx.Done():
@@ -469,8 +501,8 @@ func (p *Processor) sendRemainingOPUSFrames(pcmBuffer []byte, opusEncoder media.
 
 		if len(frames) > 0 {
 			if af, ok := frames[0].(*media.AudioPacket); ok {
-				// 使用固定延迟（60ms）发送剩余帧，确保时序正确
-				if err := p.writer.SendTTSAudioWithFlowControl(af.Payload, 60, 60); err != nil {
+				// 使用安全发送方法，避免panic
+				if err := p.safeSendTTSAudio(af.Payload, ttsCtx); err != nil {
 					// 检查是否是因为context取消导致的错误
 					select {
 					case <-ttsCtx.Done():
@@ -514,8 +546,8 @@ func (p *Processor) sendRemainingOPUSFrames(pcmBuffer []byte, opusEncoder media.
 		frames, err := opusEncoder(audioFrame)
 		if err == nil && len(frames) > 0 {
 			if af, ok := frames[0].(*media.AudioPacket); ok {
-				// 使用固定延迟（60ms）发送不完整帧，确保时序正确
-				if err := p.writer.SendTTSAudioWithFlowControl(af.Payload, 60, 60); err != nil {
+				// 使用安全发送方法，避免panic
+				if err := p.safeSendTTSAudio(af.Payload, ttsCtx); err != nil {
 					// 检查是否是因为context取消导致的错误
 					select {
 					case <-ttsCtx.Done():
@@ -660,4 +692,69 @@ func (p *Processor) handleServiceError(err error, serviceName string) bool {
 	}
 	p.writer.SendError(serviceName+"处理失败: "+err.Error(), isFatal)
 	return isFatal
+}
+
+// switchSpeaker 切换发音人（由Function Calling调用）
+func (p *Processor) switchSpeaker(speakerID string) error {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+
+	// 获取发音人信息
+	speakerInfo := p.speakerManager.GetSpeaker(speakerID)
+	if speakerInfo == nil {
+		return fmt.Errorf("发音人ID不存在: %s", speakerID)
+	}
+
+	p.logger.Info("开始切换发音人",
+		zap.String("speakerID", speakerID),
+		zap.String("speakerName", speakerInfo.Name),
+		zap.String("description", speakerInfo.Description),
+	)
+
+	// 如果TTS正在播放，先停止
+	if p.stateManager.IsTTSPlaying() {
+		p.logger.Info("TTS正在播放，先停止当前播放")
+		p.stateManager.SetTTSPlaying(false)
+		p.stateManager.CancelTTS()
+	}
+
+	// 创建新的TTS synthesizer
+	synthesizer, err := p.serviceFactory.CreateTTS(p.credential, speakerID, p.sampleRate, p.channels)
+	if err != nil {
+		return fmt.Errorf("创建新TTS synthesizer失败: %w", err)
+	}
+
+	// 更新TTS服务
+	p.ttsService.UpdateSpeaker(speakerID, synthesizer)
+
+	// 更新processor中的synthesizer引用
+	p.synthesizer = synthesizer
+
+	// 更新发音人管理器状态
+	err = p.speakerManager.SetCurrentSpeaker(speakerID)
+	if err != nil {
+		return fmt.Errorf("更新发音人状态失败: %w", err)
+	}
+
+	return nil
+}
+
+// safeSendTTSAudio 安全发送TTS音频，避免panic
+func (p *Processor) safeSendTTSAudio(data []byte, ctx context.Context) error {
+	// 检查context状态
+	select {
+	case <-ctx.Done():
+		return ctx.Err()
+	default:
+	}
+
+	// 使用defer捕获可能的panic
+	defer func() {
+		if r := recover(); r != nil {
+			p.logger.Warn("发送TTS音频时发生panic，已恢复", zap.Any("panic", r))
+		}
+	}()
+
+	// 使用固定延迟（60ms）发送，避免长时间播放时时间同步累积误差导致发送过快
+	return p.writer.SendTTSAudioWithFlowControl(data, 60, 60)
 }
