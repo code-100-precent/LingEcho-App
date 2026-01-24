@@ -698,24 +698,13 @@ func (c *AIClient) handleASRResult(text string, isLast bool, duration time.Durat
 
 // isCompleteSentence checks if text contains sentence ending markers
 func isCompleteSentence(text string) bool {
-	if text == "" {
-		return false
-	}
-	endMarkers := []string{"。", "？", "！", ".", "?", "!"}
-	for _, marker := range endMarkers {
-		if strings.Contains(text, marker) {
-			return true
-		}
-	}
-	return false
+	// 简化处理：任何非空文本都视为完整句子
+	return text != ""
 }
 
-// filterText removes punctuation and whitespace
+// filterText removes whitespace only
 func filterText(text string) string {
-	text = strings.TrimSpace(text)
-	// Remove common punctuation
-	text = strings.Trim(text, "。，、；：？！\"\"''（）【】《》")
-	return text
+	return strings.TrimSpace(text)
 }
 
 // isMeaninglessText checks if text is meaningless (should be filtered)
