@@ -127,12 +127,17 @@ func ValidatePasswordFormat(password string) error {
 		return errors.New("password is required")
 	}
 
+	// 使用字符数而不是字节数来检查密码长度
+	passwordLength := len([]rune(password))
+	
 	// 密码长度检查
-	if len(password) < 8 {
+	if passwordLength < 8 {
 		return errors.New("password must be at least 8 characters long")
 	}
-
-	if len(password) > 128 {
+    
+	// 增加最大长度以支持加密后的密码格式
+	// 格式: hash1(64):hash2(64):salt(24):timestamp(13) = 约165字符
+	if passwordLength > 256 {
 		return errors.New("password too long")
 	}
 
