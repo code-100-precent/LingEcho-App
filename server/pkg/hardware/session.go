@@ -177,6 +177,7 @@ func NewSession(config *SessionConfig) (*Session, error) {
 		synthesizer,
 		filterManager,
 		audioManager,
+		config.Credential, // 新增：传入credential
 	)
 
 	// 设置默认音频配置（hello消息后会更新）

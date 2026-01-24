@@ -127,7 +127,28 @@ func ValidatePasswordFormat(password string) error {
 		return errors.New("password is required")
 	}
 
-	// Password length check
+	// Check if this is an encrypted password format (passwordHash:encryptedHash:salt:timestamp)
+	if strings.Contains(password, ":") && len(strings.Split(password, ":")) == 4 {
+		// For encrypted passwords, validate the first part (password hash)
+		parts := strings.Split(password, ":")
+		passwordHash := parts[0]
+
+		// Password hash should be a valid SHA-256 hash (64 hex characters)
+		if len(passwordHash) != 64 {
+			return errors.New("invalid encrypted password format")
+		}
+
+		// Check if it's a valid hex string
+		for _, char := range passwordHash {
+			if !((char >= '0' && char <= '9') || (char >= 'a' && char <= 'f') || (char >= 'A' && char <= 'F')) {
+				return errors.New("invalid encrypted password format")
+			}
+		}
+
+		return nil // Encrypted password is valid
+	}
+
+	// For plain text passwords, apply normal validation
 	if len(password) < 8 {
 		return errors.New("password must be at least 8 characters long")
 	}

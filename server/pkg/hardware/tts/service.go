@@ -170,6 +170,25 @@ func (h *synthesisHandler) OnTimestamp(timestamp synthesizer.SentenceTimestamp) 
 	// 暂时不处理时间戳
 }
 
+// UpdateSpeaker 更新发音人和合成器
+func (s *Service) UpdateSpeaker(speakerID string, synthesizer synthesizer.SynthesisService) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	// 关闭旧的合成器
+	if s.synthesizer != nil {
+		s.synthesizer.Close()
+	}
+
+	// 更新发音人和合成器
+	s.speaker = speakerID
+	s.synthesizer = synthesizer
+
+	s.logger.Info("TTS发音人已更新",
+		zap.String("speakerID", speakerID),
+	)
+}
+
 // Close 关闭服务
 func (s *Service) Close() error {
 	s.mu.Lock()
