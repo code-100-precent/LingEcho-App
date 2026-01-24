@@ -23,6 +23,148 @@ import (
 	"go.uber.org/zap"
 )
 
+// EncoderPool OPUS编码器线程池
+type EncoderPool struct {
+	taskQueue chan *EncoderTask
+	ctx       context.Context
+	cancel    context.CancelFunc
+	wg        sync.WaitGroup
+	logger    *zap.Logger
+}
+
+// EncoderWorker 编码器工作者
+type EncoderWorker struct {
+	id      int
+	encoder media.EncoderFunc
+}
+
+// EncoderTask 编码任务
+type EncoderTask struct {
+	data     []byte
+	resultCh chan *EncoderResult
+	ctx      context.Context
+}
+
+// EncoderResult 编码结果
+type EncoderResult struct {
+	data []byte
+	err  error
+}
+
+// NewEncoderPool 创建编码器线程池
+func NewEncoderPool(size int, encoder media.EncoderFunc, logger *zap.Logger) *EncoderPool {
+	ctx, cancel := context.WithCancel(context.Background())
+
+	pool := &EncoderPool{
+		taskQueue: make(chan *EncoderTask, size*2), // 任务队列容量为工作者数量的2倍
+		ctx:       ctx,
+		cancel:    cancel,
+		logger:    logger,
+	}
+
+	// 创建工作者goroutines
+	for i := 0; i < size; i++ {
+		worker := &EncoderWorker{
+			id:      i,
+			encoder: encoder,
+		}
+
+		pool.wg.Add(1)
+		go pool.workerLoop(worker)
+	}
+
+	logger.Info("创建OPUS编码器线程池", zap.Int("workers", size))
+	return pool
+}
+
+// workerLoop 工作者循环
+func (p *EncoderPool) workerLoop(worker *EncoderWorker) {
+	defer p.wg.Done()
+
+	for {
+		select {
+		case <-p.ctx.Done():
+			return
+		case task := <-p.taskQueue:
+			// 执行编码任务
+			result := p.encodeTask(worker, task)
+
+			// 发送结果
+			select {
+			case <-task.ctx.Done():
+				// 任务已取消，不发送结果
+			case task.resultCh <- result:
+				// 结果已发送
+			}
+		}
+	}
+}
+
+// encodeTask 执行编码任务
+func (p *EncoderPool) encodeTask(worker *EncoderWorker, task *EncoderTask) *EncoderResult {
+	defer func() {
+		if r := recover(); r != nil {
+			p.logger.Error("编码器工作者发生panic",
+				zap.Int("workerID", worker.id),
+				zap.Any("panic", r),
+			)
+		}
+	}()
+
+	audioFrame := &media.AudioPacket{Payload: task.data}
+	frames, err := worker.encoder(audioFrame)
+	if err != nil {
+		return &EncoderResult{nil, err}
+	}
+
+	if len(frames) > 0 {
+		if af, ok := frames[0].(*media.AudioPacket); ok {
+			return &EncoderResult{af.Payload, nil}
+		}
+	}
+
+	return &EncoderResult{nil, fmt.Errorf("编码结果为空")}
+}
+
+// Encode 异步编码
+func (p *EncoderPool) Encode(ctx context.Context, data []byte) ([]byte, error) {
+	task := &EncoderTask{
+		data:     data,
+		resultCh: make(chan *EncoderResult, 1),
+		ctx:      ctx,
+	}
+
+	// 提交任务
+	select {
+	case <-ctx.Done():
+		return nil, ctx.Err()
+	case <-p.ctx.Done():
+		return nil, fmt.Errorf("编码器池已关闭")
+	case p.taskQueue <- task:
+		// 任务已提交
+	default:
+		// 任务队列满，直接返回错误而不是阻塞
+		return nil, fmt.Errorf("编码器池繁忙")
+	}
+
+	// 等待结果
+	select {
+	case <-ctx.Done():
+		return nil, ctx.Err()
+	case <-p.ctx.Done():
+		return nil, fmt.Errorf("编码器池已关闭")
+	case result := <-task.resultCh:
+		return result.data, result.err
+	}
+}
+
+// Close 关闭编码器池
+func (p *EncoderPool) Close() {
+	p.cancel()
+	p.wg.Wait()
+	p.logger.Info("OPUS编码器线程池已关闭")
+}
+
 // Processor 消息处理器
 type Processor struct {
 	stateManager   *state.Manager
@@ -39,6 +181,7 @@ type Processor struct {
 	synthesizer    synthesizer.SynthesisService // 用于获取音频格式
 	credential     *models.UserCredential       // 新增：用于重新创建TTS服务
 	serviceFactory *factory.ServiceFactory      // 新增：服务工厂
+	encoderPool    *EncoderPool                 // 新增：编码器线程池
 
 	// OPUS编码相关（用于硬件协议）
 	audioFormat string
@@ -101,10 +244,21 @@ func NewProcessor(
 func (p *Processor) SetAudioConfig(audioFormat string, sampleRate, channels int, opusEncoder media.EncoderFunc) {
 	p.mu.Lock()
 	defer p.mu.Unlock()
+
 	p.audioFormat = audioFormat
 	p.sampleRate = sampleRate
 	p.channels = channels
 	p.opusEncoder = opusEncoder
+
+	// 如果是OPUS格式，创建编码器线程池
+	if audioFormat == "opus" && opusEncoder != nil {
+		// 关闭旧的编码器池
+		if p.encoderPool != nil {
+			p.encoderPool.Close()
+		}
+		// 创建4个工作者的编码器池
+		p.encoderPool = NewEncoderPool(4, opusEncoder, p.logger)
+	}
 }
 
 // ProcessASRResult 处理ASR识别结果
@@ -395,49 +549,65 @@ func (p *Processor) synthesizeTTS(ctx context.Context, text string) {
 					frameData := pcmBuffer[:frameSize]
 					pcmBuffer = pcmBuffer[frameSize:]
 
-					// 直接使用原始帧数据，不处理静音帧
+					// 使用编码器线程池进行异步编码
+					var encodedData []byte
+					var encodeErr error
 
-					// 编码这一帧
-					audioFrame := &media.AudioPacket{Payload: frameData}
-					frames, err := opusEncoder(audioFrame)
-					if err != nil {
-						p.logger.Error("OPUS编码失败", zap.Error(err))
+					p.mu.RLock()
+					encoderPool := p.encoderPool
+					p.mu.RUnlock()
+
+					if encoderPool != nil {
+						// 使用线程池编码
+						encodedData, encodeErr = encoderPool.Encode(ttsCtx, frameData)
+					} else {
+						// 回退到同步编码
+						audioFrame := &media.AudioPacket{Payload: frameData}
+						frames, err := opusEncoder(audioFrame)
+						if err != nil {
+							encodeErr = err
+						} else if len(frames) > 0 {
+							if af, ok := frames[0].(*media.AudioPacket); ok {
+								encodedData = af.Payload
+							}
+						}
+					}
+
+					if encodeErr != nil {
+						p.logger.Error("OPUS编码失败", zap.Error(encodeErr))
 						continue
 					}
 
-					if len(frames) > 0 {
-						if af, ok := frames[0].(*media.AudioPacket); ok {
-							// 发送编码后的OPUS数据（带流控）
-							frameCount++
-							// 使用固定延迟（60ms）发送，避免长时间播放时时间同步累积误差导致发送过快
-							// 在发送前再次检查context状态
+					if len(encodedData) > 0 {
+						// 发送编码后的OPUS数据（带流控）
+						frameCount++
+						// 在发送前再次检查context状态
+						select {
+						case <-ttsCtx.Done():
+							p.logger.Info("TTS合成被取消，停止发送音频帧")
+							return
+						default:
+						}
+
+						// 使用安全的发送方法，避免panic
+						if err := p.safeSendTTSAudio(encodedData, ttsCtx); err != nil {
+							// 检查是否是因为context取消导致的错误
 							select {
 							case <-ttsCtx.Done():
-								p.logger.Info("TTS合成被取消，停止发送音频帧")
+								p.logger.Info("TTS合成被取消，发送音频失败是正常的")
 								return
 							default:
+								p.logger.Error("发送TTS音频失败", zap.Error(err))
+								return
 							}
-
-							// 使用安全的发送方法，避免panic
-							if err := p.safeSendTTSAudio(af.Payload, ttsCtx); err != nil {
-								// 检查是否是因为context取消导致的错误
-								select {
-								case <-ttsCtx.Done():
-									p.logger.Info("TTS合成被取消，发送音频失败是正常的")
-									return
-								default:
-									p.logger.Error("发送TTS音频失败", zap.Error(err))
-									return
-								}
-							}
-							// 每10帧记录一次
-							if frameCount%10 == 0 {
-								p.logger.Debug("已发送TTS音频帧",
-									zap.Int("frameCount", frameCount),
-									zap.Int("opusSize", len(af.Payload)),
-									zap.Int("totalBytes", totalBytesReceived),
-								)
-							}
+						}
+						// 每10帧记录一次
+						if frameCount%10 == 0 {
+							p.logger.Debug("已发送TTS音频帧",
+								zap.Int("frameCount", frameCount),
+								zap.Int("opusSize", len(encodedData)),
+								zap.Int("totalBytes", totalBytesReceived),
+							)
 						}
 					}
 				}
@@ -666,6 +836,21 @@ func (p *Processor) Clear() {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 	p.messages = make([]llm.Message, 0)
+}
+
+// Close 关闭处理器并清理资源
+func (p *Processor) Close() error {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+
+	// 关闭编码器池
+	if p.encoderPool != nil {
+		p.encoderPool.Close()
+		p.encoderPool = nil
+	}
+
+	p.logger.Info("消息处理器已关闭，资源已清理")
+	return nil
 }
 
 // SetSynthesizer 设置合成器（用于重新初始化TTS服务时更新）
