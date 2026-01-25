@@ -42,6 +42,8 @@ const (
 	VendorBaidu Vendor = "baidu"
 	// VendorVoiceAPI VoiceAPI
 	VendorVoiceAPI Vendor = "voiceapi"
+	// VendorLocal 本地ASR
+	VendorLocal Vendor = "local"
 )
 
 // TranscriberConfig 统一的配置接口
@@ -200,6 +202,15 @@ func (f *DefaultTranscriberFactory) registerDefaultCreators() {
 	// Whisper, Deepgram, AWS, Baidu, VoiceAPI 等需要通过 With*ASR 函数使用
 	// 如果需要使用这些，请直接调用相应的 With*ASR 函数
 
+	// 注册本地ASR
+	f.RegisterCreator(VendorLocal, func(config TranscriberConfig) (TranscribeService, error) {
+		localConfig, ok := config.(*LocalASRConfig)
+		if !ok {
+			return nil, fmt.Errorf("invalid config type for local")
+		}
+		return NewLocalASRService(localConfig)
+	})
+
 	logrus.WithFields(logrus.Fields{
 		"vendors": f.GetSupportedVendors(),
 	}).Info("transcriber factory initialized")
@@ -237,6 +248,10 @@ func (opt *GladiaASROption) GetVendor() Vendor {
 
 func (opt *FunAsrRealtimeOption) GetVendor() Vendor {
 	return VendorFunASRRealtime
+}
+
+func (opt *LocalASRConfig) GetVendor() Vendor {
+	return VendorLocal
 }
 
 // 全局工厂实例

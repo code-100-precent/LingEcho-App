@@ -293,8 +293,7 @@ func (h *Handlers) HandleHardwareWebSocketVoice(c *gin.Context) {
 	handler := hardware.NewHandler(logger.Lg)
 
 	// 处理WebSocket连接
-	// 注意：hardware 包的 HandleWebSocket 暂时不支持 context 参数
-	// 如果需要，可以后续添加
+	// 注意：hardware 包的 HandleWebSocket 现在支持录音参数
 	handler.HandleWebSocket(
 		c.Request.Context(),
 		conn,
@@ -306,5 +305,9 @@ func (h *Handlers) HandleHardwareWebSocketVoice(c *gin.Context) {
 		systemPrompt,
 		knowledgeKey,
 		h.db,
+		// 录音相关参数
+		device.UserID,     // 用户ID
+		&device.ID,        // 设备ID（MAC地址）
+		device.MacAddress, // MAC地址
 	)
 }
