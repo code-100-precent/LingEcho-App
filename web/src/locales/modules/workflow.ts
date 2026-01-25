@@ -47,6 +47,8 @@ export const workflow: Record<Language, Record<string, string>> = {
     'workflow.nodes.wait': '等待',
     'workflow.nodes.timer': '定时器',
     'workflow.nodes.script': '脚本',
+    'workflow.nodes.plugin': '插件',
+    'workflow.nodes.workflowPlugin': '工作流插件',
 
     // Version History
     'workflow.version.title': '版本历史',
@@ -128,6 +130,8 @@ export const workflow: Record<Language, Record<string, string>> = {
     'workflow.nodes.wait': 'Wait',
     'workflow.nodes.timer': 'Timer',
     'workflow.nodes.script': 'Script',
+    'workflow.nodes.plugin': 'Plugin',
+    'workflow.nodes.workflowPlugin': 'Workflow Plugin',
 
     // Version History
     'workflow.version.title': 'Version History',
@@ -209,6 +213,8 @@ export const workflow: Record<Language, Record<string, string>> = {
     'workflow.nodes.wait': '待機',
     'workflow.nodes.timer': 'タイマー',
     'workflow.nodes.script': 'スクリプト',
+    'workflow.nodes.plugin': 'プラグイン',
+    'workflow.nodes.workflowPlugin': 'ワークフロープラグイン',
 
     // バージョン履歴
     'workflow.version.title': 'バージョン履歴',

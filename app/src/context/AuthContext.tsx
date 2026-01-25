@@ -9,10 +9,10 @@ interface AuthContextType {
   user: User | null;
   isLoading: boolean;
   isAuthenticated: boolean;
-  login: (email: string, password: string, twoFactorCode?: string) => Promise<{ requiresTwoFactor?: boolean }>;
-  loginWithEmailCode: (email: string, code: string) => Promise<void>;
+  login: (email: string, password: string, twoFactorCode?: string, captchaId?: string, captchaCode?: string) => Promise<{ requiresTwoFactor?: boolean; requiresDeviceVerification?: boolean; deviceId?: string; message?: string }>;
+  loginWithEmailCode: (email: string, code: string, captchaId?: string, captchaCode?: string) => Promise<void>;
   sendEmailCode: (email: string) => Promise<void>;
-  register: (email: string, password: string, displayName?: string, userName?: string, verificationCode?: string, emailEnabled?: boolean) => Promise<any>;
+  register: (email: string, password: string, displayName?: string, userName?: string, verificationCode?: string, emailEnabled?: boolean, captchaId?: string, captchaCode?: string) => Promise<any>;
   logout: () => Promise<void>;
   refreshUser: () => Promise<void>;
 }
@@ -64,13 +64,28 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   };
 
-  const login = async (email: string, password: string, twoFactorCode?: string) => {
-    console.log('AuthContext: 开始登录', { email, hasTwoFactor: !!twoFactorCode });
-    const response = await authService.login({ email, password, twoFactorCode });
-    console.log('AuthContext: 登录响应', { code: response.code, hasData: !!response.data, requiresTwoFactor: response.data?.requiresTwoFactor });
+  const login = async (email: string, password: string, twoFactorCode?: string, captchaId?: string, captchaCode?: string) => {
+    console.log('AuthContext: 开始登录', { email, hasTwoFactor: !!twoFactorCode, hasCaptcha: !!captchaId });
+    const response = await authService.login({ 
+      email, 
+      password, 
+      twoFactorCode,
+      captchaID: captchaId,
+      captchaCode: captchaCode
+    });
+    console.log('AuthContext: 登录响应', { code: response.code, hasData: !!response.data, requiresTwoFactor: response.data?.requiresTwoFactor, requiresDeviceVerification: response.data?.requiresDeviceVerification });
     
+    // 检查是否需要设备验证
+    if (response.code === 200 && response.data?.requiresDeviceVerification) {
+      return { 
+        requiresDeviceVerification: true,
+        deviceId: response.data.deviceId,
+        message: response.data.message
+      };
+    }
+    
+    // 检查是否需要二级验证
     if (response.code === 200 && response.data?.requiresTwoFactor) {
-      // 需要二级验证
       return { requiresTwoFactor: true };
     }
     
@@ -85,9 +100,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   };
 
-  const loginWithEmailCode = async (email: string, code: string) => {
-    console.log('AuthContext: 开始邮箱验证码登录', { email });
-    const response = await authService.loginWithEmailCode({ email, code });
+  const loginWithEmailCode = async (email: string, code: string, captchaId?: string, captchaCode?: string) => {
+    console.log('AuthContext: 开始邮箱验证码登录', { email, hasCaptcha: !!captchaId });
+    const response = await authService.loginWithEmailCode({ 
+      email, 
+      code,
+      captchaID: captchaId,
+      captchaCode: captchaCode
+    });
     console.log('AuthContext: 邮箱验证码登录响应', { code: response.code, hasData: !!response.data });
     
     if (response.code === 0 && response.data) {
@@ -112,13 +132,24 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   };
 
-  const register = async (email: string, password: string, displayName?: string, userName?: string, verificationCode?: string, emailEnabled: boolean = true) => {
+  const register = async (
+    email: string, 
+    password: string, 
+    displayName?: string, 
+    userName?: string, 
+    verificationCode?: string, 
+    emailEnabled: boolean = true,
+    captchaId?: string,
+    captchaCode?: string
+  ) => {
     const response = await authService.register({ 
       email, 
       password, 
       displayName, 
       userName,
-      verificationCode 
+      verificationCode,
+      captchaID: captchaId,
+      captchaCode: captchaCode
     }, emailEnabled);
     if (response.code === 0) {
       // 注册成功，但不自动登录（用户需要手动登录）

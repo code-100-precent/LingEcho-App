@@ -1,14 +1,8 @@
 import React, { useState, useEffect, useRef } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { 
-  ArrowLeft, 
-  Plus, 
-  Edit2, 
-  Trash2, 
   Search,
   FileText,
-  Grid3x3,
-  List,
   GitBranch,
   X,
   ChevronRight,
@@ -18,12 +12,7 @@ import {
   Globe,
   Calendar,
   Webhook,
-  Bot,
-  Copy,
-  Check,
-  History,
-  RotateCcw,
-  GitCompare
+  Bot
 } from 'lucide-react'
 import Button from '@/components/UI/Button'
 import Card from '@/components/UI/Card'
@@ -401,7 +390,6 @@ const WorkflowManager: React.FC = () => {
             <Button 
               variant="ghost"
               size="sm"
-              leftIcon={<ArrowLeft className="w-4 h-4" />}
               onClick={() => setSelectedWorkflow(null)}
             >
               返回
@@ -420,7 +408,6 @@ const WorkflowManager: React.FC = () => {
             <Button
               variant="ghost"
               size="sm"
-              leftIcon={<History className="w-4 h-4" />}
               onClick={async () => {
                 console.log('点击版本历史按钮，工作流ID:', selectedWorkflow.id)
                 await loadVersions(selectedWorkflow.id)
@@ -437,7 +424,6 @@ const WorkflowManager: React.FC = () => {
             <Button
               variant="outline"
               size="sm"
-              leftIcon={<Zap className="w-4 h-4" />}
               onClick={() => setShowTriggerConfig(true)}
             >
               触发器配置
@@ -617,7 +603,12 @@ const WorkflowManager: React.FC = () => {
                         for (const [key, value] of Object.entries(node.data.config)) {
                           // Convert all values to strings for properties
                           if (value !== null && value !== undefined) {
-                            properties[key] = String(value)
+                            // Special handling for parameters object in workflow plugin nodes
+                            if (key === 'parameters' && typeof value === 'object') {
+                              properties[key] = JSON.stringify(value)
+                            } else {
+                              properties[key] = String(value)
+                            }
                           }
                         }
                       }
@@ -1139,7 +1130,6 @@ const WorkflowManager: React.FC = () => {
                         <Button
                           variant="ghost"
                           size="xs"
-                          leftIcon={<GitCompare className="w-3 h-3" />}
                           onClick={() => {
                             if (selectedVersion1 === null) {
                               setSelectedVersion1(version.id)
@@ -1159,7 +1149,6 @@ const WorkflowManager: React.FC = () => {
                         <Button
                           variant="ghost"
                           size="xs"
-                          leftIcon={<RotateCcw className="w-3 h-3" />}
                           onClick={() => {
                             if (selectedWorkflow) {
                               handleRollback(selectedWorkflow.id, version.id)
@@ -1353,7 +1342,6 @@ const WorkflowManager: React.FC = () => {
                   e.stopPropagation()
                   setViewMode('grid')
                 }}
-                leftIcon={<Grid3x3 className="w-4 h-4" />}
               >
                 网格
               </Button>
@@ -1365,13 +1353,11 @@ const WorkflowManager: React.FC = () => {
                   e.stopPropagation()
                   setViewMode('list')
                 }}
-                leftIcon={<List className="w-4 h-4" />}
               >
                 列表
               </Button>
               <Button
                 variant="primary"
-                leftIcon={<Plus className="w-4 h-4" />}
                 onClick={handleCreate}
               >
                 创建工作流
@@ -1501,7 +1487,6 @@ const WorkflowManager: React.FC = () => {
                       <Button
                         variant="ghost"
                         size="xs"
-                        leftIcon={<Edit2 className="w-3 h-3" />}
                         onClick={(e) => {
                           e.stopPropagation()
                           handleEdit(workflow)
@@ -1512,7 +1497,6 @@ const WorkflowManager: React.FC = () => {
                       <Button
                         variant="ghost"
                         size="xs"
-                        leftIcon={<Trash2 className="w-3 h-3" />}
                         onClick={(e) => {
                           e.stopPropagation()
                           handleDelete(workflow.id)
@@ -1567,7 +1551,6 @@ const WorkflowManager: React.FC = () => {
                       <Button
                         variant="ghost"
                         size="xs"
-                        leftIcon={<Edit2 className="w-3 h-3" />}
                         onClick={(e) => {
                           e.stopPropagation()
                           handleEdit(workflow)
@@ -1578,7 +1561,6 @@ const WorkflowManager: React.FC = () => {
                       <Button
                         variant="ghost"
                         size="xs"
-                        leftIcon={<Trash2 className="w-3 h-3" />}
                         onClick={(e) => {
                           e.stopPropagation()
                           handleDelete(workflow.id)
@@ -1770,7 +1752,6 @@ const TriggerConfigPanel: React.FC<TriggerConfigPanelProps> = ({
                       variant="outline"
                       size="sm"
                       onClick={copyAPIKey}
-                      leftIcon={copiedKey ? <Check className="w-4 h-4" /> : <Copy className="w-4 h-4" />}
                     >
                       {copiedKey ? '已复制' : '复制'}
                     </Button>
@@ -1937,7 +1918,6 @@ const TriggerConfigPanel: React.FC<TriggerConfigPanelProps> = ({
                       message: 'Webhook URL 已复制到剪贴板'
                     })
                   }}
-                  leftIcon={<Copy className="w-4 h-4" />}
                 >
                   复制
                 </Button>

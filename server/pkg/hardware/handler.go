@@ -35,6 +35,10 @@ func (h *Handler) HandleWebSocket(
 	systemPrompt string,
 	knowledgeKey string,
 	db *gorm.DB,
+	// 录音相关参数
+	userID uint,
+	deviceID *string,
+	macAddress string,
 ) {
 	defer conn.Close()
 
@@ -77,7 +81,7 @@ func (h *Handler) HandleWebSocket(
 	config := &SessionConfig{
 		Conn:         conn,
 		Credential:   credential,
-		AssistantID:  assistantID,
+		AssistantID:  uint(assistantID), // 转换为uint类型
 		Language:     language,
 		Speaker:      speaker,
 		Temperature:  temperature,
@@ -92,6 +96,11 @@ func (h *Handler) HandleWebSocket(
 		EnableVAD:            enableVAD,
 		VADThreshold:         vadThreshold,
 		VADConsecutiveFrames: vadConsecutiveFrames,
+		// 录音相关配置
+		UserID:        userID,
+		DeviceID:      deviceID,
+		MacAddress:    macAddress,
+		RecordingPath: "./lingstorage", // 使用lingstorage作为录音存储路径
 	}
 
 	// 创建会话

@@ -126,19 +126,6 @@ func createOPUSEncode(src, pcm media.CodecConfig) media.EncoderFunc {
 		panic(fmt.Errorf("failed to create opus encoder: %w", err))
 	}
 
-	// 禁用 DTX (Discontinuous Transmission) - 必须在设置比特率之前
-	// DTX 会在检测到静音时生成非常小的包（8字节），但硬件端可能不支持
-	// 禁用 DTX 可以确保所有帧都被完整编码
-	if err := encoder.SetDTX(false); err != nil {
-		panic(fmt.Errorf("failed to disable opus DTX: %w", err))
-	}
-
-	// 使用最大比特率，确保即使是静音段也会被编码成正常大小的包
-	// 这样可以避免 OPUS 生成 DTX 包
-	if err := encoder.SetBitrateToMax(); err != nil {
-		panic(fmt.Errorf("failed to set opus bitrate to max: %w", err))
-	}
-
 	// 设置复杂度为 10（最高质量，0-10）
 	// 更高的复杂度会提高音质但增加 CPU 使用
 	if err := encoder.SetComplexity(10); err != nil {
@@ -187,12 +174,9 @@ func createOPUSEncode(src, pcm media.CodecConfig) media.EncoderFunc {
 		samplesPerFrame := frameSize * channels
 		totalSamples := len(pcmSamples)
 
-		// 如果数据不足一帧，填充静音
+		// 如果数据不足一帧，直接返回空包
 		if totalSamples < samplesPerFrame {
-			paddedSamples := make([]int16, samplesPerFrame)
-			copy(paddedSamples, pcmSamples)
-			pcmSamples = paddedSamples
-			totalSamples = samplesPerFrame
+			return []media.MediaPacket{}, nil
 		}
 
 		// 只编码第一帧（调用者负责分帧）

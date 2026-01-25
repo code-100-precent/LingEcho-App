@@ -21,13 +21,19 @@ import {
   Minimize2,
   TestTube,
   ChevronDown,
-  ChevronUp
+  ChevronUp,
+  ChevronLeft,
+  ChevronRight,
+  Package,
+  CheckCircle
 } from 'lucide-react'
 import { cn } from '@/utils/cn'
 import Modal from '@/components/UI/Modal'
 import Button from '@/components/UI/Button'
 import Input from '@/components/UI/Input'
+import { useToast } from '@/components/UI/ToastContainer'
 import { workflowService } from '@/api/workflow'
+import { workflowPluginService, WorkflowPluginCategory } from '@/api/workflowPlugin'
 import { useI18nStore } from '@/stores/i18nStore'
 
 // 懒加载Monaco Editor，优化首次加载性能
@@ -36,11 +42,12 @@ const MonacoEditor = lazy(() => import('@monaco-editor/react'))
 // 节点类型定义（根据后端定义）
 export interface WorkflowNode {
   id: string
-  type: 'start' | 'end' | 'task' | 'gateway' | 'event' | 'subflow' | 'parallel' | 'wait' | 'timer' | 'script'
+  type: 'start' | 'end' | 'task' | 'gateway' | 'event' | 'subflow' | 'parallel' | 'wait' | 'timer' | 'script' | 'plugin' | 'workflow_plugin'
   position: { x: number; y: number }
   data: {
     label: string
     config?: any
+    pluginId?: number // 插件ID，用于插件节点
     [key: string]: any
   }
   inputs: string[]
@@ -69,75 +76,113 @@ export interface Workflow {
   updatedAt: string
 }
 
-// 获取节点类型配置的函数（支持国际化）
+// 获取节点类型配置的函数（支持国际化）- 优化后的现代化设计
 const getNodeTypes = (t: (key: string) => string) => ({
   start: {
     label: t('workflow.nodes.start'),
-    icon: <Play className="w-4 h-4" />,
-    color: '#10b981',
+    icon: <Play className="w-5 h-5" />,
+    color: '#059669', // 更深的绿色
+    gradient: 'from-emerald-400 to-emerald-600',
+    shadowColor: 'shadow-emerald-200',
     inputs: 0,
     outputs: 1
   },
   end: {
     label: t('workflow.nodes.end'),
-    icon: <Square className="w-4 h-4" />,
-    color: '#ef4444',
+    icon: <Square className="w-5 h-5" />,
+    color: '#dc2626', // 更深的红色
+    gradient: 'from-red-400 to-red-600',
+    shadowColor: 'shadow-red-200',
     inputs: 1,
     outputs: 0
   },
   task: {
     label: t('workflow.nodes.task'),
-    icon: <FileText className="w-4 h-4" />,
-    color: '#3b82f6',
+    icon: <FileText className="w-5 h-5" />,
+    color: '#2563eb', // 更深的蓝色
+    gradient: 'from-blue-400 to-blue-600',
+    shadowColor: 'shadow-blue-200',
     inputs: 1,
     outputs: 1
   },
   gateway: {
     label: t('workflow.nodes.gateway'),
-    icon: <GitBranch className="w-4 h-4" />,
-    color: '#8b5cf6',
+    icon: <GitBranch className="w-5 h-5" />,
+    color: '#7c3aed', // 更深的紫色
+    gradient: 'from-violet-400 to-violet-600',
+    shadowColor: 'shadow-violet-200',
     inputs: 1,
     outputs: 2
   },
   event: {
     label: t('workflow.nodes.event'),
-    icon: <Zap className="w-4 h-4" />,
-    color: '#f59e0b',
+    icon: <Zap className="w-5 h-5" />,
+    color: '#d97706', // 更深的橙色
+    gradient: 'from-amber-400 to-orange-500',
+    shadowColor: 'shadow-amber-200',
     inputs: 0,
     outputs: 1
   },
   subflow: {
     label: t('workflow.nodes.subflow'),
-    icon: <Settings className="w-4 h-4" />,
-    color: '#6366f1',
+    icon: <Settings className="w-5 h-5" />,
+    color: '#4f46e5', // 更深的靛蓝色
+    gradient: 'from-indigo-400 to-indigo-600',
+    shadowColor: 'shadow-indigo-200',
     inputs: 1,
     outputs: 1
   },
   parallel: {
     label: t('workflow.nodes.parallel'),
-    icon: <GitBranch className="w-4 h-4" />,
-    color: '#06b6d4',
+    icon: <GitBranch className="w-5 h-5 rotate-90" />,
+    color: '#0891b2', // 更深的青色
+    gradient: 'from-cyan-400 to-cyan-600',
+    shadowColor: 'shadow-cyan-200',
     inputs: 1,
     outputs: 2
   },
   wait: {
     label: t('workflow.nodes.wait'),
-    icon: <Clock className="w-4 h-4" />,
-    color: '#ec4899',
+    icon: <Clock className="w-5 h-5" />,
+    color: '#be185d', // 更深的粉色
+    gradient: 'from-pink-400 to-pink-600',
+    shadowColor: 'shadow-pink-200',
     inputs: 1,
     outputs: 1
   },
   timer: {
     label: t('workflow.nodes.timer'),
-    icon: <Timer className="w-4 h-4" />,
-    color: '#14b8a6',
+    icon: <Timer className="w-5 h-5" />,
+    color: '#0d9488', // 更深的青绿色
+    gradient: 'from-teal-400 to-teal-600',
+    shadowColor: 'shadow-teal-200',
     inputs: 1,
     outputs: 1
   },
   script: {
     label: t('workflow.nodes.script'),
-    icon: <Code className="w-4 h-4" />,
-    color: '#64748b',
+    icon: <Code className="w-5 h-5" />,
+    color: '#475569', // 更深的灰色
+    gradient: 'from-slate-400 to-slate-600',
+    shadowColor: 'shadow-slate-200',
+    inputs: 1,
+    outputs: 1
+  },
+  plugin: {
+    label: t('workflow.nodes.plugin'),
+    icon: <Package className="w-5 h-5" />,
+    color: '#7c2d12', // 棕色
+    gradient: 'from-orange-400 to-orange-600',
+    shadowColor: 'shadow-orange-200',
+    inputs: 1,
+    outputs: 1
+  },
+  workflow_plugin: {
+    label: t('workflow.nodes.workflowPlugin'),
+    icon: <Package className="w-5 h-5" />,
+    color: '#7c3aed', // 紫色
+    gradient: 'from-purple-400 to-purple-600',
+    shadowColor: 'shadow-purple-200',
     inputs: 1,
     outputs: 1
   }
@@ -159,6 +204,7 @@ const WorkflowEditor: React.FC<WorkflowEditorProps> = ({
   className = ''
 }) => {
   const { t } = useI18nStore()
+  const toast = useToast()
   const NODE_TYPES = getNodeTypes(t)
   const canvasRef = useRef<HTMLDivElement>(null)
   const [nodes, setNodes] = useState<WorkflowNode[]>(workflow?.nodes || [])
@@ -176,8 +222,31 @@ const WorkflowEditor: React.FC<WorkflowEditorProps> = ({
   const [canvasScale, setCanvasScale] = useState(1)
   const [showHelpModal, setShowHelpModal] = useState(false)
   const [showNodeDrawer, setShowNodeDrawer] = useState(false)
+  const [installedPlugins, setInstalledPlugins] = useState<any[]>([])
+  const [loadingPlugins, setLoadingPlugins] = useState(false)
   const [nodeSearchQuery, setNodeSearchQuery] = useState('')
   const [isCodeEditorFullscreen, setIsCodeEditorFullscreen] = useState(false)
+
+  // 加载已安装的插件
+  const loadInstalledPlugins = useCallback(async () => {
+    setLoadingPlugins(true)
+    try {
+      const response = await workflowPluginService.listInstalledWorkflowPlugins()
+      if (response.data) {
+        setInstalledPlugins(response.data)
+      }
+    } catch (error) {
+      console.error('加载已安装插件失败:', error)
+    } finally {
+      setLoadingPlugins(false)
+    }
+  }, [])
+
+  // 组件挂载时加载插件
+  useEffect(() => {
+    loadInstalledPlugins()
+  }, [])
+  const [showPublishModal, setShowPublishModal] = useState(false)
   const [showRunParamsModal, setShowRunParamsModal] = useState(false)
   const [runParameters, setRunParameters] = useState<Record<string, string>>({})
   const [availableEventTypes, setAvailableEventTypes] = useState<string[]>([])
@@ -188,6 +257,8 @@ const WorkflowEditor: React.FC<WorkflowEditorProps> = ({
   const [nodeTestParameters, setNodeTestParameters] = useState<Record<string, string>>({})
   const [nodeTestResult, setNodeTestResult] = useState<any>(null)
   const [isTestingNode, setIsTestingNode] = useState(false)
+  
+
 
   // 添加节点
   const addNode = useCallback((type: WorkflowNode['type'], position: { x: number; y: number }) => {
@@ -203,6 +274,30 @@ const WorkflowEditor: React.FC<WorkflowEditorProps> = ({
       },
       inputs: Array(NODE_TYPES[type].inputs).fill('').map((_, i) => `input-${i}`),
       outputs: Array(NODE_TYPES[type].outputs).fill('').map((_, i) => `output-${i}`)
+    }
+    setNodes(prev => [...prev, newNode])
+    // 选中新添加的节点
+    setSelectedNode(nodeId)
+    return nodeId
+  }, [])
+
+  // 添加插件节点
+  const addPluginNode = useCallback((plugin: any, position: { x: number; y: number }) => {
+    const nodeId = `plugin-${Date.now()}`
+    const newNode: WorkflowNode = {
+      id: nodeId,
+      type: 'workflow_plugin',
+      position,
+      data: {
+        label: plugin.plugin?.displayName || plugin.plugin?.name || '插件节点',
+        config: {
+          pluginId: plugin.pluginId,
+          parameters: {}
+        },
+        pluginId: plugin.pluginId
+      },
+      inputs: plugin.plugin?.inputSchema?.parameters?.map((p: any, i: number) => p.name || `input-${i}`) || ['input-0'],
+      outputs: plugin.plugin?.outputSchema?.parameters?.map((p: any, i: number) => p.name || `output-${i}`) || ['output-0']
     }
     setNodes(prev => [...prev, newNode])
     // 选中新添加的节点
@@ -273,6 +368,16 @@ func Run(inputs map[string]interface{}) (map[string]interface{}, error) {
 	
 	return result, nil
 }`
+        }
+      case 'plugin':
+        return {
+          pluginId: null,
+          parameters: {}
+        }
+      case 'workflow_plugin':
+        return {
+          pluginId: null,
+          parameters: {}
         }
       default:
         return {}
@@ -348,6 +453,24 @@ func Run(inputs map[string]interface{}) (map[string]interface{}, error) {
     }
   }, [nodes, canvasScale])
 
+  // 删除连接 - 移到前面避免初始化顺序问题
+  const deleteConnection = useCallback((connectionId: string) => {
+    setConnections(prev => prev.filter(conn => conn.id !== connectionId))
+    if (selectedConnection === connectionId) {
+      setSelectedConnection(null)
+    }
+  }, [selectedConnection])
+
+  // 点击画布取消选择
+
+
+  // 检查输出点是否已经有连接
+  const isOutputConnected = useCallback((nodeId: string, outputHandle: string) => {
+    return connections.some(conn => 
+      conn.source === nodeId && conn.sourceHandle === outputHandle
+    )
+  }, [connections])
+
   // 开始连接
   const startConnection = useCallback((nodeId: string, handle: string) => {
     setIsConnecting(true)
@@ -356,11 +479,23 @@ func Run(inputs map[string]interface{}) (map[string]interface{}, error) {
 
   // 完成连接
   // 连接规则：
-  // 1. 一个输出可以连接到多个不同的输入（支持分支）
+  // 1. 一个输出只能连接到一个输入（限制输出点只能连接一次）
   // 2. 不允许创建完全相同的连接（相同的 source, target, sourceHandle, targetHandle）
   // 3. 一个输入可以接收多个输出（支持数据合并）
   const completeConnection = useCallback((nodeId: string, handle: string) => {
     if (isConnecting && connectionStart && connectionStart.nodeId !== nodeId) {
+      // 检查源输出点是否已经连接
+      const sourceAlreadyConnected = connections.some(conn => 
+        conn.source === connectionStart.nodeId && conn.sourceHandle === connectionStart.handle
+      )
+      
+      if (sourceAlreadyConnected) {
+        console.log('输出点已经连接，无法再次连接')
+        setIsConnecting(false)
+        setConnectionStart(null)
+        return
+      }
+      
       // 检查是否已存在完全相同的连接（防止重复连接）
       const existingConnection = connections.find(conn => 
         conn.source === connectionStart.nodeId && 
@@ -406,14 +541,6 @@ func Run(inputs map[string]interface{}) (map[string]interface{}, error) {
     setIsConnecting(false)
     setConnectionStart(null)
   }, [isConnecting, connectionStart, connections, nodes])
-
-  // 删除连接
-  const deleteConnection = useCallback((connectionId: string) => {
-    setConnections(prev => prev.filter(conn => conn.id !== connectionId))
-    if (selectedConnection === connectionId) {
-      setSelectedConnection(null)
-    }
-  }, [selectedConnection])
 
   // 画布拖拽处理
   const handleCanvasMouseDown = useCallback((e: React.MouseEvent) => {
@@ -559,7 +686,7 @@ func Run(inputs map[string]interface{}) (map[string]interface{}, error) {
     }
   }, [workflow, nodes, connections, onRun])
 
-  // 渲染连接线 - 使用贝塞尔曲线
+  // 渲染连接线 - 现代化贝塞尔曲线设计
   const renderConnections = () => {
     return connections.map(connection => {
       const sourceNode = nodes.find(n => n.id === connection.source)
@@ -569,7 +696,7 @@ func Run(inputs map[string]interface{}) (map[string]interface{}, error) {
 
       // 节点卡片宽度 260px
       const nodeWidth = 260
-      const baseConnectionY = 40 // 基础连接点Y位置（从顶部开始）
+      const baseConnectionY = 45 // 基础连接点Y位置（从顶部开始）
       
       // 计算源节点连接点位置
       const sourceOutputIndex = connection.sourceHandle ? 
@@ -577,7 +704,7 @@ func Run(inputs map[string]interface{}) (map[string]interface{}, error) {
       const sourceX = sourceNode.position.x + nodeWidth // 节点右边缘
       // 根据输出参数数量均匀分布连接点
       const totalSourceOutputs = sourceNode.outputs?.length || 1
-      const sourceSpacing = totalSourceOutputs > 1 ? 50 / (totalSourceOutputs - 1) : 0
+      const sourceSpacing = totalSourceOutputs > 1 ? 60 / (totalSourceOutputs - 1) : 0
       const sourceY = sourceNode.position.y + baseConnectionY + (sourceOutputIndex * sourceSpacing)
       
       // 计算目标节点连接点位置
@@ -586,46 +713,126 @@ func Run(inputs map[string]interface{}) (map[string]interface{}, error) {
       const targetX = targetNode.position.x // 节点左边缘
       // 根据输入参数数量均匀分布连接点
       const totalTargetInputs = targetNode.inputs?.length || 1
-      const targetSpacing = totalTargetInputs > 1 ? 50 / (totalTargetInputs - 1) : 0
+      const targetSpacing = totalTargetInputs > 1 ? 60 / (totalTargetInputs - 1) : 0
       const targetY = targetNode.position.y + baseConnectionY + (targetInputIndex * targetSpacing)
 
       // 计算控制点，创建平滑的贝塞尔曲线
       const dx = targetX - sourceX
-      const controlPointOffset = Math.min(Math.abs(dx) * 0.5, 150) // 控制点偏移，最大150px
+      const controlPointOffset = Math.min(Math.abs(dx) * 0.5, 180) // 控制点偏移，最大180px
       const cp1x = sourceX + controlPointOffset
       const cp1y = sourceY
       const cp2x = targetX - controlPointOffset
       const cp2y = targetY
 
       const isSelected = selectedConnection === connection.id
+      
+      // 根据连接类型确定颜色和样式
+      const getConnectionStyle = () => {
+        switch (connection.type) {
+          case 'true':
+            return {
+              color: '#059669', // 绿色 - 真分支
+              gradient: 'url(#greenGradient)',
+              dashArray: 'none'
+            }
+          case 'false':
+            return {
+              color: '#dc2626', // 红色 - 假分支
+              gradient: 'url(#redGradient)',
+              dashArray: 'none'
+            }
+          case 'error':
+            return {
+              color: '#f59e0b', // 橙色 - 错误分支
+              gradient: 'url(#orangeGradient)',
+              dashArray: '8,4'
+            }
+          case 'branch':
+            return {
+              color: '#8b5cf6', // 紫色 - 并行分支
+              gradient: 'url(#purpleGradient)',
+              dashArray: 'none'
+            }
+          default:
+            return {
+              color: '#3b82f6', // 蓝色 - 默认
+              gradient: 'url(#blueGradient)',
+              dashArray: 'none'
+            }
+        }
+      }
+
+      const connectionStyle = getConnectionStyle()
 
       return (
         <g key={connection.id}>
+          {/* 连接线光晕效果 */}
+          <motion.path
+            d={`M ${sourceX} ${sourceY} C ${cp1x} ${cp1y}, ${cp2x} ${cp2y}, ${targetX} ${targetY}`}
+            stroke={connectionStyle.color}
+            strokeWidth={isSelected ? "8" : "6"}
+            fill="none"
+            className="pointer-events-none opacity-20"
+            strokeDasharray={connectionStyle.dashArray}
+            initial={{ pathLength: 0, opacity: 0 }}
+            animate={{ pathLength: 1, opacity: 0.2 }}
+            transition={{ duration: 0.8, ease: "easeInOut" }}
+          />
+          
           {/* 可点击的连接线背景（更粗，透明） */}
           <path
             d={`M ${sourceX} ${sourceY} C ${cp1x} ${cp1y}, ${cp2x} ${cp2y}, ${targetX} ${targetY}`}
             stroke="transparent"
-            strokeWidth="20"
+            strokeWidth="24"
             fill="none"
             className="cursor-pointer"
             style={{ pointerEvents: 'all' }}
-            onClick={() => setSelectedConnection(connection.id)}
-            onDoubleClick={(e) => {
+            onClick={(e) => {
               e.stopPropagation()
-              deleteConnection(connection.id)
+              setSelectedConnection(connection.id)
             }}
           />
-          {/* 可见的连接线 - 贝塞尔曲线 */}
+          
+          {/* 主连接线 - 渐变贝塞尔曲线 */}
           <motion.path
             d={`M ${sourceX} ${sourceY} C ${cp1x} ${cp1y}, ${cp2x} ${cp2y}, ${targetX} ${targetY}`}
-            stroke={isSelected ? "#ef4444" : "#6366f1"}
-            strokeWidth={isSelected ? "3" : "2"}
+            stroke={isSelected ? "#ef4444" : connectionStyle.gradient}
+            strokeWidth={isSelected ? "4" : "3"}
             fill="none"
-            markerEnd="url(#arrowhead)"
+            markerEnd={`url(#arrowhead-${connection.type || 'default'})`}
             className="pointer-events-none"
-            style={{ filter: isSelected ? 'drop-shadow(0 0 4px rgba(239, 68, 68, 0.5))' : 'none' }}
-            whileHover={{ strokeWidth: 3 }}
+            strokeDasharray={connectionStyle.dashArray}
+            style={{ 
+              filter: isSelected 
+                ? 'drop-shadow(0 0 8px rgba(239, 68, 68, 0.6))' 
+                : `drop-shadow(0 2px 4px ${connectionStyle.color}40)`
+            }}
+            initial={{ pathLength: 0 }}
+            animate={{ pathLength: 1 }}
+            transition={{ duration: 0.8, ease: "easeInOut" }}
+            whileHover={{ strokeWidth: isSelected ? 5 : 4 }}
           />
+          
+          {/* 数据流动画效果 */}
+          <motion.circle
+            r="3"
+            fill={connectionStyle.color}
+            className="opacity-60"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: [0, 0.8, 0] }}
+            transition={{ 
+              duration: 2, 
+              repeat: Infinity, 
+              ease: "easeInOut",
+              delay: Math.random() * 2 
+            }}
+          >
+            <animateMotion
+              dur="2s"
+              repeatCount="indefinite"
+              path={`M ${sourceX} ${sourceY} C ${cp1x} ${cp1y}, ${cp2x} ${cp2y}, ${targetX} ${targetY}`}
+            />
+          </motion.circle>
         </g>
       )
     })
@@ -1163,6 +1370,327 @@ func Run(inputs map[string]interface{}) (map[string]interface{}, error) {
                   </div>
                 )}
                 
+                {node.type === 'plugin' && (
+                  <div className="space-y-4">
+                    {/* 插件信息显示 */}
+                    {(() => {
+                      const plugin = installedPlugins.find(p => p.pluginId === node.data.pluginId)
+                      if (!plugin) {
+                        return (
+                          <div className="p-4 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg">
+                            <div className="flex items-center gap-2 text-red-700 dark:text-red-400">
+                              <AlertCircle className="w-4 h-4" />
+                              <span className="text-sm font-medium">插件未找到</span>
+                            </div>
+                            <p className="text-xs text-red-600 dark:text-red-500 mt-1">
+                              该节点关联的插件可能已被卸载或不存在
+                            </p>
+                          </div>
+                        )
+                      }
+                      
+                      return (
+                        <div className="space-y-4">
+                          {/* 插件基本信息 */}
+                          <div className="p-4 bg-gray-50 dark:bg-gray-800 rounded-lg">
+                            <div className="flex items-center gap-3 mb-2">
+                              <div 
+                                className="p-2 rounded-lg"
+                                style={{ 
+                                  backgroundColor: plugin.plugin?.color || '#7c2d12',
+                                  color: 'white'
+                                }}
+                              >
+                                <Package className="w-4 h-4" />
+                              </div>
+                              <div>
+                                <h4 className="text-sm font-semibold text-gray-900 dark:text-white">
+                                  {plugin.plugin?.displayName || plugin.plugin?.name}
+                                </h4>
+                                <p className="text-xs text-gray-500 dark:text-gray-400">
+                                  v{plugin.version} • {plugin.plugin?.category}
+                                </p>
+                              </div>
+                            </div>
+                            {plugin.plugin?.description && (
+                              <p className="text-xs text-gray-600 dark:text-gray-400">
+                                {plugin.plugin.description}
+                              </p>
+                            )}
+                          </div>
+                          
+                          {/* 输入参数配置 */}
+                          {plugin.plugin?.inputSchema?.parameters?.length > 0 && (
+                            <div>
+                              <h5 className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-3">
+                                输入参数配置
+                              </h5>
+                              <div className="space-y-3">
+                                {plugin.plugin.inputSchema.parameters.map((param: any, index: number) => (
+                                  <div key={index} className="space-y-2">
+                                    <label className="block text-xs font-medium text-gray-600 dark:text-gray-400">
+                                      {param.name}
+                                      {param.required && <span className="text-red-500 ml-1">*</span>}
+                                    </label>
+                                    {param.type === 'boolean' ? (
+                                      <div className="flex items-center gap-2">
+                                        <input
+                                          type="checkbox"
+                                          checked={node.data.config?.parameters?.[param.name] || false}
+                                          onChange={(e) => updateNodeConfig(node.id, {
+                                            ...(node.data.config || {}),
+                                            parameters: {
+                                              ...(node.data.config?.parameters || {}),
+                                              [param.name]: e.target.checked
+                                            }
+                                          })}
+                                          className="rounded border-gray-300 dark:border-gray-600"
+                                        />
+                                        <span className="text-xs text-gray-500 dark:text-gray-400">
+                                          {param.description}
+                                        </span>
+                                      </div>
+                                    ) : param.type === 'number' ? (
+                                      <input
+                                        type="number"
+                                        value={node.data.config?.parameters?.[param.name] || param.default || ''}
+                                        onChange={(e) => updateNodeConfig(node.id, {
+                                          ...(node.data.config || {}),
+                                          parameters: {
+                                            ...(node.data.config?.parameters || {}),
+                                            [param.name]: parseFloat(e.target.value) || 0
+                                          }
+                                        })}
+                                        placeholder={param.example || param.default}
+                                        className="w-full px-3 py-2 text-sm border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+                                      />
+                                    ) : (
+                                      <input
+                                        type="text"
+                                        value={node.data.config?.parameters?.[param.name] || param.default || ''}
+                                        onChange={(e) => updateNodeConfig(node.id, {
+                                          ...(node.data.config || {}),
+                                          parameters: {
+                                            ...(node.data.config?.parameters || {}),
+                                            [param.name]: e.target.value
+                                          }
+                                        })}
+                                        placeholder={param.example || param.default}
+                                        className="w-full px-3 py-2 text-sm border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+                                      />
+                                    )}
+                                    {param.description && (
+                                      <p className="text-xs text-gray-500 dark:text-gray-400">
+                                        {param.description}
+                                      </p>
+                                    )}
+                                  </div>
+                                ))}
+                              </div>
+                            </div>
+                          )}
+                          
+                          {/* 输出参数说明 */}
+                          {plugin.plugin?.outputSchema?.parameters?.length > 0 && (
+                            <div>
+                              <h5 className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-3">
+                                输出参数说明
+                              </h5>
+                              <div className="space-y-2">
+                                {plugin.plugin.outputSchema.parameters.map((param: any, index: number) => (
+                                  <div key={index} className="flex items-center gap-2 text-xs">
+                                    <span className="font-medium text-gray-600 dark:text-gray-400">
+                                      {param.name}
+                                    </span>
+                                    <span className="px-2 py-1 bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-400 rounded">
+                                      {param.type}
+                                    </span>
+                                    {param.description && (
+                                      <span className="text-gray-500 dark:text-gray-500">
+                                        {param.description}
+                                      </span>
+                                    )}
+                                  </div>
+                                ))}
+                              </div>
+                            </div>
+                          )}
+                        </div>
+                      )
+                    })()}
+                  </div>
+                )}
+                
+                {node.type === 'workflow_plugin' && (
+                  <div className="space-y-4">
+                    {/* 工作流插件信息显示 */}
+                    {(() => {
+                      const plugin = installedPlugins.find(p => p.pluginId === node.data.pluginId)
+                      if (!plugin) {
+                        return (
+                          <div className="p-4 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg">
+                            <div className="flex items-center gap-2 text-red-700 dark:text-red-400">
+                              <AlertCircle className="w-4 h-4" />
+                              <span className="text-sm font-medium">工作流插件未找到</span>
+                            </div>
+                            <p className="text-xs text-red-600 dark:text-red-500 mt-1">
+                              该节点关联的工作流插件可能已被卸载或不存在
+                            </p>
+                          </div>
+                        )
+                      }
+                      
+                      return (
+                        <div className="space-y-4">
+                          {/* 工作流插件基本信息 */}
+                          <div className="p-4 bg-gradient-to-r from-purple-50 to-blue-50 dark:from-purple-900/20 dark:to-blue-900/20 border border-purple-200 dark:border-purple-800 rounded-lg">
+                            <div className="flex items-center gap-3 mb-2">
+                              <div 
+                                className="p-2 rounded-lg bg-gradient-to-r from-purple-500 to-blue-500 text-white"
+                                style={{ 
+                                  background: plugin.plugin?.color 
+                                    ? `linear-gradient(to right, ${plugin.plugin.color}, ${plugin.plugin.color}CC)` 
+                                    : undefined
+                                }}
+                              >
+                                <Package className="w-4 h-4" />
+                              </div>
+                              <div>
+                                <h4 className="text-sm font-semibold text-gray-900 dark:text-white">
+                                  {plugin.plugin?.displayName || plugin.plugin?.name}
+                                </h4>
+                                <p className="text-xs text-gray-500 dark:text-gray-400">
+                                  工作流插件 • v{plugin.version} • {plugin.plugin?.category}
+                                </p>
+                              </div>
+                            </div>
+                            {plugin.plugin?.description && (
+                              <p className="text-xs text-gray-600 dark:text-gray-400">
+                                {plugin.plugin.description}
+                              </p>
+                            )}
+                            <div className="mt-2 p-2 bg-purple-100 dark:bg-purple-900/30 border border-purple-200 dark:border-purple-700 rounded text-xs text-purple-800 dark:text-purple-200">
+                              <strong>说明：</strong>工作流插件节点会执行一个完整的子工作流，输入参数会传递给子工作流的开始节点，输出参数来自子工作流的结束节点。
+                            </div>
+                          </div>
+                          
+                          {/* 输入参数配置 */}
+                          {plugin.plugin?.inputSchema?.parameters?.length > 0 && (
+                            <div>
+                              <h5 className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-3 flex items-center gap-2">
+                                <div className="w-3 h-3 rounded-full bg-gradient-to-r from-emerald-400 to-emerald-500"></div>
+                                输入参数配置
+                              </h5>
+                              <div className="space-y-3">
+                                {plugin.plugin.inputSchema.parameters.map((param: any, index: number) => (
+                                  <div key={index} className="space-y-2">
+                                    <label className="block text-xs font-medium text-gray-600 dark:text-gray-400">
+                                      {param.name}
+                                      {param.required && <span className="text-red-500 ml-1">*</span>}
+                                    </label>
+                                    {param.type === 'boolean' ? (
+                                      <div className="flex items-center gap-2">
+                                        <input
+                                          type="checkbox"
+                                          checked={node.data.config?.parameters?.[param.name] || false}
+                                          onChange={(e) => updateNodeConfig(node.id, {
+                                            ...(node.data.config || {}),
+                                            parameters: {
+                                              ...(node.data.config?.parameters || {}),
+                                              [param.name]: e.target.checked
+                                            }
+                                          })}
+                                          className="rounded border-gray-300 dark:border-gray-600 text-purple-600 focus:ring-purple-500"
+                                        />
+                                        <span className="text-xs text-gray-500 dark:text-gray-400">
+                                          {param.description}
+                                        </span>
+                                      </div>
+                                    ) : param.type === 'number' ? (
+                                      <input
+                                        type="number"
+                                        value={node.data.config?.parameters?.[param.name] || param.default || ''}
+                                        onChange={(e) => updateNodeConfig(node.id, {
+                                          ...(node.data.config || {}),
+                                          parameters: {
+                                            ...(node.data.config?.parameters || {}),
+                                            [param.name]: parseFloat(e.target.value) || 0
+                                          }
+                                        })}
+                                        placeholder={param.example || param.default}
+                                        className="w-full px-3 py-2 text-sm border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-purple-500"
+                                      />
+                                    ) : (
+                                      <input
+                                        type="text"
+                                        value={node.data.config?.parameters?.[param.name] || param.default || ''}
+                                        onChange={(e) => updateNodeConfig(node.id, {
+                                          ...(node.data.config || {}),
+                                          parameters: {
+                                            ...(node.data.config?.parameters || {}),
+                                            [param.name]: e.target.value
+                                          }
+                                        })}
+                                        placeholder={param.example || param.default}
+                                        className="w-full px-3 py-2 text-sm border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-purple-500"
+                                      />
+                                    )}
+                                    {param.description && (
+                                      <p className="text-xs text-gray-500 dark:text-gray-400">
+                                        {param.description}
+                                      </p>
+                                    )}
+                                  </div>
+                                ))}
+                              </div>
+                            </div>
+                          )}
+                          
+                          {/* 输出参数说明 */}
+                          {plugin.plugin?.outputSchema?.parameters?.length > 0 && (
+                            <div>
+                              <h5 className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-3 flex items-center gap-2">
+                                <div className="w-3 h-3 rounded-full bg-gradient-to-r from-blue-400 to-blue-500"></div>
+                                输出参数说明
+                              </h5>
+                              <div className="space-y-2">
+                                {plugin.plugin.outputSchema.parameters.map((param: any, index: number) => (
+                                  <div key={index} className="flex items-center gap-2 text-xs">
+                                    <span className="font-medium text-gray-600 dark:text-gray-400">
+                                      {param.name}
+                                    </span>
+                                    <span className="px-2 py-1 bg-gradient-to-r from-blue-100 to-purple-100 dark:from-blue-900/30 dark:to-purple-900/30 text-blue-700 dark:text-blue-400 rounded border border-blue-200 dark:border-blue-700">
+                                      {param.type}
+                                    </span>
+                                    {param.description && (
+                                      <span className="text-gray-500 dark:text-gray-500">
+                                        {param.description}
+                                      </span>
+                                    )}
+                                  </div>
+                                ))}
+                              </div>
+                            </div>
+                          )}
+                          
+                          {/* 工作流插件特有的执行说明 */}
+                          <div className="p-3 bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg">
+                            <div className="text-xs text-blue-800 dark:text-blue-200">
+                              <div className="font-semibold mb-1">执行流程：</div>
+                              <div className="space-y-1">
+                                <div>1. 当前工作流执行到此节点时，会启动子工作流</div>
+                                <div>2. 输入参数会传递给子工作流的开始节点</div>
+                                <div>3. 子工作流完整执行后，输出结果返回到当前工作流</div>
+                                <div>4. 输出数据可在后续节点中通过 <code className="bg-blue-100 dark:bg-blue-900 px-1 rounded">context.{node.id}.参数名</code> 访问</div>
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+                      )
+                    })()}
+                  </div>
+                )}
+                
                 {node.type === 'timer' && (
                   <div className="space-y-4">
                     <Input
@@ -1406,8 +1934,8 @@ func Run(inputs map[string]interface{}) (map[string]interface{}, error) {
                             ))
                           }}
                         >
-                          <Plus className="w-4 h-4 mr-1" />
-                          添加
+                          <Plus className="w-4 h-4" />
+                          <span>添加</span>
                         </Button>
                       </div>
                       {node.inputs && node.inputs.length > 0 ? (
@@ -1474,8 +2002,8 @@ func Run(inputs map[string]interface{}) (map[string]interface{}, error) {
                             ))
                           }}
                         >
-                          <Plus className="w-4 h-4 mr-1" />
-                          添加
+                          <Plus className="w-4 h-4" />
+                          <span>添加</span>
                         </Button>
                       </div>
                       {node.outputs && node.outputs.length > 0 ? (
@@ -1546,8 +2074,8 @@ func Run(inputs map[string]interface{}) (map[string]interface{}, error) {
                             ))
                           }}
                         >
-                          <Plus className="w-4 h-4 mr-1" />
-                          添加
+                          <Plus className="w-4 h-4" />
+                          <span>添加</span>
                         </Button>
                       </div>
                       {node.inputs && node.inputs.length > 0 ? (
@@ -1604,8 +2132,8 @@ func Run(inputs map[string]interface{}) (map[string]interface{}, error) {
                             ))
                           }}
                         >
-                          <Plus className="w-4 h-4 mr-1" />
-                          添加
+                          <Plus className="w-4 h-4" />
+                          <span>添加</span>
                         </Button>
                       </div>
                       {node.outputs && node.outputs.length > 0 ? (
@@ -1658,6 +2186,112 @@ func Run(inputs map[string]interface{}) (map[string]interface{}, error) {
                   </>
                 )}
               </div>
+              
+              {/* 连接管理 */}
+              <div className="space-y-4">
+                <h4 className="text-sm font-semibold text-gray-900 dark:text-white mb-3 flex items-center gap-2">
+                  <div className="w-1 h-4 rounded-full bg-blue-500" />
+                  连接管理
+                </h4>
+                
+                {/* 输入连接 */}
+                <div className="space-y-2">
+                  <div className="text-xs font-medium text-gray-700 dark:text-gray-300">
+                    输入连接
+                  </div>
+                  {(() => {
+                    const inputConnections = connections.filter(conn => conn.target === node.id)
+                    if (inputConnections.length === 0) {
+                      return (
+                        <div className="text-xs text-gray-500 dark:text-gray-400 italic">
+                          暂无输入连接
+                        </div>
+                      )
+                    }
+                    return inputConnections.map(conn => {
+                      const sourceNode = nodes.find(n => n.id === conn.source)
+                      return (
+                        <div key={conn.id} className="flex items-center justify-between p-2 bg-gray-50 dark:bg-gray-800 rounded-lg">
+                          <div className="flex items-center gap-2 text-xs">
+                            <div className="w-2 h-2 bg-green-500 rounded-full" />
+                            <span className="text-gray-700 dark:text-gray-300">
+                              来自: {sourceNode?.data.label || '未知节点'}
+                            </span>
+                            {conn.type && conn.type !== 'default' && (
+                              <span className="px-1.5 py-0.5 bg-blue-100 dark:bg-blue-900 text-blue-700 dark:text-blue-300 rounded text-xs">
+                                {conn.type}
+                              </span>
+                            )}
+                          </div>
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => deleteConnection(conn.id)}
+                            className="text-red-600 hover:text-red-700 hover:bg-red-50 dark:hover:bg-red-900/20 p-1"
+                          >
+                            <Trash2 className="w-3 h-3" />
+                          </Button>
+                        </div>
+                      )
+                    })
+                  })()}
+                </div>
+                
+                {/* 输出连接 */}
+                <div className="space-y-2">
+                  <div className="text-xs font-medium text-gray-700 dark:text-gray-300">
+                    输出连接
+                  </div>
+                  {(() => {
+                    const outputConnections = connections.filter(conn => conn.source === node.id)
+                    if (outputConnections.length === 0) {
+                      return (
+                        <div className="text-xs text-gray-500 dark:text-gray-400 italic">
+                          暂无输出连接
+                        </div>
+                      )
+                    }
+                    return outputConnections.map(conn => {
+                      const targetNode = nodes.find(n => n.id === conn.target)
+                      return (
+                        <div key={conn.id} className="flex items-center justify-between p-2 bg-gray-50 dark:bg-gray-800 rounded-lg">
+                          <div className="flex items-center gap-2 text-xs">
+                            <div className="w-2 h-2 bg-blue-500 rounded-full" />
+                            <span className="text-gray-700 dark:text-gray-300">
+                              到: {targetNode?.data.label || '未知节点'}
+                            </span>
+                            {conn.type && conn.type !== 'default' && (
+                              <span className="px-1.5 py-0.5 bg-blue-100 dark:bg-blue-900 text-blue-700 dark:text-blue-300 rounded text-xs">
+                                {conn.type}
+                              </span>
+                            )}
+                          </div>
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => deleteConnection(conn.id)}
+                            className="text-red-600 hover:text-red-700 hover:bg-red-50 dark:hover:bg-red-900/20 p-1"
+                          >
+                            <Trash2 className="w-3 h-3" />
+                          </Button>
+                        </div>
+                      )
+                    })
+                  })()}
+                </div>
+                
+                {/* 连接操作提示 */}
+                <div className="p-3 bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg">
+                  <div className="text-xs text-blue-800 dark:text-blue-200">
+                    <div className="font-semibold mb-1">连接操作方式：</div>
+                    <div className="space-y-1">
+                      <div>• 在此面板中点击删除按钮删除连接</div>
+                      <div>• 拖拽节点输出点到目标节点创建连接</div>
+                      <div>• 点击连接线可以选中连接</div>
+                    </div>
+                  </div>
+                </div>
+              </div>
             </div>
 
             {/* 抽屉底部操作按钮 */}
@@ -1668,7 +2302,6 @@ func Run(inputs map[string]interface{}) (map[string]interface{}, error) {
                   <Button
                     variant="outline"
                     size="sm"
-                    leftIcon={<TestTube className="w-4 h-4" />}
                     onClick={() => {
                       setTestingNode(node.id)
                       // 初始化测试参数
@@ -1682,8 +2315,10 @@ func Run(inputs map[string]interface{}) (map[string]interface{}, error) {
                       setNodeTestResult(null)
                       setShowNodeTestModal(true)
                     }}
+                    className="flex items-center gap-2"
                   >
-                    测试节点
+                    <TestTube className="w-4 h-4" />
+                    <span>测试节点</span>
                   </Button>
                 )}
                 
@@ -1777,26 +2412,6 @@ func Run(inputs map[string]interface{}) (map[string]interface{}, error) {
     loadEventTypes()
   }, [])
 
-  // 键盘事件监听
-  useEffect(() => {
-    const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === 'Delete' && selectedConnection) {
-        deleteConnection(selectedConnection)
-      }
-      if (e.key === 'Escape') {
-        setSelectedConnection(null)
-        setIsConnecting(false)
-        setConnectionStart(null)
-        setIsCodeEditorFullscreen(false)
-      }
-    }
-
-    document.addEventListener('keydown', handleKeyDown)
-    return () => {
-      document.removeEventListener('keydown', handleKeyDown)
-    }
-  }, [selectedConnection, deleteConnection])
-
   // 画布滚轮缩放 - 使用非被动事件监听器避免 preventDefault 警告
   useEffect(() => {
     const canvas = canvasRef.current
@@ -1823,18 +2438,19 @@ func Run(inputs map[string]interface{}) (map[string]interface{}, error) {
         <div className="flex items-center space-x-4">
           {!validation.valid && (
             <div className="flex items-center text-red-600 text-sm">
-              <AlertCircle className="w-4 h-4 mr-1" />
-              {validation.message}
+              <AlertCircle className="w-4 h-4" />
+              <span className="ml-1">{validation.message}</span>
             </div>
           )}
           <div className="flex items-center gap-2">
             <Button
               variant="primary"
               size="sm"
-              leftIcon={<Plus className="w-4 h-4" />}
               onClick={() => setShowNodeDrawer(true)}
+              className="flex items-center gap-2"
             >
-              {t('workflow.editor.addNode')}
+              <Plus className="w-4 h-4" />
+              <span>{t('workflow.editor.addNode')}</span>
             </Button>
             <Button
               variant="ghost"
@@ -1847,89 +2463,107 @@ func Run(inputs map[string]interface{}) (map[string]interface{}, error) {
           </div>
         </div>
         
-        <div className="flex items-center space-x-2">
-          {/* 画布控制按钮 */}
-          <div className="flex items-center space-x-1 border-r border-gray-200 dark:border-gray-700 pr-2">
+        <div className="flex items-center space-x-3">
+          {/* 画布控制按钮组 */}
+          <div className="flex items-center space-x-1 bg-gray-100 dark:bg-gray-700 rounded-lg p-1">
             <motion.button
               onClick={zoomOut}
-              className="p-2 text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white hover:bg-gray-100 dark:hover:bg-gray-700 rounded transition-colors"
+              className="p-1.5 text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white hover:bg-white dark:hover:bg-gray-600 rounded transition-colors"
               whileHover={{ scale: 1.05 }}
               whileTap={{ scale: 0.95 }}
               title="缩小"
             >
-              <span className="text-lg font-bold">-</span>
+              <span className="text-sm font-bold">-</span>
             </motion.button>
             
-            <span className="text-sm text-gray-600 dark:text-gray-400 min-w-[3rem] text-center">
+            <span className="text-xs text-gray-600 dark:text-gray-400 min-w-[2.5rem] text-center px-1">
               {Math.round(canvasScale * 100)}%
             </span>
             
             <motion.button
               onClick={zoomIn}
-              className="p-2 text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white hover:bg-gray-100 dark:hover:bg-gray-700 rounded transition-colors"
+              className="p-1.5 text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white hover:bg-white dark:hover:bg-gray-600 rounded transition-colors"
               whileHover={{ scale: 1.05 }}
               whileTap={{ scale: 0.95 }}
               title="放大"
             >
-              <span className="text-lg font-bold">+</span>
+              <span className="text-sm font-bold">+</span>
             </motion.button>
-            
+          </div>
+
+          <div className="flex items-center space-x-1">
             <motion.button
               onClick={resetCanvasView}
-              className="p-2 text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white hover:bg-gray-100 dark:hover:bg-gray-700 rounded transition-colors"
-              whileHover={{ scale: 1.05 }}
-              whileTap={{ scale: 0.95 }}
+              className="px-2 py-1.5 text-xs text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white hover:bg-gray-100 dark:hover:bg-gray-700 rounded transition-colors"
+              whileHover={{ scale: 1.02 }}
+              whileTap={{ scale: 0.98 }}
               title="重置视图"
             >
-              <span className="text-sm">重置</span>
+              重置
             </motion.button>
             
             <motion.button
               onClick={centerOnNodes}
-              className="p-2 text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white hover:bg-gray-100 dark:hover:bg-gray-700 rounded transition-colors"
-              whileHover={{ scale: 1.05 }}
-              whileTap={{ scale: 0.95 }}
+              className="px-2 py-1.5 text-xs text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white hover:bg-gray-100 dark:hover:bg-gray-700 rounded transition-colors"
+              whileHover={{ scale: 1.02 }}
+              whileTap={{ scale: 0.98 }}
               title="居中显示所有节点"
             >
-              <span className="text-sm">居中</span>
+              居中
             </motion.button>
           </div>
+
+          {/* 分隔线 */}
+          <div className="h-6 w-px bg-gray-300 dark:bg-gray-600"></div>
 
           {selectedConnection && (
             <Button
               variant="destructive"
               size="sm"
-              leftIcon={<Trash2 className="w-4 h-4" />}
               onClick={() => deleteConnection(selectedConnection)}
             >
+              <Trash2 className="w-4 h-4" />
               删除连接
             </Button>
           )}
           
-          <Button
-            variant="success"
-            size="sm"
-            leftIcon={isRunning ? (
-              <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
-            ) : (
-              <Play className="w-4 h-4" />
-            )}
-            onClick={handleRun}
-            disabled={!validation.valid || isRunning}
-            loading={isRunning}
-          >
-            {isRunning ? '运行中...' : '运行'}
-          </Button>
-          
-          <Button
-            variant="primary"
-            size="sm"
-            leftIcon={<Save className="w-4 h-4" />}
-            onClick={handleSave}
-            disabled={!onSave}
-          >
-            保存
-          </Button>
+          {/* 主要操作按钮 */}
+          <div className="flex items-center space-x-2">
+            <Button
+              variant="success"
+              size="sm"
+              onClick={handleRun}
+              disabled={!validation.valid || isRunning}
+              loading={isRunning}
+            >
+              {isRunning ? '运行中...' : '运行'}
+            </Button>
+            
+            <Button
+              variant="primary"
+              size="sm"
+              onClick={handleSave}
+              disabled={!onSave}
+            >
+              保存
+            </Button>
+            
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => {
+                if (workflowId && validation.valid) {
+                  setShowPublishModal(true)
+                } else {
+                  console.log('发布按钮被禁用:', { workflowId, validation })
+                }
+              }}
+              disabled={!workflowId || !validation.valid}
+              title={!workflowId ? '需要工作流ID' : !validation.valid ? `工作流验证失败: ${validation.message}` : '发布为插件'}
+            >
+              发布为插件
+            </Button>
+          </div>
         </div>
       </div>
 
@@ -1980,17 +2614,110 @@ func Run(inputs map[string]interface{}) (map[string]interface{}, error) {
               }}
             >
               <defs>
+                {/* 渐变定义 */}
+                <linearGradient id="blueGradient" x1="0%" y1="0%" x2="100%" y2="0%">
+                  <stop offset="0%" stopColor="#3b82f6" />
+                  <stop offset="100%" stopColor="#1d4ed8" />
+                </linearGradient>
+                
+                <linearGradient id="greenGradient" x1="0%" y1="0%" x2="100%" y2="0%">
+                  <stop offset="0%" stopColor="#059669" />
+                  <stop offset="100%" stopColor="#047857" />
+                </linearGradient>
+                
+                <linearGradient id="redGradient" x1="0%" y1="0%" x2="100%" y2="0%">
+                  <stop offset="0%" stopColor="#dc2626" />
+                  <stop offset="100%" stopColor="#b91c1c" />
+                </linearGradient>
+                
+                <linearGradient id="orangeGradient" x1="0%" y1="0%" x2="100%" y2="0%">
+                  <stop offset="0%" stopColor="#f59e0b" />
+                  <stop offset="100%" stopColor="#d97706" />
+                </linearGradient>
+                
+                <linearGradient id="purpleGradient" x1="0%" y1="0%" x2="100%" y2="0%">
+                  <stop offset="0%" stopColor="#8b5cf6" />
+                  <stop offset="100%" stopColor="#7c3aed" />
+                </linearGradient>
+
+                {/* 箭头标记定义 */}
                 <marker
-                  id="arrowhead"
-                  markerWidth="10"
-                  markerHeight="7"
-                  refX="9"
-                  refY="3.5"
+                  id="arrowhead-default"
+                  markerWidth="12"
+                  markerHeight="8"
+                  refX="11"
+                  refY="4"
                   orient="auto"
+                  markerUnits="strokeWidth"
                 >
                   <polygon
-                    points="0 0, 10 3.5, 0 7"
-                    fill="#6366f1"
+                    points="0 0, 12 4, 0 8"
+                    fill="url(#blueGradient)"
+                    stroke="none"
+                  />
+                </marker>
+                
+                <marker
+                  id="arrowhead-true"
+                  markerWidth="12"
+                  markerHeight="8"
+                  refX="11"
+                  refY="4"
+                  orient="auto"
+                  markerUnits="strokeWidth"
+                >
+                  <polygon
+                    points="0 0, 12 4, 0 8"
+                    fill="url(#greenGradient)"
+                    stroke="none"
+                  />
+                </marker>
+                
+                <marker
+                  id="arrowhead-false"
+                  markerWidth="12"
+                  markerHeight="8"
+                  refX="11"
+                  refY="4"
+                  orient="auto"
+                  markerUnits="strokeWidth"
+                >
+                  <polygon
+                    points="0 0, 12 4, 0 8"
+                    fill="url(#redGradient)"
+                    stroke="none"
+                  />
+                </marker>
+                
+                <marker
+                  id="arrowhead-error"
+                  markerWidth="12"
+                  markerHeight="8"
+                  refX="11"
+                  refY="4"
+                  orient="auto"
+                  markerUnits="strokeWidth"
+                >
+                  <polygon
+                    points="0 0, 12 4, 0 8"
+                    fill="url(#orangeGradient)"
+                    stroke="none"
+                  />
+                </marker>
+                
+                <marker
+                  id="arrowhead-branch"
+                  markerWidth="12"
+                  markerHeight="8"
+                  refX="11"
+                  refY="4"
+                  orient="auto"
+                  markerUnits="strokeWidth"
+                >
+                  <polygon
+                    points="0 0, 12 4, 0 8"
+                    fill="url(#purpleGradient)"
+                    stroke="none"
                   />
                 </marker>
               </defs>
@@ -2035,97 +2762,138 @@ func Run(inputs map[string]interface{}) (map[string]interface{}, error) {
                     }}
                     transition={{ duration: 0.15 }}
                   >
-                    {/* 主卡片 - 优化后的优雅风格 */}
+                    {/* 主卡片 - 全新现代化设计 */}
                     <div className={cn(
-                      'relative bg-white dark:bg-gray-800 rounded-xl border-2 transition-all duration-200 shadow-lg',
+                      'relative overflow-hidden transition-all duration-300 transform-gpu',
+                      'bg-gradient-to-br from-white via-gray-50 to-white dark:from-gray-800 dark:via-gray-850 dark:to-gray-800',
+                      'rounded-2xl border border-gray-200/60 dark:border-gray-700/60',
+                      'backdrop-blur-sm shadow-lg hover:shadow-2xl',
                       selectedNode === node.id 
-                        ? 'border-blue-400 dark:border-blue-500 shadow-xl ring-2 ring-blue-200 dark:ring-blue-800' 
-                        : 'border-gray-200 dark:border-gray-700 hover:border-gray-300 dark:hover:border-gray-600 hover:shadow-xl'
-                    )}>
-                      {/* 顶部颜色条 */}
+                        ? `border-2 ${nodeConfig.shadowColor} shadow-2xl ring-4 ring-opacity-20` 
+                        : 'hover:border-gray-300/80 dark:hover:border-gray-600/80 hover:-translate-y-1',
+                      draggedNode === node.id && 'shadow-3xl scale-105'
+                    )}
+                    style={{
+                      boxShadow: selectedNode === node.id 
+                        ? `0 20px 40px -12px ${nodeConfig.color}40, 0 8px 16px -8px ${nodeConfig.color}20`
+                        : undefined
+                    }}>
+                      {/* 渐变顶部装饰条 */}
                       <div 
-                        className="absolute top-0 left-0 right-0 h-1 rounded-t-xl"
-                        style={{ backgroundColor: nodeConfig.color || '#64748b' }}
+                        className={cn(
+                          'absolute top-0 left-0 right-0 h-1.5 bg-gradient-to-r',
+                          nodeConfig.gradient || 'from-gray-400 to-gray-600'
+                        )}
                       />
                       
+                      {/* 背景装饰 - 微妙的几何图案 */}
+                      <div className="absolute top-0 right-0 w-24 h-24 opacity-5 dark:opacity-10">
+                        <div 
+                          className="w-full h-full rounded-full blur-xl"
+                          style={{ backgroundColor: nodeConfig.color }}
+                        />
+                      </div>
+                      
                       {/* 内容区域 */}
-                      <div className="pt-3 pb-3 px-4">
+                      <div className="relative pt-4 pb-4 px-5">
                         {/* 头部：图标和标题 */}
-                        <div className="flex items-center justify-between gap-3 mb-3">
-                          <div className="flex items-center gap-3 flex-1 min-w-0">
-                            {/* 图标 */}
-                            <div 
-                              className="flex-shrink-0 p-2 rounded-lg shadow-sm"
-                              style={{ 
-                                backgroundColor: `${nodeConfig.color || '#64748b'}15`,
-                                color: nodeConfig.color || '#64748b'
-                              }}
-                            >
-                              {nodeConfig.icon}
+                        <div className="flex items-center justify-between gap-4 mb-4">
+                          <div className="flex items-center gap-4 flex-1 min-w-0">
+                            {/* 现代化图标容器 */}
+                            <div className="relative flex-shrink-0">
+                              <div 
+                                className={cn(
+                                  'p-3 rounded-xl shadow-md transition-all duration-300',
+                                  'bg-gradient-to-br border border-white/20',
+                                  nodeConfig.gradient || 'from-gray-400 to-gray-600',
+                                  'hover:scale-110 hover:rotate-3'
+                                )}
+                                style={{
+                                  boxShadow: `0 8px 16px -4px ${nodeConfig.color}30`
+                                }}
+                              >
+                                <div className="text-white drop-shadow-sm">
+                                  {nodeConfig.icon}
+                                </div>
+                              </div>
+                              {/* 图标光晕效果 */}
+                              <div 
+                                className="absolute inset-0 rounded-xl blur-md opacity-30 -z-10"
+                                style={{ backgroundColor: nodeConfig.color }}
+                              />
                             </div>
                             
                             {/* 标题和类型 */}
                             <div className="flex-1 min-w-0">
-                              <div className="text-base font-semibold text-gray-900 dark:text-gray-100 truncate">
+                              <div className="text-lg font-bold text-gray-900 dark:text-gray-100 truncate leading-tight">
                                 {node.data.label}
                               </div>
-                              <div className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">
+                              <div className="text-sm text-gray-600 dark:text-gray-400 mt-1 font-medium">
                                 {nodeConfig.label}
                               </div>
                             </div>
                           </div>
                           
-                          {/* 操作按钮 */}
+                          {/* 现代化操作按钮 */}
                           <div className={cn(
-                            'flex items-center gap-1 transition-opacity flex-shrink-0',
-                            selectedNode === node.id ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'
+                            'flex items-center gap-2 transition-all duration-300 flex-shrink-0',
+                            selectedNode === node.id ? 'opacity-100 scale-100' : 'opacity-0 scale-95 group-hover:opacity-100 group-hover:scale-100'
                           )}>
-                            <button
+                            <motion.button
+                              whileHover={{ scale: 1.1 }}
+                              whileTap={{ scale: 0.95 }}
                               onClick={(e) => {
                                 e.stopPropagation()
                                 setConfiguringNode(node.id)
                               }}
-                              className="p-1.5 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-md transition-colors"
+                              className="p-2 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-xl transition-all duration-200 shadow-sm hover:shadow-md"
                               title="配置"
                             >
-                              <Settings className="w-4 h-4 text-gray-500 dark:text-gray-400" />
-                            </button>
-                            <button
+                              <Settings className="w-4 h-4 text-gray-600 dark:text-gray-400" />
+                            </motion.button>
+                            <motion.button
+                              whileHover={{ scale: 1.1 }}
+                              whileTap={{ scale: 0.95 }}
                               onClick={(e) => {
                                 e.stopPropagation()
                                 deleteNode(node.id)
                               }}
-                              className="p-1.5 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-md transition-colors"
+                              className="p-2 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-xl transition-all duration-200 shadow-sm hover:shadow-md"
                               title="删除"
                             >
                               <Trash2 className="w-4 h-4 text-red-500 dark:text-red-400" />
-                            </button>
+                            </motion.button>
                           </div>
                         </div>
 
-                        {/* 输入输出参数展示 - 根据节点类型显示 */}
+                        {/* 现代化参数展示区域 */}
                         {(() => {
                           // 开始节点：只显示输入参数
                           if (node.type === 'start' && node.inputs.length > 0) {
                             return (
-                              <div className="space-y-2 pt-2 border-t border-gray-100 dark:border-gray-700">
-                                <div className="space-y-1">
-                                  <div className="text-xs font-medium text-gray-500 dark:text-gray-400 flex items-center gap-1">
-                                    <div className="w-2 h-2 rounded-full bg-green-500"></div>
-                                    输入 ({node.inputs.length})
+                              <div className="pt-3 border-t border-gray-100/60 dark:border-gray-700/60">
+                                <div className="space-y-3">
+                                  <div className="flex items-center gap-2">
+                                    <div className="w-3 h-3 rounded-full bg-gradient-to-r from-emerald-400 to-emerald-500 shadow-sm"></div>
+                                    <span className="text-sm font-semibold text-gray-700 dark:text-gray-300">
+                                      输入参数 ({node.inputs.length})
+                                    </span>
                                   </div>
-                                  <div className="flex flex-wrap gap-1">
+                                  <div className="flex flex-wrap gap-2">
                                     {node.inputs.slice(0, 3).map((input, idx) => (
-                                      <span
+                                      <motion.span
                                         key={idx}
-                                        className="px-2 py-0.5 text-xs bg-green-50 dark:bg-green-900/20 text-green-700 dark:text-green-400 rounded-md border border-green-200 dark:border-green-800 truncate max-w-[100px]"
+                                        initial={{ opacity: 0, scale: 0.8 }}
+                                        animate={{ opacity: 1, scale: 1 }}
+                                        transition={{ delay: idx * 0.1 }}
+                                        className="px-3 py-1.5 text-xs font-medium bg-gradient-to-r from-emerald-50 to-emerald-100 dark:from-emerald-900/30 dark:to-emerald-800/30 text-emerald-700 dark:text-emerald-400 rounded-lg border border-emerald-200/60 dark:border-emerald-700/60 shadow-sm hover:shadow-md transition-all duration-200 truncate max-w-[120px]"
                                         title={input}
                                       >
                                         {input}
-                                      </span>
+                                      </motion.span>
                                     ))}
                                     {node.inputs.length > 3 && (
-                                      <span className="px-2 py-0.5 text-xs text-gray-500 dark:text-gray-400">
+                                      <span className="px-3 py-1.5 text-xs font-medium text-gray-500 dark:text-gray-400 bg-gray-100 dark:bg-gray-700 rounded-lg">
                                         +{node.inputs.length - 3}
                                       </span>
                                     )}
@@ -2138,24 +2906,29 @@ func Run(inputs map[string]interface{}) (map[string]interface{}, error) {
                           // 结束节点：只显示输出参数
                           if (node.type === 'end' && node.outputs.length > 0) {
                             return (
-                              <div className="space-y-2 pt-2 border-t border-gray-100 dark:border-gray-700">
-                                <div className="space-y-1">
-                                  <div className="text-xs font-medium text-gray-500 dark:text-gray-400 flex items-center gap-1">
-                                    <div className="w-2 h-2 rounded-full bg-blue-500"></div>
-                                    输出 ({node.outputs.length})
+                              <div className="pt-3 border-t border-gray-100/60 dark:border-gray-700/60">
+                                <div className="space-y-3">
+                                  <div className="flex items-center gap-2">
+                                    <div className="w-3 h-3 rounded-full bg-gradient-to-r from-blue-400 to-blue-500 shadow-sm"></div>
+                                    <span className="text-sm font-semibold text-gray-700 dark:text-gray-300">
+                                      输出参数 ({node.outputs.length})
+                                    </span>
                                   </div>
-                                  <div className="flex flex-wrap gap-1">
+                                  <div className="flex flex-wrap gap-2">
                                     {node.outputs.slice(0, 3).map((output, idx) => (
-                                      <span
+                                      <motion.span
                                         key={idx}
-                                        className="px-2 py-0.5 text-xs bg-blue-50 dark:bg-blue-900/20 text-blue-700 dark:text-blue-400 rounded-md border border-blue-200 dark:border-blue-800 truncate max-w-[100px]"
+                                        initial={{ opacity: 0, scale: 0.8 }}
+                                        animate={{ opacity: 1, scale: 1 }}
+                                        transition={{ delay: idx * 0.1 }}
+                                        className="px-3 py-1.5 text-xs font-medium bg-gradient-to-r from-blue-50 to-blue-100 dark:from-blue-900/30 dark:to-blue-800/30 text-blue-700 dark:text-blue-400 rounded-lg border border-blue-200/60 dark:border-blue-700/60 shadow-sm hover:shadow-md transition-all duration-200 truncate max-w-[120px]"
                                         title={output}
                                       >
                                         {output}
-                                      </span>
+                                      </motion.span>
                                     ))}
                                     {node.outputs.length > 3 && (
-                                      <span className="px-2 py-0.5 text-xs text-gray-500 dark:text-gray-400">
+                                      <span className="px-3 py-1.5 text-xs font-medium text-gray-500 dark:text-gray-400 bg-gray-100 dark:bg-gray-700 rounded-lg">
                                         +{node.outputs.length - 3}
                                       </span>
                                     )}
@@ -2168,26 +2941,31 @@ func Run(inputs map[string]interface{}) (map[string]interface{}, error) {
                           // 其他节点：显示输入和输出参数
                           if (node.type !== 'start' && node.type !== 'end' && (node.inputs.length > 0 || node.outputs.length > 0)) {
                             return (
-                              <div className="space-y-2 pt-2 border-t border-gray-100 dark:border-gray-700">
+                              <div className="pt-3 border-t border-gray-100/60 dark:border-gray-700/60 space-y-4">
                                 {/* 输入参数 */}
                                 {node.inputs.length > 0 && (
-                                  <div className="space-y-1">
-                                    <div className="text-xs font-medium text-gray-500 dark:text-gray-400 flex items-center gap-1">
-                                      <div className="w-2 h-2 rounded-full bg-green-500"></div>
-                                      输入 ({node.inputs.length})
+                                  <div className="space-y-2">
+                                    <div className="flex items-center gap-2">
+                                      <div className="w-3 h-3 rounded-full bg-gradient-to-r from-emerald-400 to-emerald-500 shadow-sm"></div>
+                                      <span className="text-sm font-semibold text-gray-700 dark:text-gray-300">
+                                        输入 ({node.inputs.length})
+                                      </span>
                                     </div>
-                                    <div className="flex flex-wrap gap-1">
+                                    <div className="flex flex-wrap gap-2">
                                       {node.inputs.slice(0, 3).map((input, idx) => (
-                                        <span
+                                        <motion.span
                                           key={idx}
-                                          className="px-2 py-0.5 text-xs bg-green-50 dark:bg-green-900/20 text-green-700 dark:text-green-400 rounded-md border border-green-200 dark:border-green-800 truncate max-w-[100px]"
+                                          initial={{ opacity: 0, scale: 0.8 }}
+                                          animate={{ opacity: 1, scale: 1 }}
+                                          transition={{ delay: idx * 0.1 }}
+                                          className="px-3 py-1.5 text-xs font-medium bg-gradient-to-r from-emerald-50 to-emerald-100 dark:from-emerald-900/30 dark:to-emerald-800/30 text-emerald-700 dark:text-emerald-400 rounded-lg border border-emerald-200/60 dark:border-emerald-700/60 shadow-sm hover:shadow-md transition-all duration-200 truncate max-w-[120px]"
                                           title={input}
                                         >
                                           {input}
-                                        </span>
+                                        </motion.span>
                                       ))}
                                       {node.inputs.length > 3 && (
-                                        <span className="px-2 py-0.5 text-xs text-gray-500 dark:text-gray-400">
+                                        <span className="px-3 py-1.5 text-xs font-medium text-gray-500 dark:text-gray-400 bg-gray-100 dark:bg-gray-700 rounded-lg">
                                           +{node.inputs.length - 3}
                                         </span>
                                       )}
@@ -2197,23 +2975,28 @@ func Run(inputs map[string]interface{}) (map[string]interface{}, error) {
 
                                 {/* 输出参数 - gateway 节点不显示输出参数标签，因为它们是逻辑分支而不是数据输出 */}
                                 {node.outputs.length > 0 && node.type !== 'gateway' && (
-                                  <div className="space-y-1">
-                                    <div className="text-xs font-medium text-gray-500 dark:text-gray-400 flex items-center gap-1">
-                                      <div className="w-2 h-2 rounded-full bg-blue-500"></div>
-                                      输出 ({node.outputs.length})
+                                  <div className="space-y-2">
+                                    <div className="flex items-center gap-2">
+                                      <div className="w-3 h-3 rounded-full bg-gradient-to-r from-blue-400 to-blue-500 shadow-sm"></div>
+                                      <span className="text-sm font-semibold text-gray-700 dark:text-gray-300">
+                                        输出 ({node.outputs.length})
+                                      </span>
                                     </div>
-                                    <div className="flex flex-wrap gap-1">
+                                    <div className="flex flex-wrap gap-2">
                                       {node.outputs.slice(0, 3).map((output, idx) => (
-                                        <span
+                                        <motion.span
                                           key={idx}
-                                          className="px-2 py-0.5 text-xs bg-blue-50 dark:bg-blue-900/20 text-blue-700 dark:text-blue-400 rounded-md border border-blue-200 dark:border-blue-800 truncate max-w-[100px]"
+                                          initial={{ opacity: 0, scale: 0.8 }}
+                                          animate={{ opacity: 1, scale: 1 }}
+                                          transition={{ delay: idx * 0.1 }}
+                                          className="px-3 py-1.5 text-xs font-medium bg-gradient-to-r from-blue-50 to-blue-100 dark:from-blue-900/30 dark:to-blue-800/30 text-blue-700 dark:text-blue-400 rounded-lg border border-blue-200/60 dark:border-blue-700/60 shadow-sm hover:shadow-md transition-all duration-200 truncate max-w-[120px]"
                                           title={output}
                                         >
                                           {output}
-                                        </span>
+                                        </motion.span>
                                       ))}
                                       {node.outputs.length > 3 && (
-                                        <span className="px-2 py-0.5 text-xs text-gray-500 dark:text-gray-400">
+                                        <span className="px-3 py-1.5 text-xs font-medium text-gray-500 dark:text-gray-400 bg-gray-100 dark:bg-gray-700 rounded-lg">
                                           +{node.outputs.length - 3}
                                         </span>
                                       )}
@@ -2229,65 +3012,123 @@ func Run(inputs map[string]interface{}) (map[string]interface{}, error) {
                       </div>
                     </div>
 
-                    {/* 输入连接点 (绿色) - 优化后的样式 */}
+                    {/* 现代化输入连接点 - 渐变设计 */}
                     {node.inputs.map((input, index) => {
                       // 计算连接点位置：在节点左侧，根据输入参数数量均匀分布
                       const totalInputs = node.inputs.length
-                      const spacing = totalInputs > 1 ? 50 / (totalInputs - 1) : 0
-                      const topPosition = 40 + (index * spacing)
+                      const spacing = totalInputs > 1 ? 60 / (totalInputs - 1) : 0
+                      const topPosition = 45 + (index * spacing)
                       
                       return (
-                        <div
+                        <motion.div
                           key={input}
-                          className={cn(
-                            "absolute w-4 h-4 rounded-full cursor-pointer border-2 border-white dark:border-gray-800 transition-all z-20 shadow-md",
-                            isConnecting && connectionStart?.nodeId !== node.id
-                              ? "bg-green-500 hover:bg-green-600 scale-125 ring-2 ring-green-300"
-                              : "bg-green-500 hover:bg-green-600 hover:scale-110"
-                          )}
+                          className="absolute z-30"
                           style={{
-                            left: -8,
+                            left: -10,
                             top: `${topPosition}px`
                           }}
-                          onMouseDown={(e) => {
-                            e.stopPropagation()
-                            if (isConnecting) {
-                              completeConnection(node.id, input)
-                            }
-                          }}
-                          title={`输入: ${input}`}
-                        />
+                          whileHover={{ scale: 1.2 }}
+                          whileTap={{ scale: 0.9 }}
+                        >
+                          {/* 连接点光晕效果 */}
+                          <div 
+                            className={cn(
+                              "absolute inset-0 rounded-full blur-sm opacity-60 transition-all duration-300",
+                              isConnecting && connectionStart?.nodeId !== node.id
+                                ? "bg-emerald-400 scale-150"
+                                : "bg-emerald-300 scale-100"
+                            )}
+                          />
+                          {/* 主连接点 */}
+                          <div
+                            className={cn(
+                              "relative w-5 h-5 rounded-full cursor-pointer transition-all duration-300 transform-gpu",
+                              "bg-gradient-to-br from-emerald-400 to-emerald-600",
+                              "border-2 border-white dark:border-gray-800 shadow-lg",
+                              "hover:shadow-emerald-300/50 hover:shadow-xl",
+                              isConnecting && connectionStart?.nodeId !== node.id
+                                ? "ring-4 ring-emerald-300/60 scale-110 animate-pulse"
+                                : "hover:scale-110"
+                            )}
+                            onMouseDown={(e) => {
+                              e.stopPropagation()
+                              if (isConnecting) {
+                                completeConnection(node.id, input)
+                              }
+                            }}
+                            title={`输入: ${input}`}
+                          >
+                            {/* 内部高光 */}
+                            <div className="absolute top-0.5 left-0.5 w-2 h-2 bg-white/40 rounded-full blur-sm" />
+                          </div>
+                        </motion.div>
                       )
                     })}
 
-                    {/* 输出连接点 (蓝色) - 优化后的样式 */}
+                    {/* 现代化输出连接点 - 渐变设计 */}
                     {node.outputs.map((output, index) => {
                       // 计算连接点位置：在节点右侧，根据输出参数数量均匀分布
                       const totalOutputs = node.outputs.length
-                      const spacing = totalOutputs > 1 ? 50 / (totalOutputs - 1) : 0
-                      const topPosition = 40 + (index * spacing)
+                      const spacing = totalOutputs > 1 ? 60 / (totalOutputs - 1) : 0
+                      const topPosition = 45 + (index * spacing)
+                      
+                      // 检查此输出点是否已经连接
+                      const isConnected = isOutputConnected(node.id, output)
+                      // 检查是否可以开始连接（未连接且不在连接模式中）
+                      const canStartConnection = !isConnected && !isConnecting
                       
                       return (
-                        <div
+                        <motion.div
                           key={output}
-                          className={cn(
-                            "absolute w-4 h-4 rounded-full cursor-pointer border-2 border-white dark:border-gray-800 transition-all z-20 shadow-md",
-                            !isConnecting
-                              ? "bg-blue-500 hover:bg-blue-600 hover:scale-110"
-                              : "bg-gray-400 cursor-not-allowed"
-                          )}
+                          className="absolute z-30"
                           style={{
-                            right: -8,
+                            right: -10,
                             top: `${topPosition}px`
                           }}
-                          onMouseDown={(e) => {
-                            e.stopPropagation()
-                            if (!isConnecting) {
-                              startConnection(node.id, output)
+                          whileHover={{ scale: canStartConnection ? 1.2 : 1.1 }}
+                          whileTap={{ scale: canStartConnection ? 0.9 : 1 }}
+                        >
+                          {/* 连接点光晕效果 */}
+                          <div 
+                            className={cn(
+                              "absolute inset-0 rounded-full blur-sm opacity-60 transition-all duration-300",
+                              canStartConnection
+                                ? "bg-blue-300 scale-100"
+                                : isConnected
+                                ? "bg-green-300 scale-90"
+                                : "bg-gray-300 scale-75"
+                            )}
+                          />
+                          
+                          {/* 主连接点 */}
+                          <div
+                            className={cn(
+                              "relative w-5 h-5 rounded-full transition-all duration-300 transform-gpu",
+                              "border-2 border-white dark:border-gray-800 shadow-lg",
+                              canStartConnection
+                                ? "bg-gradient-to-br from-blue-400 to-blue-600 hover:shadow-blue-300/50 hover:shadow-xl cursor-pointer"
+                                : isConnected
+                                ? "bg-gradient-to-br from-green-400 to-green-600 shadow-green-300/50 cursor-default"
+                                : "bg-gradient-to-br from-gray-300 to-gray-500 cursor-not-allowed opacity-60"
+                            )}
+                            onMouseDown={(e) => {
+                              e.stopPropagation()
+                              if (canStartConnection) {
+                                startConnection(node.id, output)
+                              }
+                            }}
+                            title={
+                              isConnected 
+                                ? `输出: ${output} (已连接)` 
+                                : canStartConnection 
+                                ? `输出: ${output}` 
+                                : `输出: ${output} (连接模式中)`
                             }
-                          }}
-                          title={`输出: ${output}`}
-                        />
+                          >
+                            {/* 内部高光 */}
+                            <div className="absolute top-0.5 left-0.5 w-2 h-2 bg-white/40 rounded-full blur-sm" />
+                          </div>
+                        </motion.div>
                       )
                     })}
                   </motion.div>
@@ -2592,9 +3433,9 @@ func Run(inputs map[string]interface{}) (map[string]interface{}, error) {
                       variant="ghost"
                       size="sm"
                       onClick={() => setIsCodeEditorFullscreen(false)}
-                    >
-                      <Minimize2 className="w-4 h-4 mr-2" />
-                      退出全屏
+                    className="flex items-center gap-2">
+                      <Minimize2 className="w-4 h-4" />
+                      <span>退出全屏</span>
                     </Button>
                   </div>
                 </div>
@@ -2685,9 +3526,9 @@ func Run(inputs map[string]interface{}) (map[string]interface{}, error) {
                 </div>
               </div>
               
-              {/* 节点列表 */}
-              <div className="flex-1 overflow-y-auto p-4">
-                <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-6 xl:grid-cols-7 gap-2">
+              {/* 现代化节点列表 */}
+              <div className="flex-1 overflow-y-auto p-6">
+                <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-4">
                   {Object.entries(NODE_TYPES)
                     .filter(([type, config]) => 
                       config.label.toLowerCase().includes(nodeSearchQuery.toLowerCase()) ||
@@ -2696,45 +3537,197 @@ func Run(inputs map[string]interface{}) (map[string]interface{}, error) {
                     .map(([type, config]) => (
                       <motion.div
                         key={type}
-                        className="flex flex-col items-center p-2.5 bg-gray-50 dark:bg-gray-700 rounded-lg cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-600 transition-colors border border-transparent hover:border-blue-300 dark:hover:border-blue-600"
-                        whileHover={{ scale: 1.02, y: -1 }}
-                        whileTap={{ scale: 0.98 }}
+                        className="group relative"
+                        whileHover={{ scale: 1.05, y: -2 }}
+                        whileTap={{ scale: 0.95 }}
                         onClick={() => {
-                          // 简化：将节点添加到画布中心位置（0, 0），然后自动居中显示
                           addNode(type as WorkflowNode['type'], { x: 0, y: 0 })
-                          
-                          // 添加节点后，自动居中显示所有节点
                           setTimeout(() => {
                             centerOnNodes()
                           }, 100)
-                          
                           setShowNodeDrawer(false)
                           setNodeSearchQuery('')
                         }}
                       >
-                        <div 
-                          className="p-1.5 rounded mb-1.5 flex items-center justify-center"
-                          style={{ 
-                            backgroundColor: `${config.color || '#64748b'}15`,
-                            color: config.color || '#64748b'
-                          }}
-                        >
-                          {config.icon}
+                        {/* 节点卡片 */}
+                        <div className="relative flex flex-col items-center p-4 bg-gradient-to-br from-white via-gray-50 to-white dark:from-gray-800 dark:via-gray-850 dark:to-gray-800 rounded-2xl cursor-pointer transition-all duration-300 border border-gray-200/60 dark:border-gray-700/60 hover:border-gray-300/80 dark:hover:border-gray-600/80 shadow-lg hover:shadow-2xl backdrop-blur-sm overflow-hidden">
+                          
+                          {/* 背景装饰 */}
+                          <div className="absolute top-0 right-0 w-16 h-16 opacity-10">
+                            <div 
+                              className="w-full h-full rounded-full blur-xl"
+                              style={{ backgroundColor: config.color }}
+                            />
+                          </div>
+                          
+                          {/* 顶部装饰条 */}
+                          <div 
+                            className={cn(
+                              'absolute top-0 left-0 right-0 h-1 bg-gradient-to-r',
+                              config.gradient || 'from-gray-400 to-gray-600'
+                            )}
+                          />
+                          
+                          {/* 图标容器 */}
+                          <div className="relative mb-3">
+                            <div 
+                              className={cn(
+                                'p-3 rounded-xl shadow-lg transition-all duration-300',
+                                'bg-gradient-to-br border border-white/20',
+                                config.gradient || 'from-gray-400 to-gray-600',
+                                'group-hover:scale-110 group-hover:rotate-3'
+                              )}
+                              style={{
+                                boxShadow: `0 8px 16px -4px ${config.color}30`
+                              }}
+                            >
+                              <div className="text-white drop-shadow-sm">
+                                {config.icon}
+                              </div>
+                            </div>
+                            {/* 图标光晕效果 */}
+                            <div 
+                              className="absolute inset-0 rounded-xl blur-md opacity-30 -z-10 group-hover:opacity-50 transition-opacity duration-300"
+                              style={{ backgroundColor: config.color }}
+                            />
+                          </div>
+                          
+                          {/* 标题 */}
+                          <span className="text-sm font-bold text-gray-900 dark:text-white text-center leading-tight">
+                            {config.label}
+                          </span>
+                          
+                          {/* 悬停效果 */}
+                          <div className="absolute inset-0 bg-gradient-to-t from-transparent via-transparent to-white/5 opacity-0 group-hover:opacity-100 transition-opacity duration-300 rounded-2xl" />
                         </div>
-                        <span className="text-xs font-medium text-gray-900 dark:text-white text-center leading-tight">
-                          {config.label}
-                        </span>
                       </motion.div>
                     ))}
                 </div>
+                
+                {/* 插件节点部分 */}
+                {installedPlugins.length > 0 && (
+                  <>
+                    <div className="mt-8 mb-4">
+                      <h4 className="text-lg font-semibold text-gray-900 dark:text-white mb-2 flex items-center gap-2">
+                        <Package className="w-5 h-5" />
+                        已安装的插件
+                      </h4>
+                      <div className="h-px bg-gradient-to-r from-gray-200 via-gray-300 to-gray-200 dark:from-gray-700 dark:via-gray-600 dark:to-gray-700"></div>
+                    </div>
+                    
+                    <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-4">
+                      {installedPlugins
+                        .filter(plugin => 
+                          plugin.plugin?.displayName?.toLowerCase().includes(nodeSearchQuery.toLowerCase()) ||
+                          plugin.plugin?.name?.toLowerCase().includes(nodeSearchQuery.toLowerCase()) ||
+                          plugin.plugin?.description?.toLowerCase().includes(nodeSearchQuery.toLowerCase())
+                        )
+                        .map((plugin) => (
+                          <motion.div
+                            key={plugin.id}
+                            className="group relative"
+                            whileHover={{ scale: 1.05, y: -2 }}
+                            whileTap={{ scale: 0.95 }}
+                            onClick={() => {
+                              addPluginNode(plugin, { x: 0, y: 0 })
+                              setTimeout(() => {
+                                centerOnNodes()
+                              }, 100)
+                              setShowNodeDrawer(false)
+                              setNodeSearchQuery('')
+                            }}
+                          >
+                            {/* 插件节点卡片 */}
+                            <div className="relative flex flex-col items-center p-4 bg-gradient-to-br from-white via-gray-50 to-white dark:from-gray-800 dark:via-gray-850 dark:to-gray-800 rounded-2xl cursor-pointer transition-all duration-300 border border-gray-200/60 dark:border-gray-700/60 hover:border-gray-300/80 dark:hover:border-gray-600/80 shadow-lg hover:shadow-2xl backdrop-blur-sm overflow-hidden">
+                              
+                              {/* 背景装饰 */}
+                              <div className="absolute top-0 right-0 w-16 h-16 opacity-10">
+                                <div 
+                                  className="w-full h-full rounded-full blur-xl"
+                                  style={{ backgroundColor: plugin.plugin?.color || '#7c2d12' }}
+                                />
+                              </div>
+                              
+                              {/* 顶部装饰条 */}
+                              <div 
+                                className="absolute top-0 left-0 right-0 h-1 bg-gradient-to-r from-orange-400 to-orange-600"
+                                style={{ 
+                                  background: plugin.plugin?.color 
+                                    ? `linear-gradient(to right, ${plugin.plugin.color}80, ${plugin.plugin.color})` 
+                                    : undefined 
+                                }}
+                              />
+                              
+                              {/* 图标容器 */}
+                              <div className="relative mb-3">
+                                <div 
+                                  className="p-3 rounded-xl shadow-lg transition-all duration-300 bg-gradient-to-br border border-white/20 from-orange-400 to-orange-600 group-hover:scale-110 group-hover:rotate-3"
+                                  style={{
+                                    background: plugin.plugin?.color 
+                                      ? `linear-gradient(to bottom right, ${plugin.plugin.color}CC, ${plugin.plugin.color})` 
+                                      : undefined,
+                                    boxShadow: `0 8px 16px -4px ${plugin.plugin?.color || '#7c2d12'}30`
+                                  }}
+                                >
+                                  <div className="text-white drop-shadow-sm">
+                                    <Package className="w-5 h-5" />
+                                  </div>
+                                </div>
+                                {/* 图标光晕效果 */}
+                                <div 
+                                  className="absolute inset-0 rounded-xl blur-md opacity-30 -z-10 group-hover:opacity-50 transition-opacity duration-300"
+                                  style={{ backgroundColor: plugin.plugin?.color || '#7c2d12' }}
+                                />
+                              </div>
+                              
+                              {/* 标题 */}
+                              <span className="text-sm font-bold text-gray-900 dark:text-white text-center leading-tight">
+                                {plugin.plugin?.displayName || plugin.plugin?.name || '插件节点'}
+                              </span>
+                              
+                              {/* 描述 */}
+                              {plugin.plugin?.description && (
+                                <span className="text-xs text-gray-500 dark:text-gray-400 text-center mt-1 line-clamp-2">
+                                  {plugin.plugin.description}
+                                </span>
+                              )}
+                              
+                              {/* 悬停效果 */}
+                              <div className="absolute inset-0 bg-gradient-to-t from-transparent via-transparent to-white/5 opacity-0 group-hover:opacity-100 transition-opacity duration-300 rounded-2xl" />
+                            </div>
+                          </motion.div>
+                        ))}
+                    </div>
+                  </>
+                )}
+                
+                {/* 加载插件状态 */}
+                {loadingPlugins && (
+                  <div className="mt-8 text-center">
+                    <div className="inline-flex items-center gap-2 text-gray-500 dark:text-gray-400">
+                      <div className="animate-spin rounded-full h-4 w-4 border-2 border-gray-300 border-t-blue-500"></div>
+                      <span>加载插件中...</span>
+                    </div>
+                  </div>
+                )}
+                
+                {/* 空状态 */}
                 {Object.entries(NODE_TYPES).filter(([type, config]) => 
                   config.label.toLowerCase().includes(nodeSearchQuery.toLowerCase()) ||
                   type.toLowerCase().includes(nodeSearchQuery.toLowerCase())
                 ).length === 0 && (
-                  <div className="text-center py-12 text-gray-500 dark:text-gray-400">
-                    <Search className="w-12 h-12 mx-auto mb-4 opacity-50" />
-                    <p>未找到匹配的节点类型</p>
-                  </div>
+                  <motion.div 
+                    initial={{ opacity: 0, y: 20 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    className="text-center py-16 text-gray-500 dark:text-gray-400"
+                  >
+                    <div className="relative">
+                      <Search className="w-16 h-16 mx-auto mb-4 opacity-30" />
+                      <div className="absolute top-0 left-1/2 transform -translate-x-1/2 w-16 h-16 bg-gradient-to-r from-blue-400 to-purple-500 rounded-full blur-xl opacity-20 animate-pulse" />
+                    </div>
+                    <p className="text-lg font-medium">未找到匹配的节点类型</p>
+                    <p className="text-sm mt-2 opacity-75">尝试使用不同的关键词搜索</p>
+                  </motion.div>
                 )}
               </div>
             </motion.div>
@@ -2767,8 +3760,8 @@ func Run(inputs map[string]interface{}) (map[string]interface{}, error) {
                 <li>点击蓝色点开始连接</li>
                 <li>拖拽到绿色点完成连接</li>
                 <li>点击连接线选中连接</li>
+                <li>右键连接线打开菜单</li>
                 <li>双击连接线直接删除连接</li>
-                <li>点击"删除连接"按钮删除选中连接</li>
                 <li>按Delete键删除选中连接</li>
               </ul>
             </div>
@@ -2791,6 +3784,376 @@ func Run(inputs map[string]interface{}) (map[string]interface{}, error) {
           </div>
         </div>
       </Modal>
+
+      {/* 发布为插件模态框 */}
+      <Modal
+        isOpen={showPublishModal}
+        onClose={() => setShowPublishModal(false)}
+        title="发布工作流为插件"
+        size="lg"
+      >
+        <PublishWorkflowPluginModal
+          workflowId={workflowId!}
+          onClose={() => setShowPublishModal(false)}
+        />
+      </Modal>
+    </div>
+  )
+}
+
+// 发布工作流插件模态框组件
+const PublishWorkflowPluginModal: React.FC<{
+  workflowId: number
+  onClose: () => void
+}> = ({ workflowId, onClose }) => {
+  const toast = useToast()
+  const [workflow, setWorkflow] = useState<any>(null)
+  const [loading, setLoading] = useState(false)
+  const [step, setStep] = useState(1) // 添加步骤状态
+  const [formData, setFormData] = useState({
+    name: '',
+    displayName: '',
+    description: '',
+    category: 'utility' as WorkflowPluginCategory,
+    icon: '',
+    color: '#6366f1',
+    tags: '',
+    author: '',
+    homepage: '',
+    repository: '',
+    license: 'MIT',
+    inputSchema: {
+      parameters: [] as any[]
+    },
+    outputSchema: {
+      parameters: [] as any[]
+    }
+  })
+
+  // 加载工作流详情
+  useEffect(() => {
+    const loadWorkflow = async () => {
+      try {
+        const response = await workflowService.getDefinition(workflowId)
+        if (response.data) {
+          const workflowData = response.data
+          setWorkflow(workflowData)
+          setFormData(prev => ({
+            ...prev,
+            name: workflowData.slug || workflowData.name.toLowerCase().replace(/\s+/g, '-'),
+            displayName: workflowData.name,
+            description: workflowData.description || ''
+          }))
+        }
+      } catch (error) {
+        console.error('加载工作流失败:', error)
+      }
+    }
+    
+    loadWorkflow()
+  }, [workflowId])
+
+  // 处理表单提交
+  const handleSubmit = async () => {
+    if (!workflow) return
+    
+    setLoading(true)
+    try {
+      const pluginData = {
+        ...formData,
+        tags: formData.tags.split(',').map((tag: string) => tag.trim()).filter(Boolean)
+      }
+
+      const response = await workflowPluginService.publishWorkflowAsPlugin(workflowId, pluginData)
+      if (response.data) {
+        // 使用 Toast 显示成功提示
+        toast.success('插件发布成功！', '您的工作流插件已成功发布到插件市场')
+        setStep(3) // 显示成功页面
+        setTimeout(() => {
+          onClose()
+        }, 2000)
+      }
+    } catch (error) {
+      console.error('发布工作流失败:', error)
+      toast.error('发布失败', '插件发布时发生错误，请稍后重试')
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  const isFormValid = formData.name && formData.displayName && formData.description
+
+  if (!workflow) {
+    return (
+      <div className="flex flex-col items-center justify-center py-12">
+        <div className="animate-spin rounded-full h-12 w-12 border-4 border-blue-500 border-t-transparent mb-4"></div>
+        <p className="text-gray-600 dark:text-gray-400">加载工作流信息...</p>
+      </div>
+    )
+  }
+
+  // 成功页面
+  if (step === 3) {
+    return (
+      <div className="flex flex-col items-center justify-center py-12 text-center">
+        <div className="w-16 h-16 bg-green-100 dark:bg-green-900/20 rounded-full flex items-center justify-center mb-4">
+          <CheckCircle className="w-8 h-8 text-green-600 dark:text-green-400" />
+        </div>
+        <h3 className="text-xl font-semibold text-gray-900 dark:text-white mb-2">
+          插件发布成功！
+        </h3>
+        <p className="text-gray-600 dark:text-gray-400 mb-4">
+          您的工作流插件已成功发布，现在可以在插件市场中找到它。
+        </p>
+        <div className="bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg p-4">
+          <p className="text-sm text-blue-800 dark:text-blue-200">
+            <strong>提示：</strong>插件已创建为草稿状态，您可以在插件市场的"我的插件"中查看和管理。
+          </p>
+        </div>
+      </div>
+    )
+  }
+
+  return (
+    <div className="max-h-[80vh] overflow-y-auto">
+      {/* 步骤指示器 */}
+      <div className="flex items-center justify-center mb-8">
+        <div className="flex items-center space-x-4">
+          <div className={`flex items-center justify-center w-8 h-8 rounded-full text-sm font-medium ${
+            step >= 1 ? 'bg-blue-600 text-white' : 'bg-gray-200 text-gray-600'
+          }`}>
+            1
+          </div>
+          <div className={`h-1 w-16 ${step >= 2 ? 'bg-blue-600' : 'bg-gray-200'}`}></div>
+          <div className={`flex items-center justify-center w-8 h-8 rounded-full text-sm font-medium ${
+            step >= 2 ? 'bg-blue-600 text-white' : 'bg-gray-200 text-gray-600'
+          }`}>
+            2
+          </div>
+        </div>
+      </div>
+
+      {step === 1 && (
+        <div className="space-y-6">
+          {/* 工作流信息预览 */}
+          <div className="bg-gradient-to-r from-blue-50 to-indigo-50 dark:from-blue-900/20 dark:to-indigo-900/20 border border-blue-200 dark:border-blue-800 rounded-xl p-6">
+            <div className="flex items-start space-x-4">
+              <div className="w-12 h-12 bg-blue-600 rounded-lg flex items-center justify-center">
+                <GitBranch className="w-6 h-6 text-white" />
+              </div>
+              <div className="flex-1">
+                <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-2">
+                  {workflow.name}
+                </h3>
+                <p className="text-gray-600 dark:text-gray-400 mb-3">
+                  {workflow.description || '暂无描述'}
+                </p>
+                <div className="flex items-center gap-3">
+                  <span className={`px-3 py-1 text-xs font-medium rounded-full ${
+                    workflow.status === 'active' 
+                      ? 'bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400'
+                      : workflow.status === 'draft'
+                      ? 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900/30 dark:text-yellow-400'
+                      : 'bg-gray-100 text-gray-800 dark:bg-gray-900/30 dark:text-gray-400'
+                  }`}>
+                    {workflow.status === 'active' ? '已激活' : workflow.status === 'draft' ? '草稿' : '已归档'}
+                  </span>
+                  <span className="text-xs text-gray-500 bg-gray-100 dark:bg-gray-800 px-2 py-1 rounded">
+                    {workflow.definition?.nodes?.length || 0} 个节点
+                  </span>
+                  <span className="text-xs text-gray-500 bg-gray-100 dark:bg-gray-800 px-2 py-1 rounded">
+                    v{workflow.version}
+                  </span>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* 基本信息表单 */}
+          <div className="space-y-6">
+            <div>
+              <h4 className="text-lg font-semibold text-gray-900 dark:text-white mb-4">基本信息</h4>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                    插件名称 <span className="text-red-500">*</span>
+                  </label>
+                  <Input
+                    value={formData.name}
+                    onChange={(e) => setFormData({...formData, name: e.target.value})}
+                    placeholder="my-awesome-workflow"
+                    className="font-mono text-sm"
+                  />
+                  <p className="text-xs text-gray-500 mt-1">用于标识插件的唯一名称，建议使用小写字母和连字符</p>
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                    显示名称 <span className="text-red-500">*</span>
+                  </label>
+                  <Input
+                    value={formData.displayName}
+                    onChange={(e) => setFormData({...formData, displayName: e.target.value})}
+                    placeholder="我的超棒工作流"
+                  />
+                  <p className="text-xs text-gray-500 mt-1">在插件市场中显示的名称</p>
+                </div>
+              </div>
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                插件描述 <span className="text-red-500">*</span>
+              </label>
+              <textarea
+                value={formData.description}
+                onChange={(e) => setFormData({...formData, description: e.target.value})}
+                placeholder="详细描述这个工作流插件的功能和用途..."
+                className="w-full px-3 py-3 border border-gray-300 dark:border-gray-600 rounded-lg resize-none bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                rows={4}
+              />
+              <p className="text-xs text-gray-500 mt-1">清晰的描述有助于其他用户理解和使用您的插件</p>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">分类</label>
+                <select
+                  value={formData.category}
+                  onChange={(e) => setFormData({...formData, category: e.target.value as WorkflowPluginCategory})}
+                  className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                >
+                  <option value="data_processing">📊 数据处理</option>
+                  <option value="api_integration">🔗 API集成</option>
+                  <option value="ai_service">🤖 AI服务</option>
+                  <option value="notification">📢 通知服务</option>
+                  <option value="utility">🛠️ 工具类</option>
+                  <option value="business">💼 业务逻辑</option>
+                  <option value="custom">⚙️ 自定义</option>
+                </select>
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">主题色</label>
+                <div className="flex items-center space-x-3">
+                  <input
+                    type="color"
+                    value={formData.color}
+                    onChange={(e) => setFormData({...formData, color: e.target.value})}
+                    className="w-12 h-10 border border-gray-300 dark:border-gray-600 rounded-lg cursor-pointer"
+                  />
+                  <Input
+                    value={formData.color}
+                    onChange={(e) => setFormData({...formData, color: e.target.value})}
+                    placeholder="#6366f1"
+                    className="flex-1 font-mono text-sm"
+                  />
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* 操作按钮 */}
+          <div className="flex justify-between pt-6 border-t border-gray-200 dark:border-gray-700">
+            <Button
+              variant="outline"
+              onClick={onClose}
+            >
+              取消
+            </Button>
+            <Button
+              variant="primary"
+              onClick={() => setStep(2)}
+              disabled={!isFormValid}
+            >
+              下一步
+              <ChevronRight className="w-4 h-4 ml-1" />
+            </Button>
+          </div>
+        </div>
+      )}
+
+      {step === 2 && (
+        <div className="space-y-6">
+          <div>
+            <h4 className="text-lg font-semibold text-gray-900 dark:text-white mb-4">可选信息</h4>
+            <p className="text-gray-600 dark:text-gray-400 mb-6">
+              以下信息是可选的，但填写完整有助于提升插件的专业度和可信度。
+            </p>
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">标签</label>
+            <Input
+              value={formData.tags}
+              onChange={(e) => setFormData({...formData, tags: e.target.value})}
+              placeholder="自动化, 数据处理, API"
+            />
+            <p className="text-xs text-gray-500 mt-1">用逗号分隔多个标签，有助于用户搜索和发现</p>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <div>
+              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">作者</label>
+              <Input
+                value={formData.author}
+                onChange={(e) => setFormData({...formData, author: e.target.value})}
+                placeholder="您的名称"
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">主页</label>
+              <Input
+                value={formData.homepage}
+                onChange={(e) => setFormData({...formData, homepage: e.target.value})}
+                placeholder="https://example.com"
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">代码仓库</label>
+              <Input
+                value={formData.repository}
+                onChange={(e) => setFormData({...formData, repository: e.target.value})}
+                placeholder="https://github.com/user/repo"
+              />
+            </div>
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">许可证</label>
+            <select
+              value={formData.license}
+              onChange={(e) => setFormData({...formData, license: e.target.value})}
+              className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+            >
+              <option value="MIT">MIT License</option>
+              <option value="Apache-2.0">Apache License 2.0</option>
+              <option value="GPL-3.0">GNU General Public License v3.0</option>
+              <option value="BSD-3-Clause">BSD 3-Clause License</option>
+              <option value="ISC">ISC License</option>
+              <option value="Unlicense">The Unlicense</option>
+              <option value="Custom">自定义许可证</option>
+            </select>
+          </div>
+
+          {/* 操作按钮 */}
+          <div className="flex justify-between pt-6 border-t border-gray-200 dark:border-gray-700">
+            <Button
+              variant="outline"
+              onClick={() => setStep(1)}
+            >
+              <ChevronLeft className="w-4 h-4 mr-1" />
+              上一步
+            </Button>
+            <Button
+              variant="primary"
+              onClick={handleSubmit}
+              loading={loading}
+              disabled={loading}
+            >
+              {loading ? '发布中...' : '发布插件'}
+            </Button>
+          </div>
+        </div>
+      )}
     </div>
   )
 }

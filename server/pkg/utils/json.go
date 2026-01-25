@@ -39,7 +39,7 @@ var (
 )
 
 func init() {
-	binding.JSON = CarrotJsonBinding{}
+	// binding.JSON = CarrotJsonBinding{}
 }
 
 var (

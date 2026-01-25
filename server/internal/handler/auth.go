@@ -1487,7 +1487,7 @@ func (h *Handlers) handleGetUserDevices(c *gin.Context) {
 		return
 	}
 
-	devices, err := models.GetUserDevices(h.db, user.ID)
+	devices, err := models.GetUserLoginDevices(h.db, user.ID)
 	if err != nil {
 		response.Fail(c, "获取设备列表失败", err)
 		return

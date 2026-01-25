@@ -224,7 +224,7 @@ func (w *Writer) SendTTSAudioWithFlowControl(data []byte, frameDuration int, sen
 		}
 	}
 
-	// 发送数据（阻塞等待，不丢弃数据）
+	// 发送数据（非阻塞，避免在连接关闭时panic）
 	select {
 	case <-w.ctx.Done():
 		return w.ctx.Err()
@@ -235,6 +235,9 @@ func (w *Writer) SendTTSAudioWithFlowControl(data []byte, frameDuration int, sen
 		flowControl.lastSendTime = actualSendTime
 		w.ttsFlowControlMu.Unlock()
 		return nil
+	default:
+		// channel满了或已关闭，返回错误而不是阻塞
+		return fmt.Errorf("TTS音频发送通道满或已关闭")
 	}
 }
 
@@ -264,6 +267,42 @@ func (w *Writer) SendConnected() error {
 	return w.sendJSON(map[string]interface{}{
 		"type":    "connected",
 		"message": "WebSocket voice connection established",
+	})
+}
+
+// SendPong 发送pong响应
+func (w *Writer) SendPong() error {
+	if w.isXiaozhi {
+		// xiaozhi协议可能有特殊格式
+		return w.sendJSON(map[string]interface{}{
+			"type":       "pong",
+			"session_id": w.sessionID,
+		})
+	}
+	// 通用格式
+	return w.sendJSON(map[string]interface{}{
+		"type": "pong",
+	})
+}
+
+// SendChangeSpeakerResult 发送切换发音人结果
+func (w *Writer) SendChangeSpeakerResult(speakerID string, success bool, message string) error {
+	if w.isXiaozhi {
+		// xiaozhi协议格式
+		return w.sendJSON(map[string]interface{}{
+			"type":       "speaker_changed",
+			"speaker_id": speakerID,
+			"success":    success,
+			"message":    message,
+			"session_id": w.sessionID,
+		})
+	}
+	// 通用格式
+	return w.sendJSON(map[string]interface{}{
+		"type":       "speaker_changed",
+		"speaker_id": speakerID,
+		"success":    success,
+		"message":    message,
 	})
 }
 

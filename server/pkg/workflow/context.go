@@ -1,6 +1,7 @@
 package workflow
 
 import (
+	"gorm.io/gorm"
 	"strings"
 	"time"
 )
@@ -12,14 +13,19 @@ type LogSender interface {
 
 type WorkflowContext struct {
 	WorkflowID  string                 // workflow id
+	InstanceID  string                 // workflow instance id
+	UserID      uint                   // user id
+	GroupID     uint                   // group id
 	CurrentNode string                 // current node id
 	Status      NodeStatus             // node status
 	Parameters  map[string]interface{} // global parameters or data
+	Data        map[string]interface{} // alias for NodeData (for compatibility)
 	NodeData    map[string]interface{} // storage node data
 	NodeStatus  map[string]NodeStatus  // all node status
 	History     []NodeExecutionRecord  // execution history
 	Logs        []ExecutionLog         // execution logs for frontend display
 	LogSender   LogSender              // optional log sender for real-time streaming
+	db          *gorm.DB               // database connection
 }
 
 // ExecutionLog represents a log entry for frontend terminal display
@@ -44,10 +50,18 @@ func NewWorkflowContext(workflowID string) *WorkflowContext {
 	return &WorkflowContext{
 		WorkflowID: workflowID,
 		Parameters: make(map[string]interface{}),
+		Data:       make(map[string]interface{}),
 		NodeData:   make(map[string]interface{}),
 		NodeStatus: make(map[string]NodeStatus),
 		Logs:       make([]ExecutionLog, 0),
 	}
+}
+
+// NewWorkflowContextWithDB helper to build context with database connection
+func NewWorkflowContextWithDB(workflowID string, db *gorm.DB) *WorkflowContext {
+	ctx := NewWorkflowContext(workflowID)
+	ctx.db = db
+	return ctx
 }
 
 // AddLog adds a log entry to the context and optionally sends it via LogSender
