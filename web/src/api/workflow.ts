@@ -7,7 +7,7 @@ export type WorkflowStatus = 'draft' | 'active' | 'archived'
 export type WorkflowEdgeType = 'default' | 'true' | 'false' | 'error' | 'branch'
 
 // 工作流节点类型
-export type WorkflowNodeType = 'start' | 'end' | 'task' | 'gateway' | 'event' | 'subflow' | 'parallel' | 'wait' | 'timer' | 'script'
+export type WorkflowNodeType = 'start' | 'end' | 'task' | 'gateway' | 'event' | 'subflow' | 'parallel' | 'wait' | 'timer' | 'script' | 'plugin' | 'workflow_plugin' | 'condition'
 
 // 工作流节点 Schema
 export interface WorkflowNodeSchema {

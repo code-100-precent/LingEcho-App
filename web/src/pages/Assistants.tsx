@@ -24,19 +24,9 @@ const ICON_GRADIENTS = {
   Circle: 'from-gray-400 to-gray-500',
 };
 
-const MAX_JS_LEN = 18;
-const MAX_DESCRIPTION_LENGTH = 80; // 描述最大字符数
-
 const truncate = (value?: string, max = 16) => {
   if (!value) return '';
   return value.length > max ? value.slice(0, max) + '…' : value;
-};
-
-// 截断描述文本
-const truncateDescription = (description?: string, maxLength = MAX_DESCRIPTION_LENGTH) => {
-  if (!description) return '';
-  if (description.length <= maxLength) return description;
-  return description.slice(0, maxLength).trim() + '…';
 };
 
 const Assistants: React.FC = () => {
@@ -219,145 +209,147 @@ const Assistants: React.FC = () => {
                 initial={{ opacity: 0, y: 20 }}
                 animate={{ opacity: 1, y: 0 }}
                 transition={{ delay: index * 0.05, duration: 0.3 }}
-                whileHover={{ y: -4 }}
-                className="group relative flex flex-col bg-white dark:bg-neutral-800 rounded-2xl overflow-hidden shadow-sm hover:shadow-xl transition-all duration-300 border border-gray-100 dark:border-neutral-700/50 hover:border-purple-300 dark:hover:border-purple-500/50"
+                whileHover={{ y: -8, scale: 1.02 }}
+                className="group relative bg-white dark:bg-neutral-800 rounded-3xl overflow-hidden shadow-lg hover:shadow-2xl transition-all duration-500 border border-gray-100 dark:border-neutral-700/50 hover:border-purple-200 dark:hover:border-purple-500/30 cursor-pointer"
+                onClick={() => navigate(`/voice-assistant/${assistant.id}`)}
               >
-                {/* 渐变背景装饰 */}
-                <div className="absolute top-0 right-0 w-32 h-32 bg-gradient-to-br from-purple-50 to-pink-50 dark:from-purple-900/10 dark:to-pink-900/10 rounded-full blur-3xl opacity-0 group-hover:opacity-100 transition-opacity duration-500" />
+                {/* 顶部渐变装饰条 */}
+                <div className={`h-1.5 bg-gradient-to-r ${gradient} opacity-80 group-hover:opacity-100 transition-opacity duration-300`} />
                 
-                <div className="relative flex flex-col p-6 min-h-[200px]">
-                  {/* 头部区域 */}
-                  <div className="flex items-start gap-4 mb-4">
-                    {/* 图标容器 - 带渐变背景 */}
+                {/* 背景装饰 */}
+                <div className="absolute top-0 right-0 w-40 h-40 bg-gradient-to-br from-purple-50/50 to-pink-50/50 dark:from-purple-900/5 dark:to-pink-900/5 rounded-full blur-3xl opacity-0 group-hover:opacity-100 transition-opacity duration-700 transform translate-x-16 -translate-y-16" />
+                
+                <div className="relative p-4">
+                  {/* 头部区域 - 图标和状态 */}
+                  <div className="flex items-start justify-between mb-4">
                     <motion.div 
-                      className={`flex-shrink-0 cursor-pointer relative`}
-                      onClick={() => navigate(`/voice-assistant/${assistant.id}`)}
-                      whileHover={{ scale: 1.1 }}
-                      whileTap={{ scale: 0.95 }}
+                      className="relative"
+                      whileHover={{ scale: 1.1, rotate: 5 }}
+                      transition={{ type: "spring", stiffness: 300 }}
                     >
-                      <div className={`w-14 h-14 rounded-xl bg-gradient-to-br ${gradient} flex items-center justify-center shadow-lg group-hover:shadow-xl transition-shadow`}>
-                        <div>
+                      <div className={`w-12 h-12 rounded-2xl bg-gradient-to-br ${gradient} flex items-center justify-center shadow-lg group-hover:shadow-xl transition-all duration-300`}>
+                        <div className="">
                           {ICON_MAP[iconKey] ?? ICON_MAP.Circle}
                         </div>
                       </div>
-                      <div className="absolute -top-1 -right-1 w-4 h-4 bg-green-400 rounded-full border-2 border-white dark:border-neutral-800 shadow-sm" />
+                      {/* 在线状态指示器 */}
+                      <div className="absolute -top-1 -right-1 w-5 h-5 bg-green-400 rounded-full border-3 border-white dark:border-neutral-800 shadow-sm">
+                        <div className="w-full h-full bg-green-400 rounded-full animate-ping opacity-75" />
+                      </div>
                     </motion.div>
                     
-                    {/* 标题和描述 */}
-                    <div 
-                      className="flex-1 min-w-0 cursor-pointer"
-                      onClick={() => navigate(`/voice-assistant/${assistant.id}`)}
-                    >
-                      {/* 标题行 - 确保不换行 */}
-                      <div className="flex items-center justify-between gap-2 mb-2">
-                        <h3 className="font-semibold text-gray-900 dark:text-gray-100 truncate text-lg group-hover:text-purple-600 dark:group-hover:text-purple-400 transition-colors flex-1 min-w-0">
-                          {assistant.name}
-                        </h3>
-                        <div className="flex items-center gap-1 flex-shrink-0">
-                          <motion.button
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              navigate(`/assistants/${assistant.id}/graph`);
-                            }}
-                            whileHover={{ scale: 1.1 }}
-                            whileTap={{ scale: 0.9 }}
-                            className="flex-shrink-0 p-2 rounded-lg hover:bg-blue-50 dark:hover:bg-blue-900/20 text-gray-500 hover:text-blue-600 dark:hover:text-blue-400 transition-colors"
-                            title="查看知识图谱"
-                          >
-                            <Network className="w-5 h-5" />
-                          </motion.button>
-                          <motion.button
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              navigate(`/assistants/${assistant.id}/tools`);
-                            }}
-                            whileHover={{ scale: 1.1, rotate: 15 }}
-                            whileTap={{ scale: 0.9 }}
-                            className="flex-shrink-0 p-2 rounded-lg hover:bg-purple-50 dark:hover:bg-purple-900/20 text-gray-500 hover:text-purple-600 dark:hover:text-purple-400 transition-colors"
-                            title={t('assistants.manageTools')}
-                          >
-                            <Settings className="w-5 h-5" />
-                          </motion.button>
-                        </div>
-                      </div>
-                      {/* 描述 - 限制字符数并最多显示2行 */}
-                      <p 
-                        className="text-gray-600 dark:text-gray-400 text-sm leading-relaxed line-clamp-2 mb-2"
-                        title={assistant.description || t('assistants.noDescription')}
+                    {/* 操作按钮组 */}
+                    <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity duration-300">
+                      <motion.button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          navigate(`/assistants/${assistant.id}/graph`);
+                        }}
+                        whileHover={{ scale: 1.1 }}
+                        whileTap={{ scale: 0.9 }}
+                        className="p-2 rounded-xl hover:bg-blue-50 dark:hover:bg-blue-900/20 text-gray-400 hover:text-blue-600 dark:hover:text-blue-400 transition-all duration-200"
+                        title="知识图谱"
                       >
-                        {truncateDescription(assistant.description || t('assistants.noDescription'), MAX_DESCRIPTION_LENGTH)}
-                      </p>
+                        <Network className="w-4 h-4" />
+                      </motion.button>
+                      <motion.button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          navigate(`/assistants/${assistant.id}/tools`);
+                        }}
+                        whileHover={{ scale: 1.1, rotate: 90 }}
+                        whileTap={{ scale: 0.9 }}
+                        className="p-2 rounded-xl hover:bg-purple-50 dark:hover:bg-purple-900/20 text-gray-400 hover:text-purple-600 dark:hover:text-purple-400 transition-all duration-200"
+                        title={t('assistants.manageTools')}
+                      >
+                        <Settings className="w-4 h-4" />
+                      </motion.button>
                     </div>
                   </div>
 
-                  {/* 标签区域 - 优化样式，防止换行 */}
-                  <div className="mt-auto space-y-2.5">
-                    {/* 第一行标签 - 重要标签，尽量不换行 */}
-                    <div className="flex items-center gap-2 flex-wrap">
-                      {/* 组织共享标签放在最前面 */}
-                      {assistant.groupId && (
-                        <motion.span 
-                          initial={{ scale: 0.9 }}
-                          animate={{ scale: 1 }}
-                          className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-gradient-to-r from-blue-50 to-cyan-50 dark:from-blue-900/30 dark:to-cyan-900/30 text-blue-700 dark:text-blue-300 text-xs font-medium border border-blue-200 dark:border-blue-800/50 whitespace-nowrap flex-shrink-0"
-                        >
-                          <Building2 className="w-3 h-3 flex-shrink-0" />
-                          {t('assistants.groupShared')}
-                        </motion.span>
-                      )}
-                      <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-gradient-to-r from-purple-50 to-pink-50 dark:from-purple-900/20 dark:to-pink-900/20 text-purple-700 dark:text-purple-300 text-xs font-medium border border-purple-200/50 dark:border-purple-800/50 whitespace-nowrap flex-shrink-0">
-                        <Sparkles className="w-3 h-3 flex-shrink-0" />
-                        ID: {assistant.id}
+                  {/* 标题和ID */}
+                  <div className="mb-2">
+                    <div className="flex items-center gap-2 mb-1">
+                      <h3 className="font-bold text-lg text-gray-900 dark:text-gray-100 truncate group-hover:text-purple-600 dark:group-hover:text-purple-400 transition-colors duration-300">
+                        {assistant.name}
+                      </h3>
+                      <span className="px-2 py-0.5 text-xs font-medium bg-gray-100 dark:bg-neutral-700 text-gray-600 dark:text-gray-400 rounded-full flex-shrink-0">
+                        #{assistant.id}
                       </span>
+                    </div>
+                  </div>
+
+                  {/* 描述 */}
+                  <p className="text-gray-600 dark:text-gray-400 text-sm leading-relaxed mb-4 line-clamp-2 min-h-[2.5rem]">
+                    {assistant.description || t('assistants.noDescription')}
+                  </p>
+
+                  {/* 核心标签 - 重新设计为更紧凑的布局 */}
+                  <div className="space-y-2 mb-1">
+                    {/* 第一行：重要标签 */}
+                    <div className="flex items-center gap-2 flex-wrap">
+                      {assistant.groupId && (
+                        <span className="inline-flex items-center gap-1 px-2 py-1 rounded-lg bg-blue-50 dark:bg-blue-900/20 text-blue-700 dark:text-blue-300 text-xs font-medium border border-blue-200/50 dark:border-blue-800/50">
+                          <Building2 className="w-3 h-3" />
+                          {t('assistants.groupShared')}
+                        </span>
+                      )}
                       {assistant.personaTag && (
-                        <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-gradient-to-r from-indigo-50 to-blue-50 dark:from-indigo-900/20 dark:to-blue-900/20 text-indigo-700 dark:text-indigo-300 text-xs font-medium border border-indigo-200/50 dark:border-indigo-800/50 whitespace-nowrap flex-shrink-0">
-                          <TrendingUp className="w-3 h-3 flex-shrink-0" />
-                          <span className="truncate max-w-[100px]">{t('assistants.role')}: {assistant.personaTag}</span>
+                        <span className="inline-flex items-center gap-1 px-2 py-1 rounded-lg bg-indigo-50 dark:bg-indigo-900/20 text-indigo-700 dark:text-indigo-300 text-xs font-medium border border-indigo-200/50 dark:border-indigo-800/50">
+                          <TrendingUp className="w-3 h-3" />
+                          {truncate(assistant.personaTag, 12)}
                         </span>
                       )}
                       {assistant.jsSourceId && (
-                        <span
-                          className="inline-flex items-center px-2.5 py-1 rounded-lg bg-gradient-to-r from-gray-50 to-slate-50 dark:from-neutral-700 dark:to-neutral-700 text-gray-700 dark:text-gray-300 text-xs font-medium border border-gray-200 dark:border-neutral-600 whitespace-nowrap flex-shrink-0"
-                          title={assistant.jsSourceId}
-                        >
-                          JS: {truncate(assistant.jsSourceId, MAX_JS_LEN)}
+                        <span className="inline-flex items-center px-2 py-1 rounded-lg bg-gray-50 dark:bg-neutral-700 text-gray-700 dark:text-gray-300 text-xs font-medium border border-gray-200 dark:border-neutral-600">
+                          JS: {truncate(assistant.jsSourceId, 10)}
                         </span>
                       )}
                     </div>
                     
-                    {/* 参数标签 - 第二行，允许换行 */}
+                    {/* 第二行：参数标签 */}
                     {(typeof assistant.temperature === 'number' || typeof assistant.maxTokens === 'number') && (
-                      <div className="flex flex-wrap items-center gap-2">
+                      <div className="flex items-center gap-2 flex-wrap">
                         {typeof assistant.temperature === 'number' && (
-                          <span className="inline-flex items-center px-2.5 py-1 rounded-lg bg-gradient-to-r from-orange-50 to-amber-50 dark:from-orange-900/20 dark:to-amber-900/20 text-orange-700 dark:text-orange-300 text-xs font-medium border border-orange-200/50 dark:border-orange-800/50 whitespace-nowrap">
-                            {t('assistants.temperature')}: {assistant.temperature}
+                          <span className="inline-flex items-center px-2 py-1 rounded-lg bg-orange-50 dark:bg-orange-900/20 text-orange-700 dark:text-orange-300 text-xs font-medium">
+                            T: {assistant.temperature}
                           </span>
                         )}
                         {typeof assistant.maxTokens === 'number' && (
-                          <span className="inline-flex items-center px-2.5 py-1 rounded-lg bg-gradient-to-r from-emerald-50 to-teal-50 dark:from-emerald-900/20 dark:to-teal-900/20 text-emerald-700 dark:text-emerald-300 text-xs font-medium border border-emerald-200/50 dark:border-emerald-800/50 whitespace-nowrap">
-                            Token: {assistant.maxTokens}
-                          </span>
-                        )}
-                      </div>
-                    )}
-                    
-                    {/* 时间信息 */}
-                    {(assistant.createdAt || assistant.updatedAt) && (
-                      <div className="flex items-center gap-3 text-xs text-gray-500 dark:text-gray-400 pt-2 border-t border-gray-100 dark:border-neutral-700">
-                        {assistant.createdAt && (
-                          <span className="whitespace-nowrap flex-shrink-0">
-                            {t('assistants.created')}: {fmtDate(assistant.createdAt)}
-                          </span>
-                        )}
-                        {assistant.updatedAt && (
-                          <span className="whitespace-nowrap flex-shrink-0">
-                            {t('assistants.updated')}: {fmtDate(assistant.updatedAt)}
+                          <span className="inline-flex items-center px-2 py-1 rounded-lg bg-emerald-50 dark:bg-emerald-900/20 text-emerald-700 dark:text-emerald-300 text-xs font-medium">
+                            Token: {assistant.maxTokens > 1000 ? `${Math.round(assistant.maxTokens/1000)}k` : assistant.maxTokens}
                           </span>
                         )}
                       </div>
                     )}
                   </div>
+
+                  {/* 底部信息栏 */}
+                  <div className="flex items-center justify-between pt-3 border-t border-gray-100 dark:border-neutral-700">
+                    <div className="flex items-center gap-3 text-xs text-gray-500 dark:text-gray-400">
+                      {assistant.createdAt && (
+                        <span className="flex items-center gap-1">
+                          <div className="w-1.5 h-1.5 bg-gray-400 rounded-full" />
+                          {fmtDate(assistant.createdAt)}
+                        </span>
+                      )}
+                    </div>
+                    
+                    {/* 快速操作指示器 */}
+                    <motion.div 
+                      className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity duration-300"
+                      initial={false}
+                    >
+                      <div className="w-2 h-2 bg-purple-400 rounded-full animate-pulse" />
+                      <span className="text-xs text-purple-600 dark:text-purple-400 font-medium">
+                        {t('assistants.clickToEnter')}
+                      </span>
+                    </motion.div>
+                  </div>
                 </div>
+
+                {/* 悬浮时的光效 */}
+                <div className="absolute inset-0 bg-gradient-to-br from-purple-500/5 via-transparent to-pink-500/5 opacity-0 group-hover:opacity-100 transition-opacity duration-500 pointer-events-none" />
               </motion.div>
             );
           })}

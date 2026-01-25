@@ -11,6 +11,7 @@ const (
 	TTS_OPENAI            = "tts.openai"
 	TTS_ELEVENLABS        = "tts.elevenlabs"
 	TTS_LOCAL             = "tts.local"
+	TTS_LOCAL_GOSPEECH    = "tts.local_gospeech"
 	TTS_FISHSPEECH        = "tts.fishspeech"
 	TTS_COQUI             = "tts.coqui"
 	TTS_VOLCENGINE        = "tts.volcengine"
@@ -46,6 +47,8 @@ const (
 	ProviderElevenLabs TTSProvider = "elevenlabs"
 	// ProviderLocal 本地TTS
 	ProviderLocal TTSProvider = "local"
+	// ProviderLocalGoSpeech 本地go-speech TTS
+	ProviderLocalGoSpeech TTSProvider = "local_gospeech"
 	// ProviderFishSpeech FishSpeech TTS
 	ProviderFishSpeech TTSProvider = "fishspeech"
 	// ProviderCoqui Coqui TTS

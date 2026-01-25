@@ -151,6 +151,8 @@ const Home = () => {
     const aboutTeam = [
         { name: 'chenting', role: t('team.fullStack'), avatar: 'C', description: '' },
         { name: 'wangyueran', role: t('team.fullStack'), avatar: 'W', description: '' },
+        { name: 'quenanlin', role: t('team.fullStack'), avatar: 'Q', description: '' },
+        { name: 'jianghaotian', role: t('team.fullStack'), avatar: 'J', description: '' },
     ]
 
     return (
@@ -729,7 +731,7 @@ const Home = () => {
                             <h3 className="text-2xl font-bold tracking-tight text-gray-900 dark:text-white">{t('team.title')}</h3>
                             <p className="text-gray-600 dark:text-neutral-400">{t('team.desc')}</p>
                         </div>
-                        <StaggeredList className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                        <StaggeredList className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
                             {aboutTeam.map((member) => (
                                 <motion.div key={member.name} whileHover={{ y: -4 }} transition={{ duration: 0.2 }}>
                                     <Card hover className="text-center bg-white/80 dark:bg-white/5 border-gray-200 dark:border-white/10 shadow-lg z-10">

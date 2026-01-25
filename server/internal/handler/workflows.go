@@ -472,17 +472,19 @@ func (h *Handlers) DeleteWorkflowDefinition(c *gin.Context) {
 }
 
 var allowedNodeTypes = map[string]struct{}{
-	"start":     {},
-	"end":       {},
-	"task":      {},
-	"gateway":   {},
-	"event":     {},
-	"subflow":   {},
-	"condition": {},
-	"parallel":  {},
-	"wait":      {},
-	"timer":     {},
-	"script":    {},
+	"start":           {},
+	"end":             {},
+	"task":            {},
+	"gateway":         {},
+	"event":           {},
+	"subflow":         {},
+	"condition":       {},
+	"parallel":        {},
+	"wait":            {},
+	"timer":           {},
+	"script":          {},
+	"plugin":          {},
+	"workflow_plugin": {},
 }
 
 func validateWorkflowGraph(graph models.WorkflowGraph) error {
@@ -585,7 +587,7 @@ func (h *Handlers) RunWorkflowDefinition(c *gin.Context) {
 	}
 
 	// Build runtime workflow from definition
-	runtimeWf, err := workflowdef.BuildRuntimeWorkflow(&def)
+	runtimeWf, err := workflowdef.BuildRuntimeWorkflow(&def, h.db)
 	if err != nil {
 		response.Fail(c, "failed to build workflow", err.Error())
 		return

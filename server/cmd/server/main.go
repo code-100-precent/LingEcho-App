@@ -172,7 +172,7 @@ func main() {
 		// Start SIP server in background (pass empty targetURI to avoid auto-call)
 		go func() {
 			logger.Info("Starting SIP server", zap.Int("sip_port", sipPort), zap.Int("rtp_port", rtpPort))
-			sipServer.Start(sipPort, "") // Empty targetURI means no auto-call
+			//sipServer.Start(sipPort, "") // Empty targetURI means no auto-call
 		}()
 
 		logger.Info("SIP server initialized", zap.Int("sip_port", sipPort), zap.Int("rtp_port", rtpPort))
@@ -431,7 +431,7 @@ func main() {
 	httpServer := &http.Server{
 		Addr:           addr,
 		Handler:        r,
-		ReadTimeout:    30 * time.Second,
+		ReadTimeout:    300 * time.Second, // 5分钟，适合语音会话的长静音期
 		WriteTimeout:   30 * time.Second,
 		IdleTimeout:    120 * time.Second,
 		MaxHeaderBytes: 1 << 20, // 1MB

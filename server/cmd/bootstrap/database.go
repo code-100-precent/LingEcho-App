@@ -177,6 +177,16 @@ func RunMigrations(db *gorm.DB) error {
 		&models.WorkflowDefinition{},
 		&models.WorkflowInstance{},
 		&models.WorkflowVersion{},
+		// Workflow plugin models
+		&models.WorkflowPlugin{},
+		&models.WorkflowPluginVersion{},
+		&models.WorkflowPluginReview{},
+		&models.WorkflowPluginInstallation{},
+		// Node plugin models
+		&models.NodePlugin{},
+		&models.NodePluginVersion{},
+		&models.NodePluginReview{},
+		&models.NodePluginInstallation{},
 		&models.OverviewConfig{},
 		// Login security models
 		&models.UserDevice{},   // 用户设备管理表
@@ -186,5 +196,8 @@ func RunMigrations(db *gorm.DB) error {
 		&models.SipUser{}, // SIP用户表
 		// SIP call model
 		&models.SipCall{}, // SIP通话记录表
+		&models.DeviceErrorLog{},
+		&models.CallRecording{},
+		&models.DevicePerformanceLog{},
 	})
 }

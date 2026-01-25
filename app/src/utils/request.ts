@@ -22,12 +22,16 @@ const request = async <T = any>(
       ...options,
     });
     
+    console.log(`API Response for ${url}:`, JSON.stringify(response.data, null, 2));
+    
     // 返回完整的响应结构，让业务层处理
     return response.data;
   } catch (error: any) {
+    console.error(`API Error for ${url}:`, error);
     // 如果是axios错误，尝试从响应中获取错误信息
     if (error.response?.data) {
       const errorData = error.response.data;
+      console.error('Error response data:', errorData);
       // 处理不同的错误格式
       if (errorData.error) {
         // 格式: {"error": "email has exists"}

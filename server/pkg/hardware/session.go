@@ -7,6 +7,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/code-100-precent/LingEcho/internal/models"
 	"github.com/code-100-precent/LingEcho/pkg/hardware/asr"
 	"github.com/code-100-precent/LingEcho/pkg/hardware/audio"
 	"github.com/code-100-precent/LingEcho/pkg/hardware/errhandler"
@@ -14,6 +15,7 @@ import (
 	"github.com/code-100-precent/LingEcho/pkg/hardware/filter"
 	"github.com/code-100-precent/LingEcho/pkg/hardware/llm"
 	"github.com/code-100-precent/LingEcho/pkg/hardware/message"
+	"github.com/code-100-precent/LingEcho/pkg/hardware/recording"
 	"github.com/code-100-precent/LingEcho/pkg/hardware/state"
 	"github.com/code-100-precent/LingEcho/pkg/hardware/tts"
 	"github.com/code-100-precent/LingEcho/pkg/media"
@@ -21,6 +23,7 @@ import (
 	"github.com/code-100-precent/LingEcho/pkg/recognizer"
 	"github.com/gorilla/websocket"
 	"go.uber.org/zap"
+	"gorm.io/gorm"
 )
 
 // Session 语音会话实现
@@ -39,6 +42,11 @@ type Session struct {
 	vadDetector   *VADDetector // VAD 检测器用于 barge-in
 	mu            sync.RWMutex
 	active        bool
+
+	// 录音相关
+	recordingManager *recording.RecordingManager
+	recordingSession *recording.RecordingSession
+	db               *gorm.DB
 
 	// 音频格式配置（从硬件获取）
 	audioFormat string // opus, pcm, etc.
@@ -166,6 +174,14 @@ func NewSession(config *SessionConfig) (*Session, error) {
 		vadDetector.SetEnabled(false)
 	}
 
+	// 创建录音管理器
+	var recordingManager *recording.RecordingManager
+	var db *gorm.DB
+	if config.DB != nil {
+		db = config.DB
+		recordingManager = recording.NewRecordingManager(db, config.Logger, config.RecordingPath)
+	}
+
 	// 创建消息处理器
 	processor := message.NewProcessor(
 		stateManager,
@@ -177,10 +193,46 @@ func NewSession(config *SessionConfig) (*Session, error) {
 		synthesizer,
 		filterManager,
 		audioManager,
+		config.Credential, // 新增：传入credential
 	)
+
+	session := &Session{
+		config:           config,
+		ctx:              ctx,
+		cancel:           cancel,
+		stateManager:     stateManager,
+		errorHandler:     errorHandler,
+		asrService:       asrService,
+		ttsService:       ttsService,
+		llmService:       llmService,
+		messageWriter:    messageWriter,
+		processor:        processor,
+		audioManager:     audioManager,
+		vadDetector:      vadDetector,
+		recordingManager: recordingManager,
+		db:               db,
+		audioFormat:      "opus",
+		sampleRate:       16000,
+		channels:         1,
+		active:           false,
+	}
 
 	// 设置默认音频配置（hello消息后会更新）
 	processor.SetAudioConfig("opus", 16000, 1, nil)
+
+	// 设置AI回复回调函数（用于录音）
+	processor.SetAIResponseCallback(func(text string) {
+		if session.recordingSession != nil {
+			session.recordingSession.AddAIResponse(text)
+		}
+	})
+
+	// 设置用户输入回调函数（用于录音）
+	processor.SetUserInputCallback(func(text string) {
+		if session.recordingSession != nil {
+			session.recordingSession.AddUserInput(text)
+		}
+	})
 
 	// 设置ASR回调
 	asrService.SetCallbacks(
@@ -189,6 +241,11 @@ func NewSession(config *SessionConfig) (*Session, error) {
 			incremental := stateManager.UpdateASRText(text, isLast)
 			if incremental != "" {
 				processor.ProcessASRResult(ctx, incremental)
+			}
+
+			// 记录用户输入到录音会话 - 只记录最终结果
+			if isLast && text != "" {
+				processor.ProcessUserInput(text)
 			}
 		},
 		func(err error) {
@@ -199,25 +256,6 @@ func NewSession(config *SessionConfig) (*Session, error) {
 			}
 		},
 	)
-
-	session := &Session{
-		config:        config,
-		ctx:           ctx,
-		cancel:        cancel,
-		stateManager:  stateManager,
-		errorHandler:  errorHandler,
-		asrService:    asrService,
-		ttsService:    ttsService,
-		llmService:    llmService,
-		messageWriter: messageWriter,
-		processor:     processor,
-		audioManager:  audioManager,
-		vadDetector:   vadDetector,
-		audioFormat:   "opus",
-		sampleRate:    16000,
-		channels:      1,
-		active:        false,
-	}
 
 	return session, nil
 }
@@ -239,6 +277,44 @@ func (s *Session) Start() error {
 	// 等待ASR连接建立
 	time.Sleep(DefaultASRConnectionDelay)
 
+	// 开始录音（如果录音管理器可用）
+	if s.recordingManager != nil && s.config.UserID > 0 && s.config.AssistantID > 0 {
+		recordingConfig := &recording.RecordingConfig{
+			UserID:      s.config.UserID,
+			AssistantID: uint(s.config.AssistantID),
+			DeviceID:    s.config.DeviceID,
+			MacAddress:  s.config.MacAddress,
+			SessionID:   fmt.Sprintf("session_%d_%d", time.Now().Unix(), s.config.UserID),
+			AudioFormat: s.audioFormat,
+			SampleRate:  s.sampleRate,
+			Channels:    s.channels,
+			CallType:    "voice",
+		}
+
+		recordingSession, err := s.recordingManager.StartRecording(recordingConfig)
+		if err != nil {
+			s.config.Logger.Warn("启动录音失败", zap.Error(err))
+		} else {
+			s.recordingSession = recordingSession
+			s.config.Logger.Info("录音已启动",
+				zap.String("session_id", recordingConfig.SessionID),
+				zap.String("mac_address", recordingConfig.MacAddress))
+		}
+	}
+
+	// 更新设备在线状态（如果有MAC地址和数据库连接）
+	if s.db != nil && s.config.MacAddress != "" {
+		err := models.UpdateDeviceOnlineStatus(s.db, s.config.MacAddress, true)
+		if err != nil {
+			s.config.Logger.Warn("更新设备在线状态失败",
+				zap.Error(err),
+				zap.String("mac_address", s.config.MacAddress))
+		} else {
+			s.config.Logger.Info("设备已上线",
+				zap.String("mac_address", s.config.MacAddress))
+		}
+	}
+
 	// 发送连接成功消息
 	if err := s.messageWriter.SendConnected(); err != nil {
 		s.config.Logger.Error("发送连接成功消息失败", zap.Error(err))
@@ -254,6 +330,30 @@ func (s *Session) Start() error {
 
 // Stop 停止会话
 func (s *Session) Stop() error {
+	return s.stopWithReason("user_disconnect")
+}
+
+// StopWithTimeout 因超时停止会话
+func (s *Session) StopWithTimeout() error {
+	return s.stopWithReason("timeout")
+}
+
+// StopWithError 因错误停止会话
+func (s *Session) StopWithError(err error) error {
+	// 记录错误到设备错误日志
+	if s.db != nil && s.config.MacAddress != "" {
+		logErr := models.LogDeviceError(s.db, s.config.MacAddress, s.config.MacAddress,
+			"session_error", "ERROR", "SESSION_STOP", err.Error(), "", "")
+		if logErr != nil {
+			s.config.Logger.Warn("记录设备错误失败", zap.Error(logErr))
+		}
+	}
+
+	return s.stopWithReason("error")
+}
+
+// stopWithReason 带原因停止会话
+func (s *Session) stopWithReason(reason string) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
@@ -261,6 +361,66 @@ func (s *Session) Stop() error {
 		return nil
 	}
 
+	// 停止录音（如果正在录音）
+	if s.recordingSession != nil {
+		callStatus := "completed"
+		switch reason {
+		case "timeout":
+			callStatus = "interrupted"
+		case "error":
+			callStatus = "error"
+		case "user_disconnect":
+			callStatus = "completed"
+		default:
+			callStatus = "interrupted"
+		}
+
+		recording, err := s.recordingSession.StopRecording(callStatus)
+		if err != nil {
+			s.config.Logger.Error("停止录音失败", zap.Error(err))
+		} else if recording != nil {
+			s.config.Logger.Info("录音已保存",
+				zap.Uint("recording_id", recording.ID),
+				zap.String("audio_path", recording.AudioPath),
+				zap.String("storage_url", recording.StorageURL),
+				zap.Int("duration", recording.Duration),
+				zap.String("call_status", callStatus),
+				zap.String("stop_reason", reason))
+		}
+		s.recordingSession = nil
+	}
+
+	// 更新设备离线状态和性能数据（如果有MAC地址和数据库连接）
+	if s.db != nil && s.config.MacAddress != "" {
+		// 记录最后的性能数据
+		if s.config.UserID > 0 {
+			perfErr := models.LogDevicePerformance(s.db, s.config.MacAddress, s.config.MacAddress,
+				0.0, 0.0, 0.0, 0) // 停止时的性能数据为0
+			if perfErr != nil {
+				s.config.Logger.Warn("记录设备性能数据失败", zap.Error(perfErr))
+			}
+		}
+
+		// 更新设备离线状态
+		err := models.UpdateDeviceOnlineStatus(s.db, s.config.MacAddress, false)
+		if err != nil {
+			s.config.Logger.Warn("更新设备离线状态失败",
+				zap.Error(err),
+				zap.String("mac_address", s.config.MacAddress))
+		} else {
+			s.config.Logger.Info("设备已离线",
+				zap.String("mac_address", s.config.MacAddress),
+				zap.String("stop_reason", reason))
+		}
+	}
+
+	// 先取消所有TTS操作，避免在关闭过程中产生panic
+	if s.stateManager != nil {
+		s.stateManager.SetTTSPlaying(false)
+		s.stateManager.CancelTTS()
+	}
+
+	// 取消session context，这会停止所有相关的goroutine
 	s.cancel()
 
 	// 断开ASR服务
@@ -305,6 +465,7 @@ func (s *Session) HandleAudio(data []byte) error {
 	audioManager := s.audioManager
 	vadDetector := s.vadDetector
 	ttsPlaying := s.stateManager.IsTTSPlaying()
+	recordingSession := s.recordingSession
 	s.mu.RUnlock()
 
 	if !active {
@@ -335,6 +496,13 @@ func (s *Session) HandleAudio(data []byte) error {
 		pcmData = data
 	}
 
+	// 录音PCM数据（解码后的格式，用于录音）
+	if recordingSession != nil && len(pcmData) > 0 {
+		if err := recordingSession.WriteAudio(pcmData); err != nil {
+			s.config.Logger.Warn("写入录音数据失败", zap.Error(err))
+		}
+	}
+
 	if len(pcmData) == 0 {
 		return nil
 	}
@@ -344,10 +512,15 @@ func (s *Session) HandleAudio(data []byte) error {
 		// 检测用户是否说话（barge-in）
 		if vadDetector.CheckBargeIn(pcmData, true) {
 			s.config.Logger.Info("检测到用户说话，中断 TTS")
-			// 取消 TTS 播放
-			s.stateManager.CancelTTS()
-			// 设置 TTS 播放状态为 false
+			// 优雅地取消 TTS 播放：先设置状态，再取消context
 			s.stateManager.SetTTSPlaying(false)
+			s.stateManager.CancelTTS()
+
+			// 发送TTS结束消息给前端
+			if err := s.messageWriter.SendTTSEnd(); err != nil {
+				s.config.Logger.Warn("发送TTS结束消息失败", zap.Error(err))
+			}
+
 			// 继续处理音频（用户开始说话了）
 			// 使用音频管理器处理输入音频
 			processedData, shouldProcess := audioManager.ProcessInputAudio(pcmData, false)
@@ -410,7 +583,12 @@ func (s *Session) HandleText(data []byte) error {
 		s.config.Logger.Info("新会话开始")
 
 	case MessageTypePing:
-		// 心跳消息，发送pong（由writer处理）
+		// 心跳消息，发送pong响应
+		if err := s.messageWriter.SendPong(); err != nil {
+			s.config.Logger.Warn("发送pong响应失败", zap.Error(err))
+		} else {
+			s.config.Logger.Debug("收到ping，已发送pong响应")
+		}
 
 	case "hello":
 		// xiaozhi协议hello消息处理
@@ -588,6 +766,11 @@ func (s *Session) reinitializeServices(sampleRate, channels int) error {
 			if incremental != "" {
 				s.processor.ProcessASRResult(s.ctx, incremental)
 			}
+
+			// 记录用户输入到录音会话 - 只记录最终结果
+			if isLast && text != "" {
+				s.processor.ProcessUserInput(text)
+			}
 		},
 		func(err error) {
 			classified := s.errorHandler.HandleError(err, "ASR")
@@ -645,12 +828,26 @@ func (s *Session) IsActive() bool {
 	return s.active
 }
 
+// RecordAIResponse 记录AI回复到录音会话
+func (s *Session) RecordAIResponse(text string) {
+	s.mu.RLock()
+	recordingSession := s.recordingSession
+	s.mu.RUnlock()
+
+	if recordingSession != nil {
+		recordingSession.AddAIResponse(text)
+	}
+}
+
 // messageLoop 消息处理循环
 func (s *Session) messageLoop() {
 	defer func() {
 		// 当消息循环退出时，触发优雅关闭
 		s.config.Logger.Info("消息循环退出，触发会话关闭")
-		s.cancel()
+		// 调用Stop方法确保所有资源正确清理
+		if err := s.Stop(); err != nil {
+			s.config.Logger.Error("会话关闭失败", zap.Error(err))
+		}
 	}()
 
 	for {
@@ -669,8 +866,7 @@ func (s *Session) messageLoop() {
 			} else {
 				s.config.Logger.Debug("读取WebSocket消息失败", zap.Error(err))
 			}
-			// 取消context，触发优雅关闭
-			s.cancel()
+			// 直接返回，defer中的Stop会处理清理
 			return
 		}
 

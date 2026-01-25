@@ -218,6 +218,9 @@ func DefaultTimeoutConfig() TimeoutConfig {
 			"/api/assistant/chat": 60 * time.Second,
 			"/api/chat/send":      60 * time.Second,
 
+			// 语音接口：10分钟超时（支持长时间语音会话）
+			"/api/voice/lingecho/v1/": 10 * time.Minute,
+
 			// 工作流执行：10分钟超时
 			"/api/workflow/execute": 10 * time.Minute,
 

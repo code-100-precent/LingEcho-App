@@ -200,6 +200,8 @@ func (h *Handlers) Register(engine *gin.Engine) {
 	h.registerBillingRoutes(r)
 	h.registerMiddlewareRoutes(r)
 	h.registerWorkflowRoutes(r)
+	h.registerWorkflowPluginRoutes(r) // Add workflow plugin routes
+	h.registerNodePluginRoutes(r)     // Add node plugin routes
 	// Register public workflow routes (no auth required)
 	h.RegisterPublicWorkflowRoutes(r)
 	objs := h.GetObjs()
@@ -381,6 +383,24 @@ func (h *Handlers) registerDeviceRoutes(r *gin.RouterGroup) {
 
 		// Manually add device
 		device.POST("/manual-add", h.ManualAddDevice)
+
+		// Device monitoring and management
+		device.GET("/:deviceId", h.GetDeviceDetail)                                 // Get device detail
+		device.GET("/:deviceId/error-logs", h.GetDeviceErrorLogs)                   // Get device error logs
+		device.GET("/:deviceId/performance-history", h.GetDevicePerformanceHistory) // Get performance history
+		device.GET("/call-recordings", h.GetCallRecordings)                         // Get call recordings
+
+		// AI分析相关路由
+		device.POST("/call-recordings/:id/analyze", h.AnalyzeCallRecording)         // 分析单个录音
+		device.POST("/call-recordings/batch-analyze", h.BatchAnalyzeCallRecordings) // 批量分析录音
+		device.GET("/call-recordings/:id/analysis", h.GetCallRecordingAnalysis)     // 获取分析结果
+
+		// Device status updates (for hardware devices to report status)
+		device.POST("/status", h.UpdateDeviceStatus) // Update device status
+		device.POST("/error", h.LogDeviceError)      // Log device error
+
+		// Recording file access
+		device.GET("/recordings/*filepath", h.ServeRecordingFile) // Serve recording files
 	}
 }
 
@@ -722,5 +742,57 @@ func (h *Handlers) registerSipRoutes(r *gin.RouterGroup) {
 
 		// 通话历史
 		sip.GET("/calls", models.AuthRequired, h.sipHandler.GetCallHistory)
+	}
+}
+
+// registerNodePluginRoutes Node Plugin Module
+func (h *Handlers) registerNodePluginRoutes(r *gin.RouterGroup) {
+	pluginHandler := NewNodePluginHandler(h.db)
+
+	plugins := r.Group("node-plugins")
+	{
+		// Public routes (no auth required for browsing)
+		plugins.GET("", pluginHandler.ListPlugins)
+		plugins.GET("/:id", pluginHandler.GetPlugin)
+	}
+
+	// Protected routes (require authentication)
+	pluginsAuth := r.Group("node-plugins")
+	pluginsAuth.Use(models.AuthRequired)
+	{
+		pluginsAuth.POST("", pluginHandler.CreatePlugin)
+		pluginsAuth.PUT("/:id", pluginHandler.UpdatePlugin)
+		pluginsAuth.POST("/:id/publish", pluginHandler.PublishPlugin)
+		pluginsAuth.POST("/:id/install", pluginHandler.InstallPlugin)
+		pluginsAuth.GET("/installed", pluginHandler.ListInstalledPlugins)
+	}
+}
+
+// registerWorkflowPluginRoutes Workflow Plugin Module
+func (h *Handlers) registerWorkflowPluginRoutes(r *gin.RouterGroup) {
+	pluginHandler := NewWorkflowPluginHandler(h.db)
+
+	plugins := r.Group("workflow-plugins")
+	{
+		// Public routes (no auth required for browsing)
+		plugins.GET("", pluginHandler.ListWorkflowPlugins)
+		plugins.GET("/:id", pluginHandler.GetWorkflowPlugin)
+	}
+
+	// Protected routes (require authentication)
+	pluginsAuth := r.Group("workflow-plugins")
+	pluginsAuth.Use(models.AuthRequired)
+	{
+		// 发布工作流为插件
+		pluginsAuth.POST("/publish/:workflowId", pluginHandler.PublishWorkflowAsPlugin)
+
+		// 插件管理
+		pluginsAuth.PUT("/:id", pluginHandler.UpdateWorkflowPlugin)
+		pluginsAuth.POST("/:id/publish", pluginHandler.PublishWorkflowPlugin)
+		pluginsAuth.POST("/:id/install", pluginHandler.InstallWorkflowPlugin)
+
+		// 用户插件
+		pluginsAuth.GET("/installed", pluginHandler.ListInstalledWorkflowPlugins)
+		pluginsAuth.GET("/my-plugins", pluginHandler.GetUserWorkflowPlugins)
 	}
 }
