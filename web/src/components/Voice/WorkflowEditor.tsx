@@ -69,75 +69,95 @@ export interface Workflow {
   updatedAt: string
 }
 
-// 获取节点类型配置的函数（支持国际化）
+// 获取节点类型配置的函数（支持国际化）- 优化后的现代化设计
 const getNodeTypes = (t: (key: string) => string) => ({
   start: {
     label: t('workflow.nodes.start'),
-    icon: <Play className="w-4 h-4" />,
-    color: '#10b981',
+    icon: <Play className="w-5 h-5" />,
+    color: '#059669', // 更深的绿色
+    gradient: 'from-emerald-400 to-emerald-600',
+    shadowColor: 'shadow-emerald-200',
     inputs: 0,
     outputs: 1
   },
   end: {
     label: t('workflow.nodes.end'),
-    icon: <Square className="w-4 h-4" />,
-    color: '#ef4444',
+    icon: <Square className="w-5 h-5" />,
+    color: '#dc2626', // 更深的红色
+    gradient: 'from-red-400 to-red-600',
+    shadowColor: 'shadow-red-200',
     inputs: 1,
     outputs: 0
   },
   task: {
     label: t('workflow.nodes.task'),
-    icon: <FileText className="w-4 h-4" />,
-    color: '#3b82f6',
+    icon: <FileText className="w-5 h-5" />,
+    color: '#2563eb', // 更深的蓝色
+    gradient: 'from-blue-400 to-blue-600',
+    shadowColor: 'shadow-blue-200',
     inputs: 1,
     outputs: 1
   },
   gateway: {
     label: t('workflow.nodes.gateway'),
-    icon: <GitBranch className="w-4 h-4" />,
-    color: '#8b5cf6',
+    icon: <GitBranch className="w-5 h-5" />,
+    color: '#7c3aed', // 更深的紫色
+    gradient: 'from-violet-400 to-violet-600',
+    shadowColor: 'shadow-violet-200',
     inputs: 1,
     outputs: 2
   },
   event: {
     label: t('workflow.nodes.event'),
-    icon: <Zap className="w-4 h-4" />,
-    color: '#f59e0b',
+    icon: <Zap className="w-5 h-5" />,
+    color: '#d97706', // 更深的橙色
+    gradient: 'from-amber-400 to-orange-500',
+    shadowColor: 'shadow-amber-200',
     inputs: 0,
     outputs: 1
   },
   subflow: {
     label: t('workflow.nodes.subflow'),
-    icon: <Settings className="w-4 h-4" />,
-    color: '#6366f1',
+    icon: <Settings className="w-5 h-5" />,
+    color: '#4f46e5', // 更深的靛蓝色
+    gradient: 'from-indigo-400 to-indigo-600',
+    shadowColor: 'shadow-indigo-200',
     inputs: 1,
     outputs: 1
   },
   parallel: {
     label: t('workflow.nodes.parallel'),
-    icon: <GitBranch className="w-4 h-4" />,
-    color: '#06b6d4',
+    icon: <GitBranch className="w-5 h-5 rotate-90" />,
+    color: '#0891b2', // 更深的青色
+    gradient: 'from-cyan-400 to-cyan-600',
+    shadowColor: 'shadow-cyan-200',
     inputs: 1,
     outputs: 2
   },
   wait: {
     label: t('workflow.nodes.wait'),
-    icon: <Clock className="w-4 h-4" />,
-    color: '#ec4899',
+    icon: <Clock className="w-5 h-5" />,
+    color: '#be185d', // 更深的粉色
+    gradient: 'from-pink-400 to-pink-600',
+    shadowColor: 'shadow-pink-200',
     inputs: 1,
     outputs: 1
   },
   timer: {
     label: t('workflow.nodes.timer'),
-    icon: <Timer className="w-4 h-4" />,
-    color: '#14b8a6',
+    icon: <Timer className="w-5 h-5" />,
+    color: '#0d9488', // 更深的青绿色
+    gradient: 'from-teal-400 to-teal-600',
+    shadowColor: 'shadow-teal-200',
     inputs: 1,
     outputs: 1
   },
   script: {
     label: t('workflow.nodes.script'),
-    icon: <Code className="w-4 h-4" />,
-    color: '#64748b',
+    icon: <Code className="w-5 h-5" />,
+    color: '#475569', // 更深的灰色
+    gradient: 'from-slate-400 to-slate-600',
+    shadowColor: 'shadow-slate-200',
     inputs: 1,
     outputs: 1
   }
@@ -188,6 +208,8 @@ const WorkflowEditor: React.FC<WorkflowEditorProps> = ({
   const [nodeTestParameters, setNodeTestParameters] = useState<Record<string, string>>({})
   const [nodeTestResult, setNodeTestResult] = useState<any>(null)
   const [isTestingNode, setIsTestingNode] = useState(false)
+  
+
 
   // 添加节点
   const addNode = useCallback((type: WorkflowNode['type'], position: { x: number; y: number }) => {
@@ -348,6 +370,24 @@ func Run(inputs map[string]interface{}) (map[string]interface{}, error) {
     }
   }, [nodes, canvasScale])
 
+  // 删除连接 - 移到前面避免初始化顺序问题
+  const deleteConnection = useCallback((connectionId: string) => {
+    setConnections(prev => prev.filter(conn => conn.id !== connectionId))
+    if (selectedConnection === connectionId) {
+      setSelectedConnection(null)
+    }
+  }, [selectedConnection])
+
+  // 点击画布取消选择
+
+
+  // 检查输出点是否已经有连接
+  const isOutputConnected = useCallback((nodeId: string, outputHandle: string) => {
+    return connections.some(conn => 
+      conn.source === nodeId && conn.sourceHandle === outputHandle
+    )
+  }, [connections])
+
   // 开始连接
   const startConnection = useCallback((nodeId: string, handle: string) => {
     setIsConnecting(true)
@@ -356,11 +396,23 @@ func Run(inputs map[string]interface{}) (map[string]interface{}, error) {
 
   // 完成连接
   // 连接规则：
-  // 1. 一个输出可以连接到多个不同的输入（支持分支）
+  // 1. 一个输出只能连接到一个输入（限制输出点只能连接一次）
   // 2. 不允许创建完全相同的连接（相同的 source, target, sourceHandle, targetHandle）
   // 3. 一个输入可以接收多个输出（支持数据合并）
   const completeConnection = useCallback((nodeId: string, handle: string) => {
     if (isConnecting && connectionStart && connectionStart.nodeId !== nodeId) {
+      // 检查源输出点是否已经连接
+      const sourceAlreadyConnected = connections.some(conn => 
+        conn.source === connectionStart.nodeId && conn.sourceHandle === connectionStart.handle
+      )
+      
+      if (sourceAlreadyConnected) {
+        console.log('输出点已经连接，无法再次连接')
+        setIsConnecting(false)
+        setConnectionStart(null)
+        return
+      }
+      
       // 检查是否已存在完全相同的连接（防止重复连接）
       const existingConnection = connections.find(conn => 
         conn.source === connectionStart.nodeId && 
@@ -406,14 +458,6 @@ func Run(inputs map[string]interface{}) (map[string]interface{}, error) {
     setIsConnecting(false)
     setConnectionStart(null)
   }, [isConnecting, connectionStart, connections, nodes])
-
-  // 删除连接
-  const deleteConnection = useCallback((connectionId: string) => {
-    setConnections(prev => prev.filter(conn => conn.id !== connectionId))
-    if (selectedConnection === connectionId) {
-      setSelectedConnection(null)
-    }
-  }, [selectedConnection])
 
   // 画布拖拽处理
   const handleCanvasMouseDown = useCallback((e: React.MouseEvent) => {
@@ -559,7 +603,7 @@ func Run(inputs map[string]interface{}) (map[string]interface{}, error) {
     }
   }, [workflow, nodes, connections, onRun])
 
-  // 渲染连接线 - 使用贝塞尔曲线
+  // 渲染连接线 - 现代化贝塞尔曲线设计
   const renderConnections = () => {
     return connections.map(connection => {
       const sourceNode = nodes.find(n => n.id === connection.source)
@@ -569,7 +613,7 @@ func Run(inputs map[string]interface{}) (map[string]interface{}, error) {
 
       // 节点卡片宽度 260px
       const nodeWidth = 260
-      const baseConnectionY = 40 // 基础连接点Y位置（从顶部开始）
+      const baseConnectionY = 45 // 基础连接点Y位置（从顶部开始）
       
       // 计算源节点连接点位置
       const sourceOutputIndex = connection.sourceHandle ? 
@@ -577,7 +621,7 @@ func Run(inputs map[string]interface{}) (map[string]interface{}, error) {
       const sourceX = sourceNode.position.x + nodeWidth // 节点右边缘
       // 根据输出参数数量均匀分布连接点
       const totalSourceOutputs = sourceNode.outputs?.length || 1
-      const sourceSpacing = totalSourceOutputs > 1 ? 50 / (totalSourceOutputs - 1) : 0
+      const sourceSpacing = totalSourceOutputs > 1 ? 60 / (totalSourceOutputs - 1) : 0
       const sourceY = sourceNode.position.y + baseConnectionY + (sourceOutputIndex * sourceSpacing)
       
       // 计算目标节点连接点位置
@@ -586,46 +630,126 @@ func Run(inputs map[string]interface{}) (map[string]interface{}, error) {
       const targetX = targetNode.position.x // 节点左边缘
       // 根据输入参数数量均匀分布连接点
       const totalTargetInputs = targetNode.inputs?.length || 1
-      const targetSpacing = totalTargetInputs > 1 ? 50 / (totalTargetInputs - 1) : 0
+      const targetSpacing = totalTargetInputs > 1 ? 60 / (totalTargetInputs - 1) : 0
       const targetY = targetNode.position.y + baseConnectionY + (targetInputIndex * targetSpacing)
 
       // 计算控制点，创建平滑的贝塞尔曲线
       const dx = targetX - sourceX
-      const controlPointOffset = Math.min(Math.abs(dx) * 0.5, 150) // 控制点偏移，最大150px
+      const controlPointOffset = Math.min(Math.abs(dx) * 0.5, 180) // 控制点偏移，最大180px
       const cp1x = sourceX + controlPointOffset
       const cp1y = sourceY
       const cp2x = targetX - controlPointOffset
       const cp2y = targetY
 
       const isSelected = selectedConnection === connection.id
+      
+      // 根据连接类型确定颜色和样式
+      const getConnectionStyle = () => {
+        switch (connection.type) {
+          case 'true':
+            return {
+              color: '#059669', // 绿色 - 真分支
+              gradient: 'url(#greenGradient)',
+              dashArray: 'none'
+            }
+          case 'false':
+            return {
+              color: '#dc2626', // 红色 - 假分支
+              gradient: 'url(#redGradient)',
+              dashArray: 'none'
+            }
+          case 'error':
+            return {
+              color: '#f59e0b', // 橙色 - 错误分支
+              gradient: 'url(#orangeGradient)',
+              dashArray: '8,4'
+            }
+          case 'branch':
+            return {
+              color: '#8b5cf6', // 紫色 - 并行分支
+              gradient: 'url(#purpleGradient)',
+              dashArray: 'none'
+            }
+          default:
+            return {
+              color: '#3b82f6', // 蓝色 - 默认
+              gradient: 'url(#blueGradient)',
+              dashArray: 'none'
+            }
+        }
+      }
+
+      const connectionStyle = getConnectionStyle()
 
       return (
         <g key={connection.id}>
+          {/* 连接线光晕效果 */}
+          <motion.path
+            d={`M ${sourceX} ${sourceY} C ${cp1x} ${cp1y}, ${cp2x} ${cp2y}, ${targetX} ${targetY}`}
+            stroke={connectionStyle.color}
+            strokeWidth={isSelected ? "8" : "6"}
+            fill="none"
+            className="pointer-events-none opacity-20"
+            strokeDasharray={connectionStyle.dashArray}
+            initial={{ pathLength: 0, opacity: 0 }}
+            animate={{ pathLength: 1, opacity: 0.2 }}
+            transition={{ duration: 0.8, ease: "easeInOut" }}
+          />
+          
           {/* 可点击的连接线背景（更粗，透明） */}
           <path
             d={`M ${sourceX} ${sourceY} C ${cp1x} ${cp1y}, ${cp2x} ${cp2y}, ${targetX} ${targetY}`}
             stroke="transparent"
-            strokeWidth="20"
+            strokeWidth="24"
             fill="none"
             className="cursor-pointer"
             style={{ pointerEvents: 'all' }}
-            onClick={() => setSelectedConnection(connection.id)}
-            onDoubleClick={(e) => {
+            onClick={(e) => {
               e.stopPropagation()
-              deleteConnection(connection.id)
+              setSelectedConnection(connection.id)
             }}
           />
-          {/* 可见的连接线 - 贝塞尔曲线 */}
+          
+          {/* 主连接线 - 渐变贝塞尔曲线 */}
           <motion.path
             d={`M ${sourceX} ${sourceY} C ${cp1x} ${cp1y}, ${cp2x} ${cp2y}, ${targetX} ${targetY}`}
-            stroke={isSelected ? "#ef4444" : "#6366f1"}
-            strokeWidth={isSelected ? "3" : "2"}
+            stroke={isSelected ? "#ef4444" : connectionStyle.gradient}
+            strokeWidth={isSelected ? "4" : "3"}
             fill="none"
-            markerEnd="url(#arrowhead)"
+            markerEnd={`url(#arrowhead-${connection.type || 'default'})`}
             className="pointer-events-none"
-            style={{ filter: isSelected ? 'drop-shadow(0 0 4px rgba(239, 68, 68, 0.5))' : 'none' }}
-            whileHover={{ strokeWidth: 3 }}
+            strokeDasharray={connectionStyle.dashArray}
+            style={{ 
+              filter: isSelected 
+                ? 'drop-shadow(0 0 8px rgba(239, 68, 68, 0.6))' 
+                : `drop-shadow(0 2px 4px ${connectionStyle.color}40)`
+            }}
+            initial={{ pathLength: 0 }}
+            animate={{ pathLength: 1 }}
+            transition={{ duration: 0.8, ease: "easeInOut" }}
+            whileHover={{ strokeWidth: isSelected ? 5 : 4 }}
           />
+          
+          {/* 数据流动画效果 */}
+          <motion.circle
+            r="3"
+            fill={connectionStyle.color}
+            className="opacity-60"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: [0, 0.8, 0] }}
+            transition={{ 
+              duration: 2, 
+              repeat: Infinity, 
+              ease: "easeInOut",
+              delay: Math.random() * 2 
+            }}
+          >
+            <animateMotion
+              dur="2s"
+              repeatCount="indefinite"
+              path={`M ${sourceX} ${sourceY} C ${cp1x} ${cp1y}, ${cp2x} ${cp2y}, ${targetX} ${targetY}`}
+            />
+          </motion.circle>
         </g>
       )
     })
@@ -1658,6 +1782,112 @@ func Run(inputs map[string]interface{}) (map[string]interface{}, error) {
                   </>
                 )}
               </div>
+              
+              {/* 连接管理 */}
+              <div className="space-y-4">
+                <h4 className="text-sm font-semibold text-gray-900 dark:text-white mb-3 flex items-center gap-2">
+                  <div className="w-1 h-4 rounded-full bg-blue-500" />
+                  连接管理
+                </h4>
+                
+                {/* 输入连接 */}
+                <div className="space-y-2">
+                  <div className="text-xs font-medium text-gray-700 dark:text-gray-300">
+                    输入连接
+                  </div>
+                  {(() => {
+                    const inputConnections = connections.filter(conn => conn.target === node.id)
+                    if (inputConnections.length === 0) {
+                      return (
+                        <div className="text-xs text-gray-500 dark:text-gray-400 italic">
+                          暂无输入连接
+                        </div>
+                      )
+                    }
+                    return inputConnections.map(conn => {
+                      const sourceNode = nodes.find(n => n.id === conn.source)
+                      return (
+                        <div key={conn.id} className="flex items-center justify-between p-2 bg-gray-50 dark:bg-gray-800 rounded-lg">
+                          <div className="flex items-center gap-2 text-xs">
+                            <div className="w-2 h-2 bg-green-500 rounded-full" />
+                            <span className="text-gray-700 dark:text-gray-300">
+                              来自: {sourceNode?.data.label || '未知节点'}
+                            </span>
+                            {conn.type && conn.type !== 'default' && (
+                              <span className="px-1.5 py-0.5 bg-blue-100 dark:bg-blue-900 text-blue-700 dark:text-blue-300 rounded text-xs">
+                                {conn.type}
+                              </span>
+                            )}
+                          </div>
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => deleteConnection(conn.id)}
+                            className="text-red-600 hover:text-red-700 hover:bg-red-50 dark:hover:bg-red-900/20 p-1"
+                          >
+                            <Trash2 className="w-3 h-3" />
+                          </Button>
+                        </div>
+                      )
+                    })
+                  })()}
+                </div>
+                
+                {/* 输出连接 */}
+                <div className="space-y-2">
+                  <div className="text-xs font-medium text-gray-700 dark:text-gray-300">
+                    输出连接
+                  </div>
+                  {(() => {
+                    const outputConnections = connections.filter(conn => conn.source === node.id)
+                    if (outputConnections.length === 0) {
+                      return (
+                        <div className="text-xs text-gray-500 dark:text-gray-400 italic">
+                          暂无输出连接
+                        </div>
+                      )
+                    }
+                    return outputConnections.map(conn => {
+                      const targetNode = nodes.find(n => n.id === conn.target)
+                      return (
+                        <div key={conn.id} className="flex items-center justify-between p-2 bg-gray-50 dark:bg-gray-800 rounded-lg">
+                          <div className="flex items-center gap-2 text-xs">
+                            <div className="w-2 h-2 bg-blue-500 rounded-full" />
+                            <span className="text-gray-700 dark:text-gray-300">
+                              到: {targetNode?.data.label || '未知节点'}
+                            </span>
+                            {conn.type && conn.type !== 'default' && (
+                              <span className="px-1.5 py-0.5 bg-blue-100 dark:bg-blue-900 text-blue-700 dark:text-blue-300 rounded text-xs">
+                                {conn.type}
+                              </span>
+                            )}
+                          </div>
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => deleteConnection(conn.id)}
+                            className="text-red-600 hover:text-red-700 hover:bg-red-50 dark:hover:bg-red-900/20 p-1"
+                          >
+                            <Trash2 className="w-3 h-3" />
+                          </Button>
+                        </div>
+                      )
+                    })
+                  })()}
+                </div>
+                
+                {/* 连接操作提示 */}
+                <div className="p-3 bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg">
+                  <div className="text-xs text-blue-800 dark:text-blue-200">
+                    <div className="font-semibold mb-1">连接操作方式：</div>
+                    <div className="space-y-1">
+                      <div>• 在此面板中点击删除按钮删除连接</div>
+                      <div>• 拖拽节点输出点到目标节点创建连接</div>
+                      <div>• 点击连接线可以选中连接</div>
+                    </div>
+                  </div>
+                </div>
+              </div>
             </div>
 
             {/* 抽屉底部操作按钮 */}
@@ -1776,26 +2006,6 @@ func Run(inputs map[string]interface{}) (map[string]interface{}, error) {
     }
     loadEventTypes()
   }, [])
-
-  // 键盘事件监听
-  useEffect(() => {
-    const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === 'Delete' && selectedConnection) {
-        deleteConnection(selectedConnection)
-      }
-      if (e.key === 'Escape') {
-        setSelectedConnection(null)
-        setIsConnecting(false)
-        setConnectionStart(null)
-        setIsCodeEditorFullscreen(false)
-      }
-    }
-
-    document.addEventListener('keydown', handleKeyDown)
-    return () => {
-      document.removeEventListener('keydown', handleKeyDown)
-    }
-  }, [selectedConnection, deleteConnection])
 
   // 画布滚轮缩放 - 使用非被动事件监听器避免 preventDefault 警告
   useEffect(() => {
@@ -1980,17 +2190,110 @@ func Run(inputs map[string]interface{}) (map[string]interface{}, error) {
               }}
             >
               <defs>
+                {/* 渐变定义 */}
+                <linearGradient id="blueGradient" x1="0%" y1="0%" x2="100%" y2="0%">
+                  <stop offset="0%" stopColor="#3b82f6" />
+                  <stop offset="100%" stopColor="#1d4ed8" />
+                </linearGradient>
+                
+                <linearGradient id="greenGradient" x1="0%" y1="0%" x2="100%" y2="0%">
+                  <stop offset="0%" stopColor="#059669" />
+                  <stop offset="100%" stopColor="#047857" />
+                </linearGradient>
+                
+                <linearGradient id="redGradient" x1="0%" y1="0%" x2="100%" y2="0%">
+                  <stop offset="0%" stopColor="#dc2626" />
+                  <stop offset="100%" stopColor="#b91c1c" />
+                </linearGradient>
+                
+                <linearGradient id="orangeGradient" x1="0%" y1="0%" x2="100%" y2="0%">
+                  <stop offset="0%" stopColor="#f59e0b" />
+                  <stop offset="100%" stopColor="#d97706" />
+                </linearGradient>
+                
+                <linearGradient id="purpleGradient" x1="0%" y1="0%" x2="100%" y2="0%">
+                  <stop offset="0%" stopColor="#8b5cf6" />
+                  <stop offset="100%" stopColor="#7c3aed" />
+                </linearGradient>
+
+                {/* 箭头标记定义 */}
                 <marker
-                  id="arrowhead"
-                  markerWidth="10"
-                  markerHeight="7"
-                  refX="9"
-                  refY="3.5"
+                  id="arrowhead-default"
+                  markerWidth="12"
+                  markerHeight="8"
+                  refX="11"
+                  refY="4"
                   orient="auto"
+                  markerUnits="strokeWidth"
                 >
                   <polygon
-                    points="0 0, 10 3.5, 0 7"
-                    fill="#6366f1"
+                    points="0 0, 12 4, 0 8"
+                    fill="url(#blueGradient)"
+                    stroke="none"
+                  />
+                </marker>
+                
+                <marker
+                  id="arrowhead-true"
+                  markerWidth="12"
+                  markerHeight="8"
+                  refX="11"
+                  refY="4"
+                  orient="auto"
+                  markerUnits="strokeWidth"
+                >
+                  <polygon
+                    points="0 0, 12 4, 0 8"
+                    fill="url(#greenGradient)"
+                    stroke="none"
+                  />
+                </marker>
+                
+                <marker
+                  id="arrowhead-false"
+                  markerWidth="12"
+                  markerHeight="8"
+                  refX="11"
+                  refY="4"
+                  orient="auto"
+                  markerUnits="strokeWidth"
+                >
+                  <polygon
+                    points="0 0, 12 4, 0 8"
+                    fill="url(#redGradient)"
+                    stroke="none"
+                  />
+                </marker>
+                
+                <marker
+                  id="arrowhead-error"
+                  markerWidth="12"
+                  markerHeight="8"
+                  refX="11"
+                  refY="4"
+                  orient="auto"
+                  markerUnits="strokeWidth"
+                >
+                  <polygon
+                    points="0 0, 12 4, 0 8"
+                    fill="url(#orangeGradient)"
+                    stroke="none"
+                  />
+                </marker>
+                
+                <marker
+                  id="arrowhead-branch"
+                  markerWidth="12"
+                  markerHeight="8"
+                  refX="11"
+                  refY="4"
+                  orient="auto"
+                  markerUnits="strokeWidth"
+                >
+                  <polygon
+                    points="0 0, 12 4, 0 8"
+                    fill="url(#purpleGradient)"
+                    stroke="none"
                   />
                 </marker>
               </defs>
@@ -2035,97 +2338,138 @@ func Run(inputs map[string]interface{}) (map[string]interface{}, error) {
                     }}
                     transition={{ duration: 0.15 }}
                   >
-                    {/* 主卡片 - 优化后的优雅风格 */}
+                    {/* 主卡片 - 全新现代化设计 */}
                     <div className={cn(
-                      'relative bg-white dark:bg-gray-800 rounded-xl border-2 transition-all duration-200 shadow-lg',
+                      'relative overflow-hidden transition-all duration-300 transform-gpu',
+                      'bg-gradient-to-br from-white via-gray-50 to-white dark:from-gray-800 dark:via-gray-850 dark:to-gray-800',
+                      'rounded-2xl border border-gray-200/60 dark:border-gray-700/60',
+                      'backdrop-blur-sm shadow-lg hover:shadow-2xl',
                       selectedNode === node.id 
-                        ? 'border-blue-400 dark:border-blue-500 shadow-xl ring-2 ring-blue-200 dark:ring-blue-800' 
-                        : 'border-gray-200 dark:border-gray-700 hover:border-gray-300 dark:hover:border-gray-600 hover:shadow-xl'
-                    )}>
-                      {/* 顶部颜色条 */}
+                        ? `border-2 ${nodeConfig.shadowColor} shadow-2xl ring-4 ring-opacity-20` 
+                        : 'hover:border-gray-300/80 dark:hover:border-gray-600/80 hover:-translate-y-1',
+                      draggedNode === node.id && 'shadow-3xl scale-105'
+                    )}
+                    style={{
+                      boxShadow: selectedNode === node.id 
+                        ? `0 20px 40px -12px ${nodeConfig.color}40, 0 8px 16px -8px ${nodeConfig.color}20`
+                        : undefined
+                    }}>
+                      {/* 渐变顶部装饰条 */}
                       <div 
-                        className="absolute top-0 left-0 right-0 h-1 rounded-t-xl"
-                        style={{ backgroundColor: nodeConfig.color || '#64748b' }}
+                        className={cn(
+                          'absolute top-0 left-0 right-0 h-1.5 bg-gradient-to-r',
+                          nodeConfig.gradient || 'from-gray-400 to-gray-600'
+                        )}
                       />
                       
+                      {/* 背景装饰 - 微妙的几何图案 */}
+                      <div className="absolute top-0 right-0 w-24 h-24 opacity-5 dark:opacity-10">
+                        <div 
+                          className="w-full h-full rounded-full blur-xl"
+                          style={{ backgroundColor: nodeConfig.color }}
+                        />
+                      </div>
+                      
                       {/* 内容区域 */}
-                      <div className="pt-3 pb-3 px-4">
+                      <div className="relative pt-4 pb-4 px-5">
                         {/* 头部：图标和标题 */}
-                        <div className="flex items-center justify-between gap-3 mb-3">
-                          <div className="flex items-center gap-3 flex-1 min-w-0">
-                            {/* 图标 */}
-                            <div 
-                              className="flex-shrink-0 p-2 rounded-lg shadow-sm"
-                              style={{ 
-                                backgroundColor: `${nodeConfig.color || '#64748b'}15`,
-                                color: nodeConfig.color || '#64748b'
-                              }}
-                            >
-                              {nodeConfig.icon}
+                        <div className="flex items-center justify-between gap-4 mb-4">
+                          <div className="flex items-center gap-4 flex-1 min-w-0">
+                            {/* 现代化图标容器 */}
+                            <div className="relative flex-shrink-0">
+                              <div 
+                                className={cn(
+                                  'p-3 rounded-xl shadow-md transition-all duration-300',
+                                  'bg-gradient-to-br border border-white/20',
+                                  nodeConfig.gradient || 'from-gray-400 to-gray-600',
+                                  'hover:scale-110 hover:rotate-3'
+                                )}
+                                style={{
+                                  boxShadow: `0 8px 16px -4px ${nodeConfig.color}30`
+                                }}
+                              >
+                                <div className="text-white drop-shadow-sm">
+                                  {nodeConfig.icon}
+                                </div>
+                              </div>
+                              {/* 图标光晕效果 */}
+                              <div 
+                                className="absolute inset-0 rounded-xl blur-md opacity-30 -z-10"
+                                style={{ backgroundColor: nodeConfig.color }}
+                              />
                             </div>
                             
                             {/* 标题和类型 */}
                             <div className="flex-1 min-w-0">
-                              <div className="text-base font-semibold text-gray-900 dark:text-gray-100 truncate">
+                              <div className="text-lg font-bold text-gray-900 dark:text-gray-100 truncate leading-tight">
                                 {node.data.label}
                               </div>
-                              <div className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">
+                              <div className="text-sm text-gray-600 dark:text-gray-400 mt-1 font-medium">
                                 {nodeConfig.label}
                               </div>
                             </div>
                           </div>
                           
-                          {/* 操作按钮 */}
+                          {/* 现代化操作按钮 */}
                           <div className={cn(
-                            'flex items-center gap-1 transition-opacity flex-shrink-0',
-                            selectedNode === node.id ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'
+                            'flex items-center gap-2 transition-all duration-300 flex-shrink-0',
+                            selectedNode === node.id ? 'opacity-100 scale-100' : 'opacity-0 scale-95 group-hover:opacity-100 group-hover:scale-100'
                           )}>
-                            <button
+                            <motion.button
+                              whileHover={{ scale: 1.1 }}
+                              whileTap={{ scale: 0.95 }}
                               onClick={(e) => {
                                 e.stopPropagation()
                                 setConfiguringNode(node.id)
                               }}
-                              className="p-1.5 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-md transition-colors"
+                              className="p-2 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-xl transition-all duration-200 shadow-sm hover:shadow-md"
                               title="配置"
                             >
-                              <Settings className="w-4 h-4 text-gray-500 dark:text-gray-400" />
-                            </button>
-                            <button
+                              <Settings className="w-4 h-4 text-gray-600 dark:text-gray-400" />
+                            </motion.button>
+                            <motion.button
+                              whileHover={{ scale: 1.1 }}
+                              whileTap={{ scale: 0.95 }}
                               onClick={(e) => {
                                 e.stopPropagation()
                                 deleteNode(node.id)
                               }}
-                              className="p-1.5 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-md transition-colors"
+                              className="p-2 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-xl transition-all duration-200 shadow-sm hover:shadow-md"
                               title="删除"
                             >
                               <Trash2 className="w-4 h-4 text-red-500 dark:text-red-400" />
-                            </button>
+                            </motion.button>
                           </div>
                         </div>
 
-                        {/* 输入输出参数展示 - 根据节点类型显示 */}
+                        {/* 现代化参数展示区域 */}
                         {(() => {
                           // 开始节点：只显示输入参数
                           if (node.type === 'start' && node.inputs.length > 0) {
                             return (
-                              <div className="space-y-2 pt-2 border-t border-gray-100 dark:border-gray-700">
-                                <div className="space-y-1">
-                                  <div className="text-xs font-medium text-gray-500 dark:text-gray-400 flex items-center gap-1">
-                                    <div className="w-2 h-2 rounded-full bg-green-500"></div>
-                                    输入 ({node.inputs.length})
+                              <div className="pt-3 border-t border-gray-100/60 dark:border-gray-700/60">
+                                <div className="space-y-3">
+                                  <div className="flex items-center gap-2">
+                                    <div className="w-3 h-3 rounded-full bg-gradient-to-r from-emerald-400 to-emerald-500 shadow-sm"></div>
+                                    <span className="text-sm font-semibold text-gray-700 dark:text-gray-300">
+                                      输入参数 ({node.inputs.length})
+                                    </span>
                                   </div>
-                                  <div className="flex flex-wrap gap-1">
+                                  <div className="flex flex-wrap gap-2">
                                     {node.inputs.slice(0, 3).map((input, idx) => (
-                                      <span
+                                      <motion.span
                                         key={idx}
-                                        className="px-2 py-0.5 text-xs bg-green-50 dark:bg-green-900/20 text-green-700 dark:text-green-400 rounded-md border border-green-200 dark:border-green-800 truncate max-w-[100px]"
+                                        initial={{ opacity: 0, scale: 0.8 }}
+                                        animate={{ opacity: 1, scale: 1 }}
+                                        transition={{ delay: idx * 0.1 }}
+                                        className="px-3 py-1.5 text-xs font-medium bg-gradient-to-r from-emerald-50 to-emerald-100 dark:from-emerald-900/30 dark:to-emerald-800/30 text-emerald-700 dark:text-emerald-400 rounded-lg border border-emerald-200/60 dark:border-emerald-700/60 shadow-sm hover:shadow-md transition-all duration-200 truncate max-w-[120px]"
                                         title={input}
                                       >
                                         {input}
-                                      </span>
+                                      </motion.span>
                                     ))}
                                     {node.inputs.length > 3 && (
-                                      <span className="px-2 py-0.5 text-xs text-gray-500 dark:text-gray-400">
+                                      <span className="px-3 py-1.5 text-xs font-medium text-gray-500 dark:text-gray-400 bg-gray-100 dark:bg-gray-700 rounded-lg">
                                         +{node.inputs.length - 3}
                                       </span>
                                     )}
@@ -2138,24 +2482,29 @@ func Run(inputs map[string]interface{}) (map[string]interface{}, error) {
                           // 结束节点：只显示输出参数
                           if (node.type === 'end' && node.outputs.length > 0) {
                             return (
-                              <div className="space-y-2 pt-2 border-t border-gray-100 dark:border-gray-700">
-                                <div className="space-y-1">
-                                  <div className="text-xs font-medium text-gray-500 dark:text-gray-400 flex items-center gap-1">
-                                    <div className="w-2 h-2 rounded-full bg-blue-500"></div>
-                                    输出 ({node.outputs.length})
+                              <div className="pt-3 border-t border-gray-100/60 dark:border-gray-700/60">
+                                <div className="space-y-3">
+                                  <div className="flex items-center gap-2">
+                                    <div className="w-3 h-3 rounded-full bg-gradient-to-r from-blue-400 to-blue-500 shadow-sm"></div>
+                                    <span className="text-sm font-semibold text-gray-700 dark:text-gray-300">
+                                      输出参数 ({node.outputs.length})
+                                    </span>
                                   </div>
-                                  <div className="flex flex-wrap gap-1">
+                                  <div className="flex flex-wrap gap-2">
                                     {node.outputs.slice(0, 3).map((output, idx) => (
-                                      <span
+                                      <motion.span
                                         key={idx}
-                                        className="px-2 py-0.5 text-xs bg-blue-50 dark:bg-blue-900/20 text-blue-700 dark:text-blue-400 rounded-md border border-blue-200 dark:border-blue-800 truncate max-w-[100px]"
+                                        initial={{ opacity: 0, scale: 0.8 }}
+                                        animate={{ opacity: 1, scale: 1 }}
+                                        transition={{ delay: idx * 0.1 }}
+                                        className="px-3 py-1.5 text-xs font-medium bg-gradient-to-r from-blue-50 to-blue-100 dark:from-blue-900/30 dark:to-blue-800/30 text-blue-700 dark:text-blue-400 rounded-lg border border-blue-200/60 dark:border-blue-700/60 shadow-sm hover:shadow-md transition-all duration-200 truncate max-w-[120px]"
                                         title={output}
                                       >
                                         {output}
-                                      </span>
+                                      </motion.span>
                                     ))}
                                     {node.outputs.length > 3 && (
-                                      <span className="px-2 py-0.5 text-xs text-gray-500 dark:text-gray-400">
+                                      <span className="px-3 py-1.5 text-xs font-medium text-gray-500 dark:text-gray-400 bg-gray-100 dark:bg-gray-700 rounded-lg">
                                         +{node.outputs.length - 3}
                                       </span>
                                     )}
@@ -2168,26 +2517,31 @@ func Run(inputs map[string]interface{}) (map[string]interface{}, error) {
                           // 其他节点：显示输入和输出参数
                           if (node.type !== 'start' && node.type !== 'end' && (node.inputs.length > 0 || node.outputs.length > 0)) {
                             return (
-                              <div className="space-y-2 pt-2 border-t border-gray-100 dark:border-gray-700">
+                              <div className="pt-3 border-t border-gray-100/60 dark:border-gray-700/60 space-y-4">
                                 {/* 输入参数 */}
                                 {node.inputs.length > 0 && (
-                                  <div className="space-y-1">
-                                    <div className="text-xs font-medium text-gray-500 dark:text-gray-400 flex items-center gap-1">
-                                      <div className="w-2 h-2 rounded-full bg-green-500"></div>
-                                      输入 ({node.inputs.length})
+                                  <div className="space-y-2">
+                                    <div className="flex items-center gap-2">
+                                      <div className="w-3 h-3 rounded-full bg-gradient-to-r from-emerald-400 to-emerald-500 shadow-sm"></div>
+                                      <span className="text-sm font-semibold text-gray-700 dark:text-gray-300">
+                                        输入 ({node.inputs.length})
+                                      </span>
                                     </div>
-                                    <div className="flex flex-wrap gap-1">
+                                    <div className="flex flex-wrap gap-2">
                                       {node.inputs.slice(0, 3).map((input, idx) => (
-                                        <span
+                                        <motion.span
                                           key={idx}
-                                          className="px-2 py-0.5 text-xs bg-green-50 dark:bg-green-900/20 text-green-700 dark:text-green-400 rounded-md border border-green-200 dark:border-green-800 truncate max-w-[100px]"
+                                          initial={{ opacity: 0, scale: 0.8 }}
+                                          animate={{ opacity: 1, scale: 1 }}
+                                          transition={{ delay: idx * 0.1 }}
+                                          className="px-3 py-1.5 text-xs font-medium bg-gradient-to-r from-emerald-50 to-emerald-100 dark:from-emerald-900/30 dark:to-emerald-800/30 text-emerald-700 dark:text-emerald-400 rounded-lg border border-emerald-200/60 dark:border-emerald-700/60 shadow-sm hover:shadow-md transition-all duration-200 truncate max-w-[120px]"
                                           title={input}
                                         >
                                           {input}
-                                        </span>
+                                        </motion.span>
                                       ))}
                                       {node.inputs.length > 3 && (
-                                        <span className="px-2 py-0.5 text-xs text-gray-500 dark:text-gray-400">
+                                        <span className="px-3 py-1.5 text-xs font-medium text-gray-500 dark:text-gray-400 bg-gray-100 dark:bg-gray-700 rounded-lg">
                                           +{node.inputs.length - 3}
                                         </span>
                                       )}
@@ -2197,23 +2551,28 @@ func Run(inputs map[string]interface{}) (map[string]interface{}, error) {
 
                                 {/* 输出参数 - gateway 节点不显示输出参数标签，因为它们是逻辑分支而不是数据输出 */}
                                 {node.outputs.length > 0 && node.type !== 'gateway' && (
-                                  <div className="space-y-1">
-                                    <div className="text-xs font-medium text-gray-500 dark:text-gray-400 flex items-center gap-1">
-                                      <div className="w-2 h-2 rounded-full bg-blue-500"></div>
-                                      输出 ({node.outputs.length})
+                                  <div className="space-y-2">
+                                    <div className="flex items-center gap-2">
+                                      <div className="w-3 h-3 rounded-full bg-gradient-to-r from-blue-400 to-blue-500 shadow-sm"></div>
+                                      <span className="text-sm font-semibold text-gray-700 dark:text-gray-300">
+                                        输出 ({node.outputs.length})
+                                      </span>
                                     </div>
-                                    <div className="flex flex-wrap gap-1">
+                                    <div className="flex flex-wrap gap-2">
                                       {node.outputs.slice(0, 3).map((output, idx) => (
-                                        <span
+                                        <motion.span
                                           key={idx}
-                                          className="px-2 py-0.5 text-xs bg-blue-50 dark:bg-blue-900/20 text-blue-700 dark:text-blue-400 rounded-md border border-blue-200 dark:border-blue-800 truncate max-w-[100px]"
+                                          initial={{ opacity: 0, scale: 0.8 }}
+                                          animate={{ opacity: 1, scale: 1 }}
+                                          transition={{ delay: idx * 0.1 }}
+                                          className="px-3 py-1.5 text-xs font-medium bg-gradient-to-r from-blue-50 to-blue-100 dark:from-blue-900/30 dark:to-blue-800/30 text-blue-700 dark:text-blue-400 rounded-lg border border-blue-200/60 dark:border-blue-700/60 shadow-sm hover:shadow-md transition-all duration-200 truncate max-w-[120px]"
                                           title={output}
                                         >
                                           {output}
-                                        </span>
+                                        </motion.span>
                                       ))}
                                       {node.outputs.length > 3 && (
-                                        <span className="px-2 py-0.5 text-xs text-gray-500 dark:text-gray-400">
+                                        <span className="px-3 py-1.5 text-xs font-medium text-gray-500 dark:text-gray-400 bg-gray-100 dark:bg-gray-700 rounded-lg">
                                           +{node.outputs.length - 3}
                                         </span>
                                       )}
@@ -2229,65 +2588,123 @@ func Run(inputs map[string]interface{}) (map[string]interface{}, error) {
                       </div>
                     </div>
 
-                    {/* 输入连接点 (绿色) - 优化后的样式 */}
+                    {/* 现代化输入连接点 - 渐变设计 */}
                     {node.inputs.map((input, index) => {
                       // 计算连接点位置：在节点左侧，根据输入参数数量均匀分布
                       const totalInputs = node.inputs.length
-                      const spacing = totalInputs > 1 ? 50 / (totalInputs - 1) : 0
-                      const topPosition = 40 + (index * spacing)
+                      const spacing = totalInputs > 1 ? 60 / (totalInputs - 1) : 0
+                      const topPosition = 45 + (index * spacing)
                       
                       return (
-                        <div
+                        <motion.div
                           key={input}
-                          className={cn(
-                            "absolute w-4 h-4 rounded-full cursor-pointer border-2 border-white dark:border-gray-800 transition-all z-20 shadow-md",
-                            isConnecting && connectionStart?.nodeId !== node.id
-                              ? "bg-green-500 hover:bg-green-600 scale-125 ring-2 ring-green-300"
-                              : "bg-green-500 hover:bg-green-600 hover:scale-110"
-                          )}
+                          className="absolute z-30"
                           style={{
-                            left: -8,
+                            left: -10,
                             top: `${topPosition}px`
                           }}
-                          onMouseDown={(e) => {
-                            e.stopPropagation()
-                            if (isConnecting) {
-                              completeConnection(node.id, input)
-                            }
-                          }}
-                          title={`输入: ${input}`}
-                        />
+                          whileHover={{ scale: 1.2 }}
+                          whileTap={{ scale: 0.9 }}
+                        >
+                          {/* 连接点光晕效果 */}
+                          <div 
+                            className={cn(
+                              "absolute inset-0 rounded-full blur-sm opacity-60 transition-all duration-300",
+                              isConnecting && connectionStart?.nodeId !== node.id
+                                ? "bg-emerald-400 scale-150"
+                                : "bg-emerald-300 scale-100"
+                            )}
+                          />
+                          {/* 主连接点 */}
+                          <div
+                            className={cn(
+                              "relative w-5 h-5 rounded-full cursor-pointer transition-all duration-300 transform-gpu",
+                              "bg-gradient-to-br from-emerald-400 to-emerald-600",
+                              "border-2 border-white dark:border-gray-800 shadow-lg",
+                              "hover:shadow-emerald-300/50 hover:shadow-xl",
+                              isConnecting && connectionStart?.nodeId !== node.id
+                                ? "ring-4 ring-emerald-300/60 scale-110 animate-pulse"
+                                : "hover:scale-110"
+                            )}
+                            onMouseDown={(e) => {
+                              e.stopPropagation()
+                              if (isConnecting) {
+                                completeConnection(node.id, input)
+                              }
+                            }}
+                            title={`输入: ${input}`}
+                          >
+                            {/* 内部高光 */}
+                            <div className="absolute top-0.5 left-0.5 w-2 h-2 bg-white/40 rounded-full blur-sm" />
+                          </div>
+                        </motion.div>
                       )
                     })}
 
-                    {/* 输出连接点 (蓝色) - 优化后的样式 */}
+                    {/* 现代化输出连接点 - 渐变设计 */}
                     {node.outputs.map((output, index) => {
                       // 计算连接点位置：在节点右侧，根据输出参数数量均匀分布
                       const totalOutputs = node.outputs.length
-                      const spacing = totalOutputs > 1 ? 50 / (totalOutputs - 1) : 0
-                      const topPosition = 40 + (index * spacing)
+                      const spacing = totalOutputs > 1 ? 60 / (totalOutputs - 1) : 0
+                      const topPosition = 45 + (index * spacing)
+                      
+                      // 检查此输出点是否已经连接
+                      const isConnected = isOutputConnected(node.id, output)
+                      // 检查是否可以开始连接（未连接且不在连接模式中）
+                      const canStartConnection = !isConnected && !isConnecting
                       
                       return (
-                        <div
+                        <motion.div
                           key={output}
-                          className={cn(
-                            "absolute w-4 h-4 rounded-full cursor-pointer border-2 border-white dark:border-gray-800 transition-all z-20 shadow-md",
-                            !isConnecting
-                              ? "bg-blue-500 hover:bg-blue-600 hover:scale-110"
-                              : "bg-gray-400 cursor-not-allowed"
-                          )}
+                          className="absolute z-30"
                           style={{
-                            right: -8,
+                            right: -10,
                             top: `${topPosition}px`
                           }}
-                          onMouseDown={(e) => {
-                            e.stopPropagation()
-                            if (!isConnecting) {
-                              startConnection(node.id, output)
+                          whileHover={{ scale: canStartConnection ? 1.2 : 1.1 }}
+                          whileTap={{ scale: canStartConnection ? 0.9 : 1 }}
+                        >
+                          {/* 连接点光晕效果 */}
+                          <div 
+                            className={cn(
+                              "absolute inset-0 rounded-full blur-sm opacity-60 transition-all duration-300",
+                              canStartConnection
+                                ? "bg-blue-300 scale-100"
+                                : isConnected
+                                ? "bg-green-300 scale-90"
+                                : "bg-gray-300 scale-75"
+                            )}
+                          />
+                          
+                          {/* 主连接点 */}
+                          <div
+                            className={cn(
+                              "relative w-5 h-5 rounded-full transition-all duration-300 transform-gpu",
+                              "border-2 border-white dark:border-gray-800 shadow-lg",
+                              canStartConnection
+                                ? "bg-gradient-to-br from-blue-400 to-blue-600 hover:shadow-blue-300/50 hover:shadow-xl cursor-pointer"
+                                : isConnected
+                                ? "bg-gradient-to-br from-green-400 to-green-600 shadow-green-300/50 cursor-default"
+                                : "bg-gradient-to-br from-gray-300 to-gray-500 cursor-not-allowed opacity-60"
+                            )}
+                            onMouseDown={(e) => {
+                              e.stopPropagation()
+                              if (canStartConnection) {
+                                startConnection(node.id, output)
+                              }
+                            }}
+                            title={
+                              isConnected 
+                                ? `输出: ${output} (已连接)` 
+                                : canStartConnection 
+                                ? `输出: ${output}` 
+                                : `输出: ${output} (连接模式中)`
                             }
-                          }}
-                          title={`输出: ${output}`}
-                        />
+                          >
+                            {/* 内部高光 */}
+                            <div className="absolute top-0.5 left-0.5 w-2 h-2 bg-white/40 rounded-full blur-sm" />
+                          </div>
+                        </motion.div>
                       )
                     })}
                   </motion.div>
@@ -2685,9 +3102,9 @@ func Run(inputs map[string]interface{}) (map[string]interface{}, error) {
                 </div>
               </div>
               
-              {/* 节点列表 */}
-              <div className="flex-1 overflow-y-auto p-4">
-                <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-6 xl:grid-cols-7 gap-2">
+              {/* 现代化节点列表 */}
+              <div className="flex-1 overflow-y-auto p-6">
+                <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-4">
                   {Object.entries(NODE_TYPES)
                     .filter(([type, config]) => 
                       config.label.toLowerCase().includes(nodeSearchQuery.toLowerCase()) ||
@@ -2696,45 +3113,90 @@ func Run(inputs map[string]interface{}) (map[string]interface{}, error) {
                     .map(([type, config]) => (
                       <motion.div
                         key={type}
-                        className="flex flex-col items-center p-2.5 bg-gray-50 dark:bg-gray-700 rounded-lg cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-600 transition-colors border border-transparent hover:border-blue-300 dark:hover:border-blue-600"
-                        whileHover={{ scale: 1.02, y: -1 }}
-                        whileTap={{ scale: 0.98 }}
+                        className="group relative"
+                        whileHover={{ scale: 1.05, y: -2 }}
+                        whileTap={{ scale: 0.95 }}
                         onClick={() => {
-                          // 简化：将节点添加到画布中心位置（0, 0），然后自动居中显示
                           addNode(type as WorkflowNode['type'], { x: 0, y: 0 })
-                          
-                          // 添加节点后，自动居中显示所有节点
                           setTimeout(() => {
                             centerOnNodes()
                           }, 100)
-                          
                           setShowNodeDrawer(false)
                           setNodeSearchQuery('')
                         }}
                       >
-                        <div 
-                          className="p-1.5 rounded mb-1.5 flex items-center justify-center"
-                          style={{ 
-                            backgroundColor: `${config.color || '#64748b'}15`,
-                            color: config.color || '#64748b'
-                          }}
-                        >
-                          {config.icon}
+                        {/* 节点卡片 */}
+                        <div className="relative flex flex-col items-center p-4 bg-gradient-to-br from-white via-gray-50 to-white dark:from-gray-800 dark:via-gray-850 dark:to-gray-800 rounded-2xl cursor-pointer transition-all duration-300 border border-gray-200/60 dark:border-gray-700/60 hover:border-gray-300/80 dark:hover:border-gray-600/80 shadow-lg hover:shadow-2xl backdrop-blur-sm overflow-hidden">
+                          
+                          {/* 背景装饰 */}
+                          <div className="absolute top-0 right-0 w-16 h-16 opacity-10">
+                            <div 
+                              className="w-full h-full rounded-full blur-xl"
+                              style={{ backgroundColor: config.color }}
+                            />
+                          </div>
+                          
+                          {/* 顶部装饰条 */}
+                          <div 
+                            className={cn(
+                              'absolute top-0 left-0 right-0 h-1 bg-gradient-to-r',
+                              config.gradient || 'from-gray-400 to-gray-600'
+                            )}
+                          />
+                          
+                          {/* 图标容器 */}
+                          <div className="relative mb-3">
+                            <div 
+                              className={cn(
+                                'p-3 rounded-xl shadow-lg transition-all duration-300',
+                                'bg-gradient-to-br border border-white/20',
+                                config.gradient || 'from-gray-400 to-gray-600',
+                                'group-hover:scale-110 group-hover:rotate-3'
+                              )}
+                              style={{
+                                boxShadow: `0 8px 16px -4px ${config.color}30`
+                              }}
+                            >
+                              <div className="text-white drop-shadow-sm">
+                                {config.icon}
+                              </div>
+                            </div>
+                            {/* 图标光晕效果 */}
+                            <div 
+                              className="absolute inset-0 rounded-xl blur-md opacity-30 -z-10 group-hover:opacity-50 transition-opacity duration-300"
+                              style={{ backgroundColor: config.color }}
+                            />
+                          </div>
+                          
+                          {/* 标题 */}
+                          <span className="text-sm font-bold text-gray-900 dark:text-white text-center leading-tight">
+                            {config.label}
+                          </span>
+                          
+                          {/* 悬停效果 */}
+                          <div className="absolute inset-0 bg-gradient-to-t from-transparent via-transparent to-white/5 opacity-0 group-hover:opacity-100 transition-opacity duration-300 rounded-2xl" />
                         </div>
-                        <span className="text-xs font-medium text-gray-900 dark:text-white text-center leading-tight">
-                          {config.label}
-                        </span>
                       </motion.div>
                     ))}
                 </div>
+                
+                {/* 空状态 */}
                 {Object.entries(NODE_TYPES).filter(([type, config]) => 
                   config.label.toLowerCase().includes(nodeSearchQuery.toLowerCase()) ||
                   type.toLowerCase().includes(nodeSearchQuery.toLowerCase())
                 ).length === 0 && (
-                  <div className="text-center py-12 text-gray-500 dark:text-gray-400">
-                    <Search className="w-12 h-12 mx-auto mb-4 opacity-50" />
-                    <p>未找到匹配的节点类型</p>
-                  </div>
+                  <motion.div 
+                    initial={{ opacity: 0, y: 20 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    className="text-center py-16 text-gray-500 dark:text-gray-400"
+                  >
+                    <div className="relative">
+                      <Search className="w-16 h-16 mx-auto mb-4 opacity-30" />
+                      <div className="absolute top-0 left-1/2 transform -translate-x-1/2 w-16 h-16 bg-gradient-to-r from-blue-400 to-purple-500 rounded-full blur-xl opacity-20 animate-pulse" />
+                    </div>
+                    <p className="text-lg font-medium">未找到匹配的节点类型</p>
+                    <p className="text-sm mt-2 opacity-75">尝试使用不同的关键词搜索</p>
+                  </motion.div>
                 )}
               </div>
             </motion.div>
@@ -2767,8 +3229,8 @@ func Run(inputs map[string]interface{}) (map[string]interface{}, error) {
                 <li>点击蓝色点开始连接</li>
                 <li>拖拽到绿色点完成连接</li>
                 <li>点击连接线选中连接</li>
+                <li>右键连接线打开菜单</li>
                 <li>双击连接线直接删除连接</li>
-                <li>点击"删除连接"按钮删除选中连接</li>
                 <li>按Delete键删除选中连接</li>
               </ul>
             </div>
