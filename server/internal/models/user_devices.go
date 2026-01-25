@@ -213,6 +213,32 @@ func DeleteUserDevice(db *gorm.DB, userID uint, deviceID string) error {
 
 // TrustUserDevice 信任设备
 func TrustUserDevice(db *gorm.DB, userID uint, deviceID string) error {
+	// 先检查设备是否存在
+	device, err := GetUserDevice(db, userID, deviceID)
+	if err != nil && err != gorm.ErrRecordNotFound {
+		return err
+	}
+	
+	// 如果设备不存在，先创建一个基本记录（这种情况理论上不应该发生，但为了健壮性）
+	if device == nil {
+		device = &UserDevice{
+			UserID:     userID,
+			DeviceID:   deviceID,
+			DeviceName: "Unknown Device",
+			DeviceType: "unknown",
+			OS:         "unknown",
+			Browser:    "unknown",
+			IsTrusted:  true, // 直接设置为信任
+			IsActive:   true,
+			LastUsedAt: time.Now(),
+		}
+		if err := db.Create(device).Error; err != nil {
+			return err
+		}
+		return nil
+	}
+	
+	// 如果设备存在，更新信任状态
 	return db.Model(&UserDevice{}).
 		Where("user_id = ? AND device_id = ?", userID, deviceID).
 		Update("is_trusted", true).Error
