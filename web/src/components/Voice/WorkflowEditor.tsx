@@ -21,13 +21,19 @@ import {
   Minimize2,
   TestTube,
   ChevronDown,
-  ChevronUp
+  ChevronUp,
+  ChevronLeft,
+  ChevronRight,
+  Package,
+  CheckCircle
 } from 'lucide-react'
 import { cn } from '@/utils/cn'
 import Modal from '@/components/UI/Modal'
 import Button from '@/components/UI/Button'
 import Input from '@/components/UI/Input'
+import { useToast } from '@/components/UI/ToastContainer'
 import { workflowService } from '@/api/workflow'
+import { workflowPluginService, WorkflowPluginCategory } from '@/api/workflowPlugin'
 import { useI18nStore } from '@/stores/i18nStore'
 
 // 懒加载Monaco Editor，优化首次加载性能
@@ -36,11 +42,12 @@ const MonacoEditor = lazy(() => import('@monaco-editor/react'))
 // 节点类型定义（根据后端定义）
 export interface WorkflowNode {
   id: string
-  type: 'start' | 'end' | 'task' | 'gateway' | 'event' | 'subflow' | 'parallel' | 'wait' | 'timer' | 'script'
+  type: 'start' | 'end' | 'task' | 'gateway' | 'event' | 'subflow' | 'parallel' | 'wait' | 'timer' | 'script' | 'plugin' | 'workflow_plugin'
   position: { x: number; y: number }
   data: {
     label: string
     config?: any
+    pluginId?: number // 插件ID，用于插件节点
     [key: string]: any
   }
   inputs: string[]
@@ -160,6 +167,24 @@ const getNodeTypes = (t: (key: string) => string) => ({
     shadowColor: 'shadow-slate-200',
     inputs: 1,
     outputs: 1
+  },
+  plugin: {
+    label: t('workflow.nodes.plugin'),
+    icon: <Package className="w-5 h-5" />,
+    color: '#7c2d12', // 棕色
+    gradient: 'from-orange-400 to-orange-600',
+    shadowColor: 'shadow-orange-200',
+    inputs: 1,
+    outputs: 1
+  },
+  workflow_plugin: {
+    label: t('workflow.nodes.workflowPlugin'),
+    icon: <Package className="w-5 h-5" />,
+    color: '#7c3aed', // 紫色
+    gradient: 'from-purple-400 to-purple-600',
+    shadowColor: 'shadow-purple-200',
+    inputs: 1,
+    outputs: 1
   }
 })
 
@@ -179,6 +204,7 @@ const WorkflowEditor: React.FC<WorkflowEditorProps> = ({
   className = ''
 }) => {
   const { t } = useI18nStore()
+  const toast = useToast()
   const NODE_TYPES = getNodeTypes(t)
   const canvasRef = useRef<HTMLDivElement>(null)
   const [nodes, setNodes] = useState<WorkflowNode[]>(workflow?.nodes || [])
@@ -196,8 +222,31 @@ const WorkflowEditor: React.FC<WorkflowEditorProps> = ({
   const [canvasScale, setCanvasScale] = useState(1)
   const [showHelpModal, setShowHelpModal] = useState(false)
   const [showNodeDrawer, setShowNodeDrawer] = useState(false)
+  const [installedPlugins, setInstalledPlugins] = useState<any[]>([])
+  const [loadingPlugins, setLoadingPlugins] = useState(false)
   const [nodeSearchQuery, setNodeSearchQuery] = useState('')
   const [isCodeEditorFullscreen, setIsCodeEditorFullscreen] = useState(false)
+
+  // 加载已安装的插件
+  const loadInstalledPlugins = useCallback(async () => {
+    setLoadingPlugins(true)
+    try {
+      const response = await workflowPluginService.listInstalledWorkflowPlugins()
+      if (response.data) {
+        setInstalledPlugins(response.data)
+      }
+    } catch (error) {
+      console.error('加载已安装插件失败:', error)
+    } finally {
+      setLoadingPlugins(false)
+    }
+  }, [])
+
+  // 组件挂载时加载插件
+  useEffect(() => {
+    loadInstalledPlugins()
+  }, [])
+  const [showPublishModal, setShowPublishModal] = useState(false)
   const [showRunParamsModal, setShowRunParamsModal] = useState(false)
   const [runParameters, setRunParameters] = useState<Record<string, string>>({})
   const [availableEventTypes, setAvailableEventTypes] = useState<string[]>([])
@@ -225,6 +274,30 @@ const WorkflowEditor: React.FC<WorkflowEditorProps> = ({
       },
       inputs: Array(NODE_TYPES[type].inputs).fill('').map((_, i) => `input-${i}`),
       outputs: Array(NODE_TYPES[type].outputs).fill('').map((_, i) => `output-${i}`)
+    }
+    setNodes(prev => [...prev, newNode])
+    // 选中新添加的节点
+    setSelectedNode(nodeId)
+    return nodeId
+  }, [])
+
+  // 添加插件节点
+  const addPluginNode = useCallback((plugin: any, position: { x: number; y: number }) => {
+    const nodeId = `plugin-${Date.now()}`
+    const newNode: WorkflowNode = {
+      id: nodeId,
+      type: 'workflow_plugin',
+      position,
+      data: {
+        label: plugin.plugin?.displayName || plugin.plugin?.name || '插件节点',
+        config: {
+          pluginId: plugin.pluginId,
+          parameters: {}
+        },
+        pluginId: plugin.pluginId
+      },
+      inputs: plugin.plugin?.inputSchema?.parameters?.map((p: any, i: number) => p.name || `input-${i}`) || ['input-0'],
+      outputs: plugin.plugin?.outputSchema?.parameters?.map((p: any, i: number) => p.name || `output-${i}`) || ['output-0']
     }
     setNodes(prev => [...prev, newNode])
     // 选中新添加的节点
@@ -295,6 +368,16 @@ func Run(inputs map[string]interface{}) (map[string]interface{}, error) {
 	
 	return result, nil
 }`
+        }
+      case 'plugin':
+        return {
+          pluginId: null,
+          parameters: {}
+        }
+      case 'workflow_plugin':
+        return {
+          pluginId: null,
+          parameters: {}
         }
       default:
         return {}
@@ -1287,6 +1370,327 @@ func Run(inputs map[string]interface{}) (map[string]interface{}, error) {
                   </div>
                 )}
                 
+                {node.type === 'plugin' && (
+                  <div className="space-y-4">
+                    {/* 插件信息显示 */}
+                    {(() => {
+                      const plugin = installedPlugins.find(p => p.pluginId === node.data.pluginId)
+                      if (!plugin) {
+                        return (
+                          <div className="p-4 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg">
+                            <div className="flex items-center gap-2 text-red-700 dark:text-red-400">
+                              <AlertCircle className="w-4 h-4" />
+                              <span className="text-sm font-medium">插件未找到</span>
+                            </div>
+                            <p className="text-xs text-red-600 dark:text-red-500 mt-1">
+                              该节点关联的插件可能已被卸载或不存在
+                            </p>
+                          </div>
+                        )
+                      }
+                      
+                      return (
+                        <div className="space-y-4">
+                          {/* 插件基本信息 */}
+                          <div className="p-4 bg-gray-50 dark:bg-gray-800 rounded-lg">
+                            <div className="flex items-center gap-3 mb-2">
+                              <div 
+                                className="p-2 rounded-lg"
+                                style={{ 
+                                  backgroundColor: plugin.plugin?.color || '#7c2d12',
+                                  color: 'white'
+                                }}
+                              >
+                                <Package className="w-4 h-4" />
+                              </div>
+                              <div>
+                                <h4 className="text-sm font-semibold text-gray-900 dark:text-white">
+                                  {plugin.plugin?.displayName || plugin.plugin?.name}
+                                </h4>
+                                <p className="text-xs text-gray-500 dark:text-gray-400">
+                                  v{plugin.version} • {plugin.plugin?.category}
+                                </p>
+                              </div>
+                            </div>
+                            {plugin.plugin?.description && (
+                              <p className="text-xs text-gray-600 dark:text-gray-400">
+                                {plugin.plugin.description}
+                              </p>
+                            )}
+                          </div>
+                          
+                          {/* 输入参数配置 */}
+                          {plugin.plugin?.inputSchema?.parameters?.length > 0 && (
+                            <div>
+                              <h5 className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-3">
+                                输入参数配置
+                              </h5>
+                              <div className="space-y-3">
+                                {plugin.plugin.inputSchema.parameters.map((param: any, index: number) => (
+                                  <div key={index} className="space-y-2">
+                                    <label className="block text-xs font-medium text-gray-600 dark:text-gray-400">
+                                      {param.name}
+                                      {param.required && <span className="text-red-500 ml-1">*</span>}
+                                    </label>
+                                    {param.type === 'boolean' ? (
+                                      <div className="flex items-center gap-2">
+                                        <input
+                                          type="checkbox"
+                                          checked={node.data.config?.parameters?.[param.name] || false}
+                                          onChange={(e) => updateNodeConfig(node.id, {
+                                            ...(node.data.config || {}),
+                                            parameters: {
+                                              ...(node.data.config?.parameters || {}),
+                                              [param.name]: e.target.checked
+                                            }
+                                          })}
+                                          className="rounded border-gray-300 dark:border-gray-600"
+                                        />
+                                        <span className="text-xs text-gray-500 dark:text-gray-400">
+                                          {param.description}
+                                        </span>
+                                      </div>
+                                    ) : param.type === 'number' ? (
+                                      <input
+                                        type="number"
+                                        value={node.data.config?.parameters?.[param.name] || param.default || ''}
+                                        onChange={(e) => updateNodeConfig(node.id, {
+                                          ...(node.data.config || {}),
+                                          parameters: {
+                                            ...(node.data.config?.parameters || {}),
+                                            [param.name]: parseFloat(e.target.value) || 0
+                                          }
+                                        })}
+                                        placeholder={param.example || param.default}
+                                        className="w-full px-3 py-2 text-sm border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+                                      />
+                                    ) : (
+                                      <input
+                                        type="text"
+                                        value={node.data.config?.parameters?.[param.name] || param.default || ''}
+                                        onChange={(e) => updateNodeConfig(node.id, {
+                                          ...(node.data.config || {}),
+                                          parameters: {
+                                            ...(node.data.config?.parameters || {}),
+                                            [param.name]: e.target.value
+                                          }
+                                        })}
+                                        placeholder={param.example || param.default}
+                                        className="w-full px-3 py-2 text-sm border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+                                      />
+                                    )}
+                                    {param.description && (
+                                      <p className="text-xs text-gray-500 dark:text-gray-400">
+                                        {param.description}
+                                      </p>
+                                    )}
+                                  </div>
+                                ))}
+                              </div>
+                            </div>
+                          )}
+                          
+                          {/* 输出参数说明 */}
+                          {plugin.plugin?.outputSchema?.parameters?.length > 0 && (
+                            <div>
+                              <h5 className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-3">
+                                输出参数说明
+                              </h5>
+                              <div className="space-y-2">
+                                {plugin.plugin.outputSchema.parameters.map((param: any, index: number) => (
+                                  <div key={index} className="flex items-center gap-2 text-xs">
+                                    <span className="font-medium text-gray-600 dark:text-gray-400">
+                                      {param.name}
+                                    </span>
+                                    <span className="px-2 py-1 bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-400 rounded">
+                                      {param.type}
+                                    </span>
+                                    {param.description && (
+                                      <span className="text-gray-500 dark:text-gray-500">
+                                        {param.description}
+                                      </span>
+                                    )}
+                                  </div>
+                                ))}
+                              </div>
+                            </div>
+                          )}
+                        </div>
+                      )
+                    })()}
+                  </div>
+                )}
+                
+                {node.type === 'workflow_plugin' && (
+                  <div className="space-y-4">
+                    {/* 工作流插件信息显示 */}
+                    {(() => {
+                      const plugin = installedPlugins.find(p => p.pluginId === node.data.pluginId)
+                      if (!plugin) {
+                        return (
+                          <div className="p-4 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg">
+                            <div className="flex items-center gap-2 text-red-700 dark:text-red-400">
+                              <AlertCircle className="w-4 h-4" />
+                              <span className="text-sm font-medium">工作流插件未找到</span>
+                            </div>
+                            <p className="text-xs text-red-600 dark:text-red-500 mt-1">
+                              该节点关联的工作流插件可能已被卸载或不存在
+                            </p>
+                          </div>
+                        )
+                      }
+                      
+                      return (
+                        <div className="space-y-4">
+                          {/* 工作流插件基本信息 */}
+                          <div className="p-4 bg-gradient-to-r from-purple-50 to-blue-50 dark:from-purple-900/20 dark:to-blue-900/20 border border-purple-200 dark:border-purple-800 rounded-lg">
+                            <div className="flex items-center gap-3 mb-2">
+                              <div 
+                                className="p-2 rounded-lg bg-gradient-to-r from-purple-500 to-blue-500 text-white"
+                                style={{ 
+                                  background: plugin.plugin?.color 
+                                    ? `linear-gradient(to right, ${plugin.plugin.color}, ${plugin.plugin.color}CC)` 
+                                    : undefined
+                                }}
+                              >
+                                <Package className="w-4 h-4" />
+                              </div>
+                              <div>
+                                <h4 className="text-sm font-semibold text-gray-900 dark:text-white">
+                                  {plugin.plugin?.displayName || plugin.plugin?.name}
+                                </h4>
+                                <p className="text-xs text-gray-500 dark:text-gray-400">
+                                  工作流插件 • v{plugin.version} • {plugin.plugin?.category}
+                                </p>
+                              </div>
+                            </div>
+                            {plugin.plugin?.description && (
+                              <p className="text-xs text-gray-600 dark:text-gray-400">
+                                {plugin.plugin.description}
+                              </p>
+                            )}
+                            <div className="mt-2 p-2 bg-purple-100 dark:bg-purple-900/30 border border-purple-200 dark:border-purple-700 rounded text-xs text-purple-800 dark:text-purple-200">
+                              <strong>说明：</strong>工作流插件节点会执行一个完整的子工作流，输入参数会传递给子工作流的开始节点，输出参数来自子工作流的结束节点。
+                            </div>
+                          </div>
+                          
+                          {/* 输入参数配置 */}
+                          {plugin.plugin?.inputSchema?.parameters?.length > 0 && (
+                            <div>
+                              <h5 className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-3 flex items-center gap-2">
+                                <div className="w-3 h-3 rounded-full bg-gradient-to-r from-emerald-400 to-emerald-500"></div>
+                                输入参数配置
+                              </h5>
+                              <div className="space-y-3">
+                                {plugin.plugin.inputSchema.parameters.map((param: any, index: number) => (
+                                  <div key={index} className="space-y-2">
+                                    <label className="block text-xs font-medium text-gray-600 dark:text-gray-400">
+                                      {param.name}
+                                      {param.required && <span className="text-red-500 ml-1">*</span>}
+                                    </label>
+                                    {param.type === 'boolean' ? (
+                                      <div className="flex items-center gap-2">
+                                        <input
+                                          type="checkbox"
+                                          checked={node.data.config?.parameters?.[param.name] || false}
+                                          onChange={(e) => updateNodeConfig(node.id, {
+                                            ...(node.data.config || {}),
+                                            parameters: {
+                                              ...(node.data.config?.parameters || {}),
+                                              [param.name]: e.target.checked
+                                            }
+                                          })}
+                                          className="rounded border-gray-300 dark:border-gray-600 text-purple-600 focus:ring-purple-500"
+                                        />
+                                        <span className="text-xs text-gray-500 dark:text-gray-400">
+                                          {param.description}
+                                        </span>
+                                      </div>
+                                    ) : param.type === 'number' ? (
+                                      <input
+                                        type="number"
+                                        value={node.data.config?.parameters?.[param.name] || param.default || ''}
+                                        onChange={(e) => updateNodeConfig(node.id, {
+                                          ...(node.data.config || {}),
+                                          parameters: {
+                                            ...(node.data.config?.parameters || {}),
+                                            [param.name]: parseFloat(e.target.value) || 0
+                                          }
+                                        })}
+                                        placeholder={param.example || param.default}
+                                        className="w-full px-3 py-2 text-sm border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-purple-500"
+                                      />
+                                    ) : (
+                                      <input
+                                        type="text"
+                                        value={node.data.config?.parameters?.[param.name] || param.default || ''}
+                                        onChange={(e) => updateNodeConfig(node.id, {
+                                          ...(node.data.config || {}),
+                                          parameters: {
+                                            ...(node.data.config?.parameters || {}),
+                                            [param.name]: e.target.value
+                                          }
+                                        })}
+                                        placeholder={param.example || param.default}
+                                        className="w-full px-3 py-2 text-sm border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-purple-500"
+                                      />
+                                    )}
+                                    {param.description && (
+                                      <p className="text-xs text-gray-500 dark:text-gray-400">
+                                        {param.description}
+                                      </p>
+                                    )}
+                                  </div>
+                                ))}
+                              </div>
+                            </div>
+                          )}
+                          
+                          {/* 输出参数说明 */}
+                          {plugin.plugin?.outputSchema?.parameters?.length > 0 && (
+                            <div>
+                              <h5 className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-3 flex items-center gap-2">
+                                <div className="w-3 h-3 rounded-full bg-gradient-to-r from-blue-400 to-blue-500"></div>
+                                输出参数说明
+                              </h5>
+                              <div className="space-y-2">
+                                {plugin.plugin.outputSchema.parameters.map((param: any, index: number) => (
+                                  <div key={index} className="flex items-center gap-2 text-xs">
+                                    <span className="font-medium text-gray-600 dark:text-gray-400">
+                                      {param.name}
+                                    </span>
+                                    <span className="px-2 py-1 bg-gradient-to-r from-blue-100 to-purple-100 dark:from-blue-900/30 dark:to-purple-900/30 text-blue-700 dark:text-blue-400 rounded border border-blue-200 dark:border-blue-700">
+                                      {param.type}
+                                    </span>
+                                    {param.description && (
+                                      <span className="text-gray-500 dark:text-gray-500">
+                                        {param.description}
+                                      </span>
+                                    )}
+                                  </div>
+                                ))}
+                              </div>
+                            </div>
+                          )}
+                          
+                          {/* 工作流插件特有的执行说明 */}
+                          <div className="p-3 bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg">
+                            <div className="text-xs text-blue-800 dark:text-blue-200">
+                              <div className="font-semibold mb-1">执行流程：</div>
+                              <div className="space-y-1">
+                                <div>1. 当前工作流执行到此节点时，会启动子工作流</div>
+                                <div>2. 输入参数会传递给子工作流的开始节点</div>
+                                <div>3. 子工作流完整执行后，输出结果返回到当前工作流</div>
+                                <div>4. 输出数据可在后续节点中通过 <code className="bg-blue-100 dark:bg-blue-900 px-1 rounded">context.{node.id}.参数名</code> 访问</div>
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+                      )
+                    })()}
+                  </div>
+                )}
+                
                 {node.type === 'timer' && (
                   <div className="space-y-4">
                     <Input
@@ -1530,8 +1934,8 @@ func Run(inputs map[string]interface{}) (map[string]interface{}, error) {
                             ))
                           }}
                         >
-                          <Plus className="w-4 h-4 mr-1" />
-                          添加
+                          <Plus className="w-4 h-4" />
+                          <span>添加</span>
                         </Button>
                       </div>
                       {node.inputs && node.inputs.length > 0 ? (
@@ -1598,8 +2002,8 @@ func Run(inputs map[string]interface{}) (map[string]interface{}, error) {
                             ))
                           }}
                         >
-                          <Plus className="w-4 h-4 mr-1" />
-                          添加
+                          <Plus className="w-4 h-4" />
+                          <span>添加</span>
                         </Button>
                       </div>
                       {node.outputs && node.outputs.length > 0 ? (
@@ -1670,8 +2074,8 @@ func Run(inputs map[string]interface{}) (map[string]interface{}, error) {
                             ))
                           }}
                         >
-                          <Plus className="w-4 h-4 mr-1" />
-                          添加
+                          <Plus className="w-4 h-4" />
+                          <span>添加</span>
                         </Button>
                       </div>
                       {node.inputs && node.inputs.length > 0 ? (
@@ -1728,8 +2132,8 @@ func Run(inputs map[string]interface{}) (map[string]interface{}, error) {
                             ))
                           }}
                         >
-                          <Plus className="w-4 h-4 mr-1" />
-                          添加
+                          <Plus className="w-4 h-4" />
+                          <span>添加</span>
                         </Button>
                       </div>
                       {node.outputs && node.outputs.length > 0 ? (
@@ -1898,7 +2302,6 @@ func Run(inputs map[string]interface{}) (map[string]interface{}, error) {
                   <Button
                     variant="outline"
                     size="sm"
-                    leftIcon={<TestTube className="w-4 h-4" />}
                     onClick={() => {
                       setTestingNode(node.id)
                       // 初始化测试参数
@@ -1912,8 +2315,10 @@ func Run(inputs map[string]interface{}) (map[string]interface{}, error) {
                       setNodeTestResult(null)
                       setShowNodeTestModal(true)
                     }}
+                    className="flex items-center gap-2"
                   >
-                    测试节点
+                    <TestTube className="w-4 h-4" />
+                    <span>测试节点</span>
                   </Button>
                 )}
                 
@@ -2033,18 +2438,19 @@ func Run(inputs map[string]interface{}) (map[string]interface{}, error) {
         <div className="flex items-center space-x-4">
           {!validation.valid && (
             <div className="flex items-center text-red-600 text-sm">
-              <AlertCircle className="w-4 h-4 mr-1" />
-              {validation.message}
+              <AlertCircle className="w-4 h-4" />
+              <span className="ml-1">{validation.message}</span>
             </div>
           )}
           <div className="flex items-center gap-2">
             <Button
               variant="primary"
               size="sm"
-              leftIcon={<Plus className="w-4 h-4" />}
               onClick={() => setShowNodeDrawer(true)}
+              className="flex items-center gap-2"
             >
-              {t('workflow.editor.addNode')}
+              <Plus className="w-4 h-4" />
+              <span>{t('workflow.editor.addNode')}</span>
             </Button>
             <Button
               variant="ghost"
@@ -2057,89 +2463,107 @@ func Run(inputs map[string]interface{}) (map[string]interface{}, error) {
           </div>
         </div>
         
-        <div className="flex items-center space-x-2">
-          {/* 画布控制按钮 */}
-          <div className="flex items-center space-x-1 border-r border-gray-200 dark:border-gray-700 pr-2">
+        <div className="flex items-center space-x-3">
+          {/* 画布控制按钮组 */}
+          <div className="flex items-center space-x-1 bg-gray-100 dark:bg-gray-700 rounded-lg p-1">
             <motion.button
               onClick={zoomOut}
-              className="p-2 text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white hover:bg-gray-100 dark:hover:bg-gray-700 rounded transition-colors"
+              className="p-1.5 text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white hover:bg-white dark:hover:bg-gray-600 rounded transition-colors"
               whileHover={{ scale: 1.05 }}
               whileTap={{ scale: 0.95 }}
               title="缩小"
             >
-              <span className="text-lg font-bold">-</span>
+              <span className="text-sm font-bold">-</span>
             </motion.button>
             
-            <span className="text-sm text-gray-600 dark:text-gray-400 min-w-[3rem] text-center">
+            <span className="text-xs text-gray-600 dark:text-gray-400 min-w-[2.5rem] text-center px-1">
               {Math.round(canvasScale * 100)}%
             </span>
             
             <motion.button
               onClick={zoomIn}
-              className="p-2 text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white hover:bg-gray-100 dark:hover:bg-gray-700 rounded transition-colors"
+              className="p-1.5 text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white hover:bg-white dark:hover:bg-gray-600 rounded transition-colors"
               whileHover={{ scale: 1.05 }}
               whileTap={{ scale: 0.95 }}
               title="放大"
             >
-              <span className="text-lg font-bold">+</span>
+              <span className="text-sm font-bold">+</span>
             </motion.button>
-            
+          </div>
+
+          <div className="flex items-center space-x-1">
             <motion.button
               onClick={resetCanvasView}
-              className="p-2 text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white hover:bg-gray-100 dark:hover:bg-gray-700 rounded transition-colors"
-              whileHover={{ scale: 1.05 }}
-              whileTap={{ scale: 0.95 }}
+              className="px-2 py-1.5 text-xs text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white hover:bg-gray-100 dark:hover:bg-gray-700 rounded transition-colors"
+              whileHover={{ scale: 1.02 }}
+              whileTap={{ scale: 0.98 }}
               title="重置视图"
             >
-              <span className="text-sm">重置</span>
+              重置
             </motion.button>
             
             <motion.button
               onClick={centerOnNodes}
-              className="p-2 text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white hover:bg-gray-100 dark:hover:bg-gray-700 rounded transition-colors"
-              whileHover={{ scale: 1.05 }}
-              whileTap={{ scale: 0.95 }}
+              className="px-2 py-1.5 text-xs text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white hover:bg-gray-100 dark:hover:bg-gray-700 rounded transition-colors"
+              whileHover={{ scale: 1.02 }}
+              whileTap={{ scale: 0.98 }}
               title="居中显示所有节点"
             >
-              <span className="text-sm">居中</span>
+              居中
             </motion.button>
           </div>
+
+          {/* 分隔线 */}
+          <div className="h-6 w-px bg-gray-300 dark:bg-gray-600"></div>
 
           {selectedConnection && (
             <Button
               variant="destructive"
               size="sm"
-              leftIcon={<Trash2 className="w-4 h-4" />}
               onClick={() => deleteConnection(selectedConnection)}
             >
+              <Trash2 className="w-4 h-4" />
               删除连接
             </Button>
           )}
           
-          <Button
-            variant="success"
-            size="sm"
-            leftIcon={isRunning ? (
-              <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
-            ) : (
-              <Play className="w-4 h-4" />
-            )}
-            onClick={handleRun}
-            disabled={!validation.valid || isRunning}
-            loading={isRunning}
-          >
-            {isRunning ? '运行中...' : '运行'}
-          </Button>
-          
-          <Button
-            variant="primary"
-            size="sm"
-            leftIcon={<Save className="w-4 h-4" />}
-            onClick={handleSave}
-            disabled={!onSave}
-          >
-            保存
-          </Button>
+          {/* 主要操作按钮 */}
+          <div className="flex items-center space-x-2">
+            <Button
+              variant="success"
+              size="sm"
+              onClick={handleRun}
+              disabled={!validation.valid || isRunning}
+              loading={isRunning}
+            >
+              {isRunning ? '运行中...' : '运行'}
+            </Button>
+            
+            <Button
+              variant="primary"
+              size="sm"
+              onClick={handleSave}
+              disabled={!onSave}
+            >
+              保存
+            </Button>
+            
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => {
+                if (workflowId && validation.valid) {
+                  setShowPublishModal(true)
+                } else {
+                  console.log('发布按钮被禁用:', { workflowId, validation })
+                }
+              }}
+              disabled={!workflowId || !validation.valid}
+              title={!workflowId ? '需要工作流ID' : !validation.valid ? `工作流验证失败: ${validation.message}` : '发布为插件'}
+            >
+              发布为插件
+            </Button>
+          </div>
         </div>
       </div>
 
@@ -3009,9 +3433,9 @@ func Run(inputs map[string]interface{}) (map[string]interface{}, error) {
                       variant="ghost"
                       size="sm"
                       onClick={() => setIsCodeEditorFullscreen(false)}
-                    >
-                      <Minimize2 className="w-4 h-4 mr-2" />
-                      退出全屏
+                    className="flex items-center gap-2">
+                      <Minimize2 className="w-4 h-4" />
+                      <span>退出全屏</span>
                     </Button>
                   </div>
                 </div>
@@ -3180,6 +3604,113 @@ func Run(inputs map[string]interface{}) (map[string]interface{}, error) {
                     ))}
                 </div>
                 
+                {/* 插件节点部分 */}
+                {installedPlugins.length > 0 && (
+                  <>
+                    <div className="mt-8 mb-4">
+                      <h4 className="text-lg font-semibold text-gray-900 dark:text-white mb-2 flex items-center gap-2">
+                        <Package className="w-5 h-5" />
+                        已安装的插件
+                      </h4>
+                      <div className="h-px bg-gradient-to-r from-gray-200 via-gray-300 to-gray-200 dark:from-gray-700 dark:via-gray-600 dark:to-gray-700"></div>
+                    </div>
+                    
+                    <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-4">
+                      {installedPlugins
+                        .filter(plugin => 
+                          plugin.plugin?.displayName?.toLowerCase().includes(nodeSearchQuery.toLowerCase()) ||
+                          plugin.plugin?.name?.toLowerCase().includes(nodeSearchQuery.toLowerCase()) ||
+                          plugin.plugin?.description?.toLowerCase().includes(nodeSearchQuery.toLowerCase())
+                        )
+                        .map((plugin) => (
+                          <motion.div
+                            key={plugin.id}
+                            className="group relative"
+                            whileHover={{ scale: 1.05, y: -2 }}
+                            whileTap={{ scale: 0.95 }}
+                            onClick={() => {
+                              addPluginNode(plugin, { x: 0, y: 0 })
+                              setTimeout(() => {
+                                centerOnNodes()
+                              }, 100)
+                              setShowNodeDrawer(false)
+                              setNodeSearchQuery('')
+                            }}
+                          >
+                            {/* 插件节点卡片 */}
+                            <div className="relative flex flex-col items-center p-4 bg-gradient-to-br from-white via-gray-50 to-white dark:from-gray-800 dark:via-gray-850 dark:to-gray-800 rounded-2xl cursor-pointer transition-all duration-300 border border-gray-200/60 dark:border-gray-700/60 hover:border-gray-300/80 dark:hover:border-gray-600/80 shadow-lg hover:shadow-2xl backdrop-blur-sm overflow-hidden">
+                              
+                              {/* 背景装饰 */}
+                              <div className="absolute top-0 right-0 w-16 h-16 opacity-10">
+                                <div 
+                                  className="w-full h-full rounded-full blur-xl"
+                                  style={{ backgroundColor: plugin.plugin?.color || '#7c2d12' }}
+                                />
+                              </div>
+                              
+                              {/* 顶部装饰条 */}
+                              <div 
+                                className="absolute top-0 left-0 right-0 h-1 bg-gradient-to-r from-orange-400 to-orange-600"
+                                style={{ 
+                                  background: plugin.plugin?.color 
+                                    ? `linear-gradient(to right, ${plugin.plugin.color}80, ${plugin.plugin.color})` 
+                                    : undefined 
+                                }}
+                              />
+                              
+                              {/* 图标容器 */}
+                              <div className="relative mb-3">
+                                <div 
+                                  className="p-3 rounded-xl shadow-lg transition-all duration-300 bg-gradient-to-br border border-white/20 from-orange-400 to-orange-600 group-hover:scale-110 group-hover:rotate-3"
+                                  style={{
+                                    background: plugin.plugin?.color 
+                                      ? `linear-gradient(to bottom right, ${plugin.plugin.color}CC, ${plugin.plugin.color})` 
+                                      : undefined,
+                                    boxShadow: `0 8px 16px -4px ${plugin.plugin?.color || '#7c2d12'}30`
+                                  }}
+                                >
+                                  <div className="text-white drop-shadow-sm">
+                                    <Package className="w-5 h-5" />
+                                  </div>
+                                </div>
+                                {/* 图标光晕效果 */}
+                                <div 
+                                  className="absolute inset-0 rounded-xl blur-md opacity-30 -z-10 group-hover:opacity-50 transition-opacity duration-300"
+                                  style={{ backgroundColor: plugin.plugin?.color || '#7c2d12' }}
+                                />
+                              </div>
+                              
+                              {/* 标题 */}
+                              <span className="text-sm font-bold text-gray-900 dark:text-white text-center leading-tight">
+                                {plugin.plugin?.displayName || plugin.plugin?.name || '插件节点'}
+                              </span>
+                              
+                              {/* 描述 */}
+                              {plugin.plugin?.description && (
+                                <span className="text-xs text-gray-500 dark:text-gray-400 text-center mt-1 line-clamp-2">
+                                  {plugin.plugin.description}
+                                </span>
+                              )}
+                              
+                              {/* 悬停效果 */}
+                              <div className="absolute inset-0 bg-gradient-to-t from-transparent via-transparent to-white/5 opacity-0 group-hover:opacity-100 transition-opacity duration-300 rounded-2xl" />
+                            </div>
+                          </motion.div>
+                        ))}
+                    </div>
+                  </>
+                )}
+                
+                {/* 加载插件状态 */}
+                {loadingPlugins && (
+                  <div className="mt-8 text-center">
+                    <div className="inline-flex items-center gap-2 text-gray-500 dark:text-gray-400">
+                      <div className="animate-spin rounded-full h-4 w-4 border-2 border-gray-300 border-t-blue-500"></div>
+                      <span>加载插件中...</span>
+                    </div>
+                  </div>
+                )}
+                
                 {/* 空状态 */}
                 {Object.entries(NODE_TYPES).filter(([type, config]) => 
                   config.label.toLowerCase().includes(nodeSearchQuery.toLowerCase()) ||
@@ -3253,6 +3784,376 @@ func Run(inputs map[string]interface{}) (map[string]interface{}, error) {
           </div>
         </div>
       </Modal>
+
+      {/* 发布为插件模态框 */}
+      <Modal
+        isOpen={showPublishModal}
+        onClose={() => setShowPublishModal(false)}
+        title="发布工作流为插件"
+        size="lg"
+      >
+        <PublishWorkflowPluginModal
+          workflowId={workflowId!}
+          onClose={() => setShowPublishModal(false)}
+        />
+      </Modal>
+    </div>
+  )
+}
+
+// 发布工作流插件模态框组件
+const PublishWorkflowPluginModal: React.FC<{
+  workflowId: number
+  onClose: () => void
+}> = ({ workflowId, onClose }) => {
+  const toast = useToast()
+  const [workflow, setWorkflow] = useState<any>(null)
+  const [loading, setLoading] = useState(false)
+  const [step, setStep] = useState(1) // 添加步骤状态
+  const [formData, setFormData] = useState({
+    name: '',
+    displayName: '',
+    description: '',
+    category: 'utility' as WorkflowPluginCategory,
+    icon: '',
+    color: '#6366f1',
+    tags: '',
+    author: '',
+    homepage: '',
+    repository: '',
+    license: 'MIT',
+    inputSchema: {
+      parameters: [] as any[]
+    },
+    outputSchema: {
+      parameters: [] as any[]
+    }
+  })
+
+  // 加载工作流详情
+  useEffect(() => {
+    const loadWorkflow = async () => {
+      try {
+        const response = await workflowService.getDefinition(workflowId)
+        if (response.data) {
+          const workflowData = response.data
+          setWorkflow(workflowData)
+          setFormData(prev => ({
+            ...prev,
+            name: workflowData.slug || workflowData.name.toLowerCase().replace(/\s+/g, '-'),
+            displayName: workflowData.name,
+            description: workflowData.description || ''
+          }))
+        }
+      } catch (error) {
+        console.error('加载工作流失败:', error)
+      }
+    }
+    
+    loadWorkflow()
+  }, [workflowId])
+
+  // 处理表单提交
+  const handleSubmit = async () => {
+    if (!workflow) return
+    
+    setLoading(true)
+    try {
+      const pluginData = {
+        ...formData,
+        tags: formData.tags.split(',').map((tag: string) => tag.trim()).filter(Boolean)
+      }
+
+      const response = await workflowPluginService.publishWorkflowAsPlugin(workflowId, pluginData)
+      if (response.data) {
+        // 使用 Toast 显示成功提示
+        toast.success('插件发布成功！', '您的工作流插件已成功发布到插件市场')
+        setStep(3) // 显示成功页面
+        setTimeout(() => {
+          onClose()
+        }, 2000)
+      }
+    } catch (error) {
+      console.error('发布工作流失败:', error)
+      toast.error('发布失败', '插件发布时发生错误，请稍后重试')
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  const isFormValid = formData.name && formData.displayName && formData.description
+
+  if (!workflow) {
+    return (
+      <div className="flex flex-col items-center justify-center py-12">
+        <div className="animate-spin rounded-full h-12 w-12 border-4 border-blue-500 border-t-transparent mb-4"></div>
+        <p className="text-gray-600 dark:text-gray-400">加载工作流信息...</p>
+      </div>
+    )
+  }
+
+  // 成功页面
+  if (step === 3) {
+    return (
+      <div className="flex flex-col items-center justify-center py-12 text-center">
+        <div className="w-16 h-16 bg-green-100 dark:bg-green-900/20 rounded-full flex items-center justify-center mb-4">
+          <CheckCircle className="w-8 h-8 text-green-600 dark:text-green-400" />
+        </div>
+        <h3 className="text-xl font-semibold text-gray-900 dark:text-white mb-2">
+          插件发布成功！
+        </h3>
+        <p className="text-gray-600 dark:text-gray-400 mb-4">
+          您的工作流插件已成功发布，现在可以在插件市场中找到它。
+        </p>
+        <div className="bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg p-4">
+          <p className="text-sm text-blue-800 dark:text-blue-200">
+            <strong>提示：</strong>插件已创建为草稿状态，您可以在插件市场的"我的插件"中查看和管理。
+          </p>
+        </div>
+      </div>
+    )
+  }
+
+  return (
+    <div className="max-h-[80vh] overflow-y-auto">
+      {/* 步骤指示器 */}
+      <div className="flex items-center justify-center mb-8">
+        <div className="flex items-center space-x-4">
+          <div className={`flex items-center justify-center w-8 h-8 rounded-full text-sm font-medium ${
+            step >= 1 ? 'bg-blue-600 text-white' : 'bg-gray-200 text-gray-600'
+          }`}>
+            1
+          </div>
+          <div className={`h-1 w-16 ${step >= 2 ? 'bg-blue-600' : 'bg-gray-200'}`}></div>
+          <div className={`flex items-center justify-center w-8 h-8 rounded-full text-sm font-medium ${
+            step >= 2 ? 'bg-blue-600 text-white' : 'bg-gray-200 text-gray-600'
+          }`}>
+            2
+          </div>
+        </div>
+      </div>
+
+      {step === 1 && (
+        <div className="space-y-6">
+          {/* 工作流信息预览 */}
+          <div className="bg-gradient-to-r from-blue-50 to-indigo-50 dark:from-blue-900/20 dark:to-indigo-900/20 border border-blue-200 dark:border-blue-800 rounded-xl p-6">
+            <div className="flex items-start space-x-4">
+              <div className="w-12 h-12 bg-blue-600 rounded-lg flex items-center justify-center">
+                <GitBranch className="w-6 h-6 text-white" />
+              </div>
+              <div className="flex-1">
+                <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-2">
+                  {workflow.name}
+                </h3>
+                <p className="text-gray-600 dark:text-gray-400 mb-3">
+                  {workflow.description || '暂无描述'}
+                </p>
+                <div className="flex items-center gap-3">
+                  <span className={`px-3 py-1 text-xs font-medium rounded-full ${
+                    workflow.status === 'active' 
+                      ? 'bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400'
+                      : workflow.status === 'draft'
+                      ? 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900/30 dark:text-yellow-400'
+                      : 'bg-gray-100 text-gray-800 dark:bg-gray-900/30 dark:text-gray-400'
+                  }`}>
+                    {workflow.status === 'active' ? '已激活' : workflow.status === 'draft' ? '草稿' : '已归档'}
+                  </span>
+                  <span className="text-xs text-gray-500 bg-gray-100 dark:bg-gray-800 px-2 py-1 rounded">
+                    {workflow.definition?.nodes?.length || 0} 个节点
+                  </span>
+                  <span className="text-xs text-gray-500 bg-gray-100 dark:bg-gray-800 px-2 py-1 rounded">
+                    v{workflow.version}
+                  </span>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* 基本信息表单 */}
+          <div className="space-y-6">
+            <div>
+              <h4 className="text-lg font-semibold text-gray-900 dark:text-white mb-4">基本信息</h4>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                    插件名称 <span className="text-red-500">*</span>
+                  </label>
+                  <Input
+                    value={formData.name}
+                    onChange={(e) => setFormData({...formData, name: e.target.value})}
+                    placeholder="my-awesome-workflow"
+                    className="font-mono text-sm"
+                  />
+                  <p className="text-xs text-gray-500 mt-1">用于标识插件的唯一名称，建议使用小写字母和连字符</p>
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                    显示名称 <span className="text-red-500">*</span>
+                  </label>
+                  <Input
+                    value={formData.displayName}
+                    onChange={(e) => setFormData({...formData, displayName: e.target.value})}
+                    placeholder="我的超棒工作流"
+                  />
+                  <p className="text-xs text-gray-500 mt-1">在插件市场中显示的名称</p>
+                </div>
+              </div>
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                插件描述 <span className="text-red-500">*</span>
+              </label>
+              <textarea
+                value={formData.description}
+                onChange={(e) => setFormData({...formData, description: e.target.value})}
+                placeholder="详细描述这个工作流插件的功能和用途..."
+                className="w-full px-3 py-3 border border-gray-300 dark:border-gray-600 rounded-lg resize-none bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                rows={4}
+              />
+              <p className="text-xs text-gray-500 mt-1">清晰的描述有助于其他用户理解和使用您的插件</p>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">分类</label>
+                <select
+                  value={formData.category}
+                  onChange={(e) => setFormData({...formData, category: e.target.value as WorkflowPluginCategory})}
+                  className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                >
+                  <option value="data_processing">📊 数据处理</option>
+                  <option value="api_integration">🔗 API集成</option>
+                  <option value="ai_service">🤖 AI服务</option>
+                  <option value="notification">📢 通知服务</option>
+                  <option value="utility">🛠️ 工具类</option>
+                  <option value="business">💼 业务逻辑</option>
+                  <option value="custom">⚙️ 自定义</option>
+                </select>
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">主题色</label>
+                <div className="flex items-center space-x-3">
+                  <input
+                    type="color"
+                    value={formData.color}
+                    onChange={(e) => setFormData({...formData, color: e.target.value})}
+                    className="w-12 h-10 border border-gray-300 dark:border-gray-600 rounded-lg cursor-pointer"
+                  />
+                  <Input
+                    value={formData.color}
+                    onChange={(e) => setFormData({...formData, color: e.target.value})}
+                    placeholder="#6366f1"
+                    className="flex-1 font-mono text-sm"
+                  />
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* 操作按钮 */}
+          <div className="flex justify-between pt-6 border-t border-gray-200 dark:border-gray-700">
+            <Button
+              variant="outline"
+              onClick={onClose}
+            >
+              取消
+            </Button>
+            <Button
+              variant="primary"
+              onClick={() => setStep(2)}
+              disabled={!isFormValid}
+            >
+              下一步
+              <ChevronRight className="w-4 h-4 ml-1" />
+            </Button>
+          </div>
+        </div>
+      )}
+
+      {step === 2 && (
+        <div className="space-y-6">
+          <div>
+            <h4 className="text-lg font-semibold text-gray-900 dark:text-white mb-4">可选信息</h4>
+            <p className="text-gray-600 dark:text-gray-400 mb-6">
+              以下信息是可选的，但填写完整有助于提升插件的专业度和可信度。
+            </p>
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">标签</label>
+            <Input
+              value={formData.tags}
+              onChange={(e) => setFormData({...formData, tags: e.target.value})}
+              placeholder="自动化, 数据处理, API"
+            />
+            <p className="text-xs text-gray-500 mt-1">用逗号分隔多个标签，有助于用户搜索和发现</p>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <div>
+              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">作者</label>
+              <Input
+                value={formData.author}
+                onChange={(e) => setFormData({...formData, author: e.target.value})}
+                placeholder="您的名称"
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">主页</label>
+              <Input
+                value={formData.homepage}
+                onChange={(e) => setFormData({...formData, homepage: e.target.value})}
+                placeholder="https://example.com"
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">代码仓库</label>
+              <Input
+                value={formData.repository}
+                onChange={(e) => setFormData({...formData, repository: e.target.value})}
+                placeholder="https://github.com/user/repo"
+              />
+            </div>
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">许可证</label>
+            <select
+              value={formData.license}
+              onChange={(e) => setFormData({...formData, license: e.target.value})}
+              className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+            >
+              <option value="MIT">MIT License</option>
+              <option value="Apache-2.0">Apache License 2.0</option>
+              <option value="GPL-3.0">GNU General Public License v3.0</option>
+              <option value="BSD-3-Clause">BSD 3-Clause License</option>
+              <option value="ISC">ISC License</option>
+              <option value="Unlicense">The Unlicense</option>
+              <option value="Custom">自定义许可证</option>
+            </select>
+          </div>
+
+          {/* 操作按钮 */}
+          <div className="flex justify-between pt-6 border-t border-gray-200 dark:border-gray-700">
+            <Button
+              variant="outline"
+              onClick={() => setStep(1)}
+            >
+              <ChevronLeft className="w-4 h-4 mr-1" />
+              上一步
+            </Button>
+            <Button
+              variant="primary"
+              onClick={handleSubmit}
+              loading={loading}
+              disabled={loading}
+            >
+              {loading ? '发布中...' : '发布插件'}
+            </Button>
+          </div>
+        </div>
+      )}
     </div>
   )
 }
