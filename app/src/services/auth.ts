@@ -28,6 +28,8 @@ export interface LoginForm {
   twoFactorCode?: string;
   timezone?: string;
   remember?: boolean;
+  captchaID?: string;
+  captchaCode?: string;
 }
 
 export interface EmailCodeLoginFormLocal {
@@ -35,6 +37,8 @@ export interface EmailCodeLoginFormLocal {
   code: string;
   timezone?: string;
   remember?: boolean;
+  captchaID?: string;
+  captchaCode?: string;
 }
 
 export interface RegisterForm {
@@ -47,6 +51,8 @@ export interface RegisterForm {
   timezone?: string;
   userName?: string;
   verificationCode?: string;
+  captchaID?: string;
+  captchaCode?: string;
 }
 
 export interface SendCodeForm {
@@ -70,11 +76,31 @@ export const authService = {
         timezone: form.timezone || 'Asia/Shanghai',
         remember: form.remember,
         authToken: true,
+        captchaID: form.captchaID,
+        captchaCode: form.captchaCode,
       };
       const response = await loginUser(apiForm);
+      console.log('Login API response:', JSON.stringify(response, null, 2));
+      
       if (response.code === 200 && response.data) {
+        // 后端返回格式: {code: 200, data: {user: {...}, token: "..."}}
+        const responseData = response.data as any;
+        
+        // 检查是否需要设备验证
+        if (responseData.requiresDeviceVerification) {
+          return {
+            code: 200,
+            message: responseData.message || '需要设备验证',
+            data: {
+              requiresDeviceVerification: true,
+              deviceId: responseData.deviceId,
+              message: responseData.message,
+            },
+          };
+        }
+        
         // 检查是否需要二级验证
-        if (response.data.requiresTwoFactor && !form.twoFactorCode) {
+        if (responseData.user?.requiresTwoFactor && !form.twoFactorCode) {
           return {
             code: 200,
             message: '需要二级验证',
@@ -84,27 +110,39 @@ export const authService = {
           };
         }
         
-        await AsyncStorage.setItem('auth_token', response.data.token);
-        // 将用户信息转换为User格式并保存
+        // 确保 token 存在
+        const token = responseData.token;
+        if (!token) {
+          console.error('Login response missing token:', response);
+          return {
+            code: 1,
+            message: '登录失败：未获取到令牌',
+          };
+        }
+        
+        await AsyncStorage.setItem('auth_token', token);
+        
+        // 从 user 对象中提取用户信息
+        const userData = responseData.user || {};
         const user: User = {
-          id: response.data.email, // 如果没有id，使用email作为标识
-          email: response.data.email,
-          displayName: response.data.displayName,
-          firstName: response.data.firstName,
-          lastName: response.data.lastName,
-          timezone: response.data.timezone,
-          createdAt: response.data.createdAt,
-          updatedAt: response.data.updatedAt,
-          lastLogin: response.data.lastLogin,
-          hasFilledDetails: response.data.hasFilledDetails,
-          emailNotifications: response.data.emailNotifications,
+          id: userData.id || userData.email,
+          email: userData.email,
+          displayName: userData.displayName,
+          firstName: userData.firstName,
+          lastName: userData.lastName,
+          timezone: userData.timezone,
+          createdAt: userData.createdAt,
+          updatedAt: userData.updatedAt,
+          lastLogin: userData.lastLogin,
+          hasFilledDetails: userData.hasFilledDetails,
+          emailNotifications: userData.emailNotifications,
         };
         await AsyncStorage.setItem('user_info', JSON.stringify(user));
         return {
           code: 0,
           message: '登录成功',
           data: {
-            token: response.data.token,
+            token,
             user,
           },
         };
@@ -132,30 +170,49 @@ export const authService = {
         timezone: form.timezone || 'Asia/Shanghai',
         remember: form.remember,
         authToken: true,
+        captchaID: form.captchaID,
+        captchaCode: form.captchaCode,
       };
       const response = await loginWithEmailCode(apiForm);
+      console.log('Email code login API response:', JSON.stringify(response, null, 2));
+      
       if (response.code === 200 && response.data) {
-        await AsyncStorage.setItem('auth_token', response.data.token);
-        // 将用户信息转换为User格式并保存
+        // 后端返回格式: {code: 200, data: {user: {...}, token: "..."}}
+        const responseData = response.data as any;
+        
+        // 确保 token 存在
+        const token = responseData.token;
+        if (!token) {
+          console.error('Email code login response missing token:', response);
+          return {
+            code: 1,
+            message: '登录失败：未获取到令牌',
+          };
+        }
+        
+        await AsyncStorage.setItem('auth_token', token);
+        
+        // 从 user 对象中提取用户信息
+        const userData = responseData.user || {};
         const user: User = {
-          id: response.data.email,
-          email: response.data.email,
-          displayName: response.data.displayName,
-          firstName: response.data.firstName,
-          lastName: response.data.lastName,
-          timezone: response.data.timezone,
-          createdAt: response.data.createdAt,
-          updatedAt: response.data.updatedAt,
-          lastLogin: response.data.lastLogin,
-          hasFilledDetails: response.data.hasFilledDetails,
-          emailNotifications: response.data.emailNotifications,
+          id: userData.id || userData.email,
+          email: userData.email,
+          displayName: userData.displayName,
+          firstName: userData.firstName,
+          lastName: userData.lastName,
+          timezone: userData.timezone,
+          createdAt: userData.createdAt,
+          updatedAt: userData.updatedAt,
+          lastLogin: userData.lastLogin,
+          hasFilledDetails: userData.hasFilledDetails,
+          emailNotifications: userData.emailNotifications,
         };
         await AsyncStorage.setItem('user_info', JSON.stringify(user));
         return {
           code: 0,
           message: '登录成功',
           data: {
-            token: response.data.token,
+            token,
             user,
           },
         };
@@ -235,6 +292,8 @@ export const authService = {
           locale: 'zh-CN',
           timezone: form.timezone || 'Asia/Shanghai',
           source: 'MOBILE',
+          captchaID: form.captchaID,
+          captchaCode: form.captchaCode,
         };
         response = await registerUserByEmail(apiForm);
       } else {
