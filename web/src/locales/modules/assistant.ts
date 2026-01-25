@@ -19,6 +19,7 @@ export const assistant: Record<Language, Record<string, string>> = {
     'assistants.emptyState.createButton': '创建第一个助手',
     'assistants.groupShared': '组织共享',
     'assistants.noDescription': '暂无描述',
+    'assistants.clickToEnter': '点击进入',
 
     // AssistantTools 页面
     'assistantTools.title': '工具管理',
@@ -166,6 +167,7 @@ export const assistant: Record<Language, Record<string, string>> = {
     'assistants.emptyState.createButton': 'Create First Assistant',
     'assistants.groupShared': 'Organization Shared',
     'assistants.noDescription': 'No description',
+    'assistants.clickToEnter': 'Click to Enter',
 
     // AssistantTools Page
     'assistantTools.title': 'Tool Management',
@@ -240,6 +242,7 @@ export const assistant: Record<Language, Record<string, string>> = {
     'assistants.emptyState.createButton': '最初のアシスタントを作成',
     'assistants.groupShared': '組織共有',
     'assistants.noDescription': '説明なし',
+    'assistants.clickToEnter': 'クリックして入る',
 
     // アシスタントメッセージ
     'assistants.messages.fetchFailed': 'アシスタントリストの取得に失敗しました',
