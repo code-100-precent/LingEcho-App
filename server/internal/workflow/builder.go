@@ -3,6 +3,8 @@ package workflowdef
 import (
 	"encoding/json"
 	"fmt"
+	"strconv"
+	"time"
 
 	"github.com/code-100-precent/LingEcho/internal/models"
 	runtimewf "github.com/code-100-precent/LingEcho/pkg/workflow"
@@ -261,7 +263,19 @@ func instantiateNode(base runtimewf.Node) (runtimewf.ExecutableNode, error) {
 	case runtimewf.NodeTypeWait:
 		return &runtimewf.WaitNode{Node: base}, nil
 	case runtimewf.NodeTypeTimer:
-		return &runtimewf.TimerNode{Node: base}, nil
+		timerNode := &runtimewf.TimerNode{Node: base}
+		// Extract timer configuration from properties
+		if base.Properties != nil {
+			if delayStr, ok := base.Properties["delay"]; ok {
+				if delayMs, err := strconv.Atoi(delayStr); err == nil {
+					timerNode.Delay = time.Duration(delayMs) * time.Millisecond
+				}
+			}
+			if repeatStr, ok := base.Properties["repeat"]; ok {
+				timerNode.Repeat = repeatStr == "true"
+			}
+		}
+		return timerNode, nil
 	case runtimewf.NodeTypeScript:
 		scriptNode := &runtimewf.ScriptNode{Node: base}
 		// Extract script code from properties

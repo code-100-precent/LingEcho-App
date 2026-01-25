@@ -186,5 +186,8 @@ func RunMigrations(db *gorm.DB) error {
 		&models.SipUser{}, // SIP用户表
 		// SIP call model
 		&models.SipCall{}, // SIP通话记录表
+		&models.DeviceErrorLog{},
+		&models.CallRecording{},
+		&models.DevicePerformanceLog{},
 	})
 }
