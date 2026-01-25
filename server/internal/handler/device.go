@@ -2,13 +2,17 @@ package handlers
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
+	"os"
+	"path/filepath"
 	"strconv"
 	"strings"
 	"time"
 
 	"github.com/code-100-precent/LingEcho/internal/models"
 	"github.com/code-100-precent/LingEcho/pkg/cache"
+	"github.com/code-100-precent/LingEcho/pkg/hardware/analysis"
 	"github.com/code-100-precent/LingEcho/pkg/logger"
 	"github.com/code-100-precent/LingEcho/pkg/response"
 	"github.com/gin-gonic/gin"
@@ -172,32 +176,8 @@ func (h *Handlers) GetUserDevices(c *gin.Context) {
 		return
 	}
 
-	// 获取用户所属的组织ID列表
-	var groupIDs []uint
-	var groupMembers []models.GroupMember
-	if err := h.db.Where("user_id = ?", user.ID).Find(&groupMembers).Error; err == nil {
-		for _, member := range groupMembers {
-			groupIDs = append(groupIDs, member.GroupID)
-		}
-	}
-	// 获取用户创建的组织ID
-	var userGroups []models.Group
-	if err := h.db.Where("creator_id = ?", user.ID).Find(&userGroups).Error; err == nil {
-		for _, group := range userGroups {
-			groupIDs = append(groupIDs, group.ID)
-		}
-	}
-
-	// Query devices: 用户自己的设备 + 组织共享的设备
-	var devices []models.Device
-	query := h.db.Where("assistant_id = ?", assistantID)
-	if len(groupIDs) > 0 {
-		query = query.Where("user_id = ? OR (group_id IS NOT NULL AND group_id IN (?))", user.ID, groupIDs)
-	} else {
-		query = query.Where("user_id = ?", user.ID)
-	}
-
-	err = query.Find(&devices).Error
+	// 使用新的 GetUserDevices 方法，支持监控字段
+	devices, err := models.GetUserDevices(h.db, user.ID, &assistantID)
 	if err != nil {
 		logger.Error("Failed to query devices", zap.Error(err))
 		response.Fail(c, "Failed to query devices", nil)
@@ -518,4 +498,524 @@ func (h *Handlers) GetDeviceConfig(c *gin.Context) {
 		zap.Int64("assistantID", int64(assistantID)))
 
 	response.Success(c, "Success", config)
+}
+
+// UpdateDeviceStatus 更新设备状态
+// POST /device/status
+func (h *Handlers) UpdateDeviceStatus(c *gin.Context) {
+	var req struct {
+		MacAddress    string                 `json:"macAddress" binding:"required"`
+		IsOnline      *bool                  `json:"isOnline"`
+		CPUUsage      *float64               `json:"cpuUsage"`
+		MemoryUsage   *float64               `json:"memoryUsage"`
+		Temperature   *float64               `json:"temperature"`
+		SystemInfo    map[string]interface{} `json:"systemInfo"`
+		HardwareInfo  map[string]interface{} `json:"hardwareInfo"`
+		NetworkInfo   map[string]interface{} `json:"networkInfo"`
+		AudioStatus   map[string]interface{} `json:"audioStatus"`
+		ServiceStatus map[string]interface{} `json:"serviceStatus"`
+	}
+
+	if err := c.ShouldBindJSON(&req); err != nil {
+		response.Fail(c, "请求参数错误", nil)
+		return
+	}
+
+	// 构建更新数据
+	updates := make(map[string]interface{})
+	updates["last_seen"] = time.Now()
+
+	if req.IsOnline != nil {
+		updates["is_online"] = *req.IsOnline
+		if *req.IsOnline {
+			updates["start_time"] = time.Now()
+		}
+	}
+
+	if req.CPUUsage != nil {
+		updates["cpu_usage"] = *req.CPUUsage
+	}
+
+	if req.MemoryUsage != nil {
+		updates["memory_usage"] = *req.MemoryUsage
+	}
+
+	if req.Temperature != nil {
+		updates["temperature"] = *req.Temperature
+	}
+
+	if req.SystemInfo != nil {
+		systemInfoJSON, _ := json.Marshal(req.SystemInfo)
+		updates["system_info"] = string(systemInfoJSON)
+	}
+
+	if req.HardwareInfo != nil {
+		hardwareInfoJSON, _ := json.Marshal(req.HardwareInfo)
+		updates["hardware_info"] = string(hardwareInfoJSON)
+	}
+
+	if req.NetworkInfo != nil {
+		networkInfoJSON, _ := json.Marshal(req.NetworkInfo)
+		updates["network_info"] = string(networkInfoJSON)
+	}
+
+	if req.AudioStatus != nil {
+		audioStatusJSON, _ := json.Marshal(req.AudioStatus)
+		updates["audio_status"] = string(audioStatusJSON)
+	}
+
+	if req.ServiceStatus != nil {
+		serviceStatusJSON, _ := json.Marshal(req.ServiceStatus)
+		updates["service_status"] = string(serviceStatusJSON)
+	}
+
+	err := models.UpdateDeviceStatus(h.db, req.MacAddress, updates)
+	if err != nil {
+		logger.Error("更新设备状态失败", zap.Error(err), zap.String("mac_address", req.MacAddress))
+		response.Fail(c, "更新设备状态失败", nil)
+		return
+	}
+
+	response.Success(c, "设备状态更新成功", nil)
+}
+
+// LogDeviceError 记录设备错误
+// POST /device/error
+func (h *Handlers) LogDeviceError(c *gin.Context) {
+	var req struct {
+		MacAddress string `json:"macAddress" binding:"required"`
+		ErrorType  string `json:"errorType" binding:"required"`
+		ErrorLevel string `json:"errorLevel" binding:"required"`
+		ErrorCode  string `json:"errorCode"`
+		ErrorMsg   string `json:"errorMsg" binding:"required"`
+		StackTrace string `json:"stackTrace"`
+		Context    string `json:"context"`
+	}
+
+	if err := c.ShouldBindJSON(&req); err != nil {
+		response.Fail(c, "请求参数错误", nil)
+		return
+	}
+
+	// 查找设备
+	device, err := models.GetDeviceByMacAddress(h.db, req.MacAddress)
+	if err != nil {
+		logger.Error("查找设备失败", zap.Error(err), zap.String("mac_address", req.MacAddress))
+		response.Fail(c, "查找设备失败", nil)
+		return
+	}
+
+	if device == nil {
+		response.Fail(c, "设备不存在", nil)
+		return
+	}
+
+	err = models.LogDeviceError(h.db, device.ID, req.MacAddress, req.ErrorType, req.ErrorLevel,
+		req.ErrorCode, req.ErrorMsg, req.StackTrace, req.Context)
+	if err != nil {
+		logger.Error("记录设备错误失败", zap.Error(err), zap.String("device_id", device.ID))
+		response.Fail(c, "记录设备错误失败", nil)
+		return
+	}
+
+	response.Success(c, "设备错误记录成功", nil)
+}
+
+// GetDeviceDetail 获取设备详情
+// GET /device/:deviceId
+func (h *Handlers) GetDeviceDetail(c *gin.Context) {
+	user := models.CurrentUser(c)
+	if user == nil {
+		response.Fail(c, "用户未登录", nil)
+		return
+	}
+
+	deviceID := c.Param("deviceId")
+	if deviceID == "" {
+		response.Fail(c, "设备ID不能为空", nil)
+		return
+	}
+
+	// 查询设备详情 - 使用MAC地址查询
+	device, err := models.GetDeviceByMacAddress(h.db, deviceID)
+	if err != nil || device == nil {
+		response.Fail(c, "设备不存在", nil)
+		return
+	}
+
+	// 验证设备所有权
+	if device.UserID != user.ID {
+		// 检查是否是组织共享设备
+		if device.GroupID == nil {
+			response.Fail(c, "权限不足", nil)
+			return
+		}
+		// 检查用户是否是组织成员
+		var member models.GroupMember
+		if err := h.db.Where("group_id = ? AND user_id = ?", *device.GroupID, user.ID).First(&member).Error; err != nil {
+			response.Fail(c, "权限不足", nil)
+			return
+		}
+	}
+
+	response.Success(c, "获取成功", device)
+}
+
+// GetDeviceErrorLogs 获取设备错误日志
+// GET /device/:deviceId/error-logs
+func (h *Handlers) GetDeviceErrorLogs(c *gin.Context) {
+	user := models.CurrentUser(c)
+	if user == nil {
+		response.Fail(c, "用户未登录", nil)
+		return
+	}
+
+	deviceID := c.Param("deviceId")
+	if deviceID == "" {
+		response.Fail(c, "设备ID不能为空", nil)
+		return
+	}
+
+	// 验证设备所有权 - 使用MAC地址查询
+	var device models.Device
+	err := h.db.Where("mac_address = ? AND user_id = ?", deviceID, user.ID).First(&device).Error
+	if err != nil {
+		response.Fail(c, "设备不存在", nil)
+		return
+	}
+
+	// 分页参数
+	page, _ := strconv.Atoi(c.DefaultQuery("page", "1"))
+	pageSize, _ := strconv.Atoi(c.DefaultQuery("page_size", "20"))
+	if page < 1 {
+		page = 1
+	}
+	if pageSize < 1 || pageSize > 100 {
+		pageSize = 20
+	}
+
+	offset := (page - 1) * pageSize
+
+	var logs []models.DeviceErrorLog
+	var total int64
+
+	// 获取总数
+	h.db.Model(&models.DeviceErrorLog{}).Where("device_id = ?", device.ID).Count(&total)
+
+	// 获取分页数据
+	err = h.db.Where("device_id = ?", device.ID).
+		Order("created_at DESC").
+		Limit(pageSize).
+		Offset(offset).
+		Find(&logs).Error
+
+	if err != nil {
+		logger.Error("获取设备错误日志失败", zap.Error(err), zap.String("device_id", device.ID))
+		response.Fail(c, "获取错误日志失败", nil)
+		return
+	}
+
+	response.Success(c, "获取成功", gin.H{
+		"logs":      logs,
+		"total":     total,
+		"page":      page,
+		"page_size": pageSize,
+	})
+}
+
+// GetCallRecordings 获取通话录音列表
+// GET /device/call-recordings
+func (h *Handlers) GetCallRecordings(c *gin.Context) {
+	user := models.CurrentUser(c)
+	if user == nil {
+		response.Fail(c, "用户未登录", nil)
+		return
+	}
+
+	// 分页参数
+	page, _ := strconv.Atoi(c.DefaultQuery("page", "1"))
+	pageSize, _ := strconv.Atoi(c.DefaultQuery("page_size", "20"))
+	if page < 1 {
+		page = 1
+	}
+	if pageSize < 1 || pageSize > 100 {
+		pageSize = 20
+	}
+
+	// 过滤参数
+	assistantIDStr := c.Query("assistant_id")
+	macAddress := c.Query("mac_address")
+
+	var recordings []models.CallRecording
+	var total int64
+	var err error
+
+	if assistantIDStr != "" {
+		// 按助手ID查询
+		assistantID, err := strconv.ParseUint(assistantIDStr, 10, 32)
+		if err != nil {
+			response.Fail(c, "助手ID格式错误", nil)
+			return
+		}
+		recordings, total, err = models.GetCallRecordingsByAssistant(h.db, user.ID, uint(assistantID), pageSize, (page-1)*pageSize)
+	} else if macAddress != "" {
+		// 按设备MAC地址查询
+		recordings, total, err = models.GetCallRecordingsByDevice(h.db, user.ID, macAddress, pageSize, (page-1)*pageSize)
+	} else {
+		// 查询用户所有录音
+		offset := (page - 1) * pageSize
+		query := h.db.Where("user_id = ?", user.ID)
+		query.Model(&models.CallRecording{}).Count(&total)
+		err = query.Order("created_at DESC").Limit(pageSize).Offset(offset).Find(&recordings).Error
+	}
+
+	if err != nil {
+		logger.Error("获取通话录音列表失败", zap.Error(err), zap.Uint("user_id", user.ID))
+		response.Fail(c, "获取录音列表失败", nil)
+		return
+	}
+
+	response.Success(c, "获取成功", gin.H{
+		"recordings": recordings,
+		"total":      total,
+		"page":       page,
+		"page_size":  pageSize,
+	})
+}
+
+// GetDevicePerformanceHistory 获取设备性能历史数据
+// GET /device/:deviceId/performance-history
+func (h *Handlers) GetDevicePerformanceHistory(c *gin.Context) {
+	user := models.CurrentUser(c)
+	if user == nil {
+		response.Fail(c, "用户未登录", nil)
+		return
+	}
+
+	deviceID := c.Param("deviceId")
+	if deviceID == "" {
+		response.Fail(c, "设备ID不能为空", nil)
+		return
+	}
+
+	// 验证设备所有权 - 使用MAC地址查询
+	var device models.Device
+	err := h.db.Where("mac_address = ? AND user_id = ?", deviceID, user.ID).First(&device).Error
+	if err != nil {
+		response.Fail(c, "设备不存在", nil)
+		return
+	}
+
+	// 时间范围参数（小时）
+	hours, _ := strconv.Atoi(c.DefaultQuery("hours", "24"))
+	if hours < 1 {
+		hours = 1
+	}
+	if hours > 168 { // 最多7天
+		hours = 168
+	}
+
+	logs, err := models.GetDevicePerformanceHistory(h.db, device.ID, hours)
+	if err != nil {
+		logger.Error("获取设备性能历史失败", zap.Error(err), zap.String("device_id", device.ID))
+		response.Fail(c, "获取性能历史失败", nil)
+		return
+	}
+
+	response.Success(c, "获取成功", logs)
+}
+
+// AnalyzeCallRecording 分析通话录音
+// POST /device/call-recordings/:id/analyze
+func (h *Handlers) AnalyzeCallRecording(c *gin.Context) {
+	user := models.CurrentUser(c)
+	if user == nil {
+		response.Fail(c, "用户未登录", nil)
+		return
+	}
+
+	recordingIDStr := c.Param("id")
+	recordingID, err := strconv.ParseUint(recordingIDStr, 10, 32)
+	if err != nil {
+		response.Fail(c, "录音ID格式错误", nil)
+		return
+	}
+
+	// 验证录音所有权
+	var recording models.CallRecording
+	if err := h.db.Where("id = ? AND user_id = ?", recordingID, user.ID).First(&recording).Error; err != nil {
+		response.Fail(c, "录音不存在", nil)
+		return
+	}
+
+	// 检查是否强制重新分析
+	forceAnalyze := c.Query("force") == "true"
+
+	// 创建分析服务
+	analysisService := analysis.NewAnalysisService(h.db)
+
+	// 执行分析
+	if err := analysisService.AnalyzeCallRecording(c.Request.Context(), uint(recordingID), forceAnalyze); err != nil {
+		logger.Error("分析录音失败", zap.Error(err), zap.Uint64("recordingID", recordingID))
+		response.Fail(c, fmt.Sprintf("分析失败: %v", err), nil)
+		return
+	}
+
+	response.Success(c, "分析已启动", nil)
+}
+
+// BatchAnalyzeCallRecordings 批量分析通话录音
+// POST /device/call-recordings/batch-analyze
+func (h *Handlers) BatchAnalyzeCallRecordings(c *gin.Context) {
+	user := models.CurrentUser(c)
+	if user == nil {
+		response.Fail(c, "用户未登录", nil)
+		return
+	}
+
+	var req struct {
+		AssistantID *uint `json:"assistantId"`
+		Limit       int   `json:"limit"`
+	}
+
+	if err := c.ShouldBindJSON(&req); err != nil {
+		response.Fail(c, "请求参数错误", nil)
+		return
+	}
+
+	// 设置默认限制
+	if req.Limit <= 0 || req.Limit > 50 {
+		req.Limit = 10
+	}
+
+	// 创建分析服务
+	analysisService := analysis.NewAnalysisService(h.db)
+
+	// 执行批量分析
+	if err := analysisService.BatchAnalyzeRecordings(c.Request.Context(), user.ID, req.AssistantID, req.Limit); err != nil {
+		logger.Error("批量分析录音失败", zap.Error(err), zap.Uint("userID", user.ID))
+		response.Fail(c, fmt.Sprintf("批量分析失败: %v", err), nil)
+		return
+	}
+
+	response.Success(c, "批量分析已启动", nil)
+}
+
+// GetCallRecordingAnalysis 获取通话录音分析结果
+// GET /device/call-recordings/:id/analysis
+func (h *Handlers) GetCallRecordingAnalysis(c *gin.Context) {
+	user := models.CurrentUser(c)
+	if user == nil {
+		response.Fail(c, "用户未登录", nil)
+		return
+	}
+
+	recordingIDStr := c.Param("id")
+	recordingID, err := strconv.ParseUint(recordingIDStr, 10, 32)
+	if err != nil {
+		response.Fail(c, "录音ID格式错误", nil)
+		return
+	}
+
+	// 验证录音所有权并获取分析结果
+	var recording models.CallRecording
+	if err := h.db.Where("id = ? AND user_id = ?", recordingID, user.ID).First(&recording).Error; err != nil {
+		response.Fail(c, "录音不存在", nil)
+		return
+	}
+
+	// 构建分析结果响应
+	analysisData := gin.H{
+		"recordingId":     recording.ID,
+		"analysisStatus":  recording.AnalysisStatus,
+		"analysisError":   recording.AnalysisError,
+		"analyzedAt":      recording.AnalyzedAt,
+		"autoAnalyzed":    recording.AutoAnalyzed,
+		"analysisVersion": recording.AnalysisVersion,
+	}
+
+	// 如果有分析结果，解析并返回
+	if recording.AIAnalysis != "" {
+		var analysisResult map[string]interface{}
+		if err := json.Unmarshal([]byte(recording.AIAnalysis), &analysisResult); err == nil {
+			analysisData["analysis"] = analysisResult
+		} else {
+			analysisData["analysis"] = recording.AIAnalysis // 如果解析失败，返回原始文本
+		}
+	}
+
+	response.Success(c, "获取成功", analysisData)
+}
+
+// ServeRecordingFile 提供录音文件下载服务
+// GET /device/recordings/*filepath
+func (h *Handlers) ServeRecordingFile(c *gin.Context) {
+	user := models.CurrentUser(c)
+	if user == nil {
+		response.Fail(c, "用户未登录", nil)
+		return
+	}
+
+	filePath := c.Param("filepath")
+	if filePath == "" {
+		response.Fail(c, "文件路径不能为空", nil)
+		return
+	}
+
+	// URL解码文件路径（处理MAC地址中的冒号等特殊字符）
+	decodedPath := strings.ReplaceAll(filePath, "%3A", ":")
+
+	// 从URL路径中提取录音ID（如果有的话）
+	// 或者通过文件路径验证用户权限
+
+	// 这里需要验证用户是否有权限访问该录音文件
+	// 可以通过文件路径中的user_id来验证
+	// 例如: /recordings/user_1/assistant_2/2026/01/25/file.wav
+
+	// 简单的权限验证：检查路径是否包含用户ID
+	expectedUserPath := fmt.Sprintf("user_%d", user.ID)
+	if !strings.Contains(decodedPath, expectedUserPath) {
+		response.Fail(c, "权限不足", nil)
+		return
+	}
+
+	// 构建完整的文件路径
+	// 使用lingstorage作为录音文件的存储根目录
+	recordingBasePath := "./lingstorage" // 与录音管理器的存储路径一致
+	fullPath := filepath.Join(recordingBasePath, decodedPath)
+
+	// 检查文件是否存在
+	if _, err := os.Stat(fullPath); os.IsNotExist(err) {
+		response.Fail(c, "文件不存在", nil)
+		return
+	}
+
+	// 设置适当的Content-Type
+	ext := filepath.Ext(fullPath)
+	switch ext {
+	case ".wav":
+		c.Header("Content-Type", "audio/wav")
+	case ".opus":
+		c.Header("Content-Type", "audio/opus")
+	case ".mp3":
+		c.Header("Content-Type", "audio/mpeg")
+	default:
+		c.Header("Content-Type", "application/octet-stream")
+	}
+
+	// 设置缓存头
+	c.Header("Cache-Control", "public, max-age=3600")
+
+	// 检查是否是下载请求
+	if c.Query("download") == "1" {
+		// 只有明确请求下载时才设置下载头
+		filename := filepath.Base(fullPath)
+		c.Header("Content-Disposition", fmt.Sprintf("attachment; filename=\"%s\"", filename))
+	} else {
+		// 否则设置为内联播放
+		c.Header("Content-Disposition", "inline")
+	}
+
+	// 提供文件服务
+	c.File(fullPath)
 }

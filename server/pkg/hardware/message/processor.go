@@ -188,6 +188,10 @@ type Processor struct {
 	sampleRate  int
 	channels    int
 	opusEncoder media.EncoderFunc // PCM -> OPUS (for TTS)
+
+	// 录音回调
+	aiResponseCallback func(text string) // 新增：AI回复回调函数
+	userInputCallback  func(text string) // 新增：用户输入回调函数
 }
 
 // NewProcessor 创建消息处理器
@@ -319,6 +323,21 @@ func (p *Processor) ProcessASRResult(ctx context.Context, text string) {
 	go p.processText(ctx, text)
 }
 
+// ProcessUserInput 处理用户输入（用于录音）
+func (p *Processor) ProcessUserInput(text string) {
+	if text == "" {
+		return
+	}
+
+	// 调用用户输入回调函数（用于录音）
+	p.mu.RLock()
+	callback := p.userInputCallback
+	p.mu.RUnlock()
+	if callback != nil {
+		callback(text)
+	}
+}
+
 // processText 处理文本（调用LLM和TTS）
 // 注意：此方法在goroutine中异步执行，减少锁持有时间
 func (p *Processor) processText(ctx context.Context, text string) {
@@ -374,6 +393,14 @@ func (p *Processor) processText(ctx context.Context, text string) {
 	// 发送LLM响应给前端（在锁外执行）
 	if err := p.writer.SendLLMResponse(response); err != nil {
 		p.logger.Error("发送LLM响应失败", zap.Error(err))
+	}
+
+	// 调用AI回复回调函数（用于录音）
+	p.mu.RLock()
+	callback := p.aiResponseCallback
+	p.mu.RUnlock()
+	if callback != nil {
+		callback(response)
 	}
 
 	// 注意：发音人切换现在由LLM的Function Calling自动处理，无需手动分析
@@ -793,6 +820,20 @@ func (p *Processor) calculatePlaybackWaitTime(frameCount int, audioFormat string
 	}
 
 	return time.Duration(baseWaitMs) * time.Millisecond
+}
+
+// SetAIResponseCallback 设置AI回复回调函数
+func (p *Processor) SetAIResponseCallback(callback func(text string)) {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	p.aiResponseCallback = callback
+}
+
+// SetUserInputCallback 设置用户输入回调函数
+func (p *Processor) SetUserInputCallback(callback func(text string)) {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	p.userInputCallback = callback
 }
 
 // HandleTextMessage 处理文本消息
