@@ -154,10 +154,8 @@ func (h *WorkflowPluginHandler) ListWorkflowPlugins(c *gin.Context) {
 	}
 	if req.Status != "" {
 		query = query.Where("status = ?", req.Status)
-	} else {
-		// 默认只显示已发布的插件
-		query = query.Where("status = ?", models.WorkflowPluginStatusPublished)
 	}
+	// 注意：当没有指定status时，显示所有状态的插件
 	if req.UserID != 0 {
 		query = query.Where("user_id = ?", req.UserID)
 	}
