@@ -12,6 +12,7 @@ import {
   TouchableOpacity,
   ScrollView,
   Image,
+  Alert,
 } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
@@ -20,6 +21,7 @@ import { useAuth } from '../context/AuthContext';
 import { Input, Button } from '../components';
 import { Mail, Lock, Eye, EyeOff, Shield, User as UserIcon } from '../components/Icons';
 import { getSystemInit } from '../services/api/system';
+import { getCaptcha, type CaptchaData } from '../services/api/auth';
 
 type NavigationProp = NativeStackNavigationProp<RootStackParamList>;
 
@@ -53,6 +55,11 @@ const LoginScreen: React.FC<LoginScreenProps> = ({
   const [successData, setSuccessData] = useState<any>(null);
   const [showTwoFactorInput, setShowTwoFactorInput] = useState(false);
   const [emailEnabled, setEmailEnabled] = useState(true); // 默认启用邮箱登录
+  
+  // 图形验证码相关状态
+  const [captcha, setCaptcha] = useState<CaptchaData | null>(null);
+  const [captchaCode, setCaptchaCode] = useState('');
+  const [isLoadingCaptcha, setIsLoadingCaptcha] = useState(false);
 
   // 动画值
   const fadeAnim = useRef(new Animated.Value(0)).current;
@@ -83,7 +90,35 @@ const LoginScreen: React.FC<LoginScreenProps> = ({
       // 如果获取失败，默认启用邮箱登录
       setEmailEnabled(true);
     });
+    
+    // 加载图形验证码
+    loadCaptcha();
   }, []);
+  
+  // 加载图形验证码
+  const loadCaptcha = async () => {
+    console.log('开始加载验证码...');
+    setIsLoadingCaptcha(true);
+    try {
+      console.log('调用 getCaptcha API...');
+      const response = await getCaptcha();
+      console.log('验证码 API 响应:', response);
+      if (response.code === 200 && response.data) {
+        console.log('验证码加载成功:', { id: response.data.id, hasImage: !!response.data.image });
+        setCaptcha(response.data);
+        setCaptchaCode(''); // 清空验证码输入
+      } else {
+        console.error('验证码加载失败:', response);
+        Alert.alert('提示', '验证码加载失败，请重试');
+      }
+    } catch (error) {
+      console.error('Failed to load captcha:', error);
+      Alert.alert('错误', '验证码加载失败，请检查网络连接');
+    } finally {
+      setIsLoadingCaptcha(false);
+      console.log('验证码加载完成');
+    }
+  };
 
   useEffect(() => {
     // 启动动画
@@ -216,6 +251,21 @@ const LoginScreen: React.FC<LoginScreenProps> = ({
     } else if (!/\S+@\S+\.\S+/.test(email)) {
       newErrors.email = '邮箱格式不正确';
     }
+    
+    // 验证图形验证码（必须）
+    if (!captcha || !captcha.id) {
+      if (isLoadingCaptcha) {
+        newErrors.captchaCode = '验证码加载中，请稍候';
+      } else {
+        // 如果验证码没有加载，尝试重新加载
+        loadCaptcha();
+        newErrors.captchaCode = '验证码加载失败，请刷新';
+      }
+    } else if (!captchaCode) {
+      newErrors.captchaCode = '请输入图形验证码';
+    } else if (captchaCode.length !== 4) {
+      newErrors.captchaCode = '验证码为4位';
+    }
 
     if (mode === 'login') {
       if (loginType === 'email') {
@@ -264,7 +314,7 @@ const LoginScreen: React.FC<LoginScreenProps> = ({
     try {
       if (mode === 'register') {
         // 注册模式
-        const registerData = await register(email, password, displayName, userName, verificationCode, emailEnabled);
+        const registerData = await register(email, password, displayName, userName, verificationCode, emailEnabled, captcha?.id, captchaCode);
         const finalDisplayName = registerData?.displayName || displayName || (email.includes('@') ? email.split('@')[0] : '用户');
         setSuccessData({
           email: registerData?.email || email,
@@ -283,6 +333,8 @@ const LoginScreen: React.FC<LoginScreenProps> = ({
           setUserName('');
           setDisplayName('');
           setVerificationCode('');
+          setCaptchaCode('');
+          loadCaptcha(); // 重新加载验证码
         }, 2000);
         return;
       } else {
@@ -294,13 +346,32 @@ const LoginScreen: React.FC<LoginScreenProps> = ({
             setIsLoading(false);
             return;
           }
-          await loginWithEmailCode(email, verificationCode);
+          await loginWithEmailCode(email, verificationCode, captcha?.id, captchaCode);
           // 登录成功后，AuthContext会更新isAuthenticated状态
           // AppNavigator会自动导航到Main页面
           navigation.replace('Main');
         } else {
           // 密码登录
-          const result = await login(email, password);
+          const result = await login(email, password, twoFactorCode, captcha?.id, captchaCode);
+          
+          // 检查是否需要设备验证
+          if (result.requiresDeviceVerification) {
+            setIsLoading(false);
+            Alert.alert(
+              '新设备登录',
+              '检测到您正在使用新设备登录。为了账户安全，请使用邮箱验证码方式登录。',
+              [
+                {
+                  text: '使用邮箱验证码登录',
+                  onPress: () => {
+                    setLoginType('email');
+                  },
+                },
+              ]
+            );
+            return;
+          }
+          
           // 检查是否需要二级验证
           if (result.requiresTwoFactor) {
             setShowTwoFactorInput(true);
@@ -314,8 +385,26 @@ const LoginScreen: React.FC<LoginScreenProps> = ({
       }
     } catch (error: any) {
       console.error('Auth error:', error);
-      const errorMessage = error.message || (mode === 'login' ? '登录失败，请检查邮箱和密码' : '注册失败');
-      setErrors({ email: errorMessage });
+      
+      // 检查是否是频率限制错误
+      if (error.message && (
+        error.message.includes('too many login attempts') || 
+        error.message.includes('429') ||
+        error.message.includes('Too Many Requests')
+      )) {
+        Alert.alert(
+          '登录次数过多',
+          '您的登录尝试次数过多，请稍后再试。为了账户安全，系统限制了登录频率。\n\n建议等待 2-3 分钟后再次尝试。',
+          [{ text: '知道了' }]
+        );
+      } else {
+        // 其他错误显示在输入框下方
+        const errorMessage = error.message || (mode === 'login' ? '登录失败，请检查邮箱和密码' : '注册失败');
+        setErrors({ email: errorMessage });
+      }
+      
+      // 验证失败后刷新验证码
+      loadCaptcha();
     } finally {
       setIsLoading(false);
     }
@@ -330,7 +419,7 @@ const LoginScreen: React.FC<LoginScreenProps> = ({
 
     setIsLoading(true);
     try {
-      const result = await login(email, password, twoFactorCode);
+      const result = await login(email, password, twoFactorCode, captcha?.id, captchaCode);
       if (result.requiresTwoFactor) {
         setErrors({ ...errors, twoFactorCode: '验证码错误，请重试' });
         setIsLoading(false);
@@ -340,7 +429,24 @@ const LoginScreen: React.FC<LoginScreenProps> = ({
       navigation.replace('Main');
     } catch (error: any) {
       console.error('Two factor auth error:', error);
-      setErrors({ ...errors, twoFactorCode: error.message || '验证失败' });
+      
+      // 检查是否是频率限制错误
+      if (error.message && (
+        error.message.includes('too many login attempts') || 
+        error.message.includes('429') ||
+        error.message.includes('Too Many Requests')
+      )) {
+        Alert.alert(
+          '登录次数过多',
+          '您的登录尝试次数过多，请稍后再试。为了账户安全，系统限制了登录频率。\n\n建议等待 2-3 分钟后再次尝试。',
+          [{ text: '知道了' }]
+        );
+      } else {
+        setErrors({ ...errors, twoFactorCode: error.message || '验证失败' });
+      }
+      
+      // 验证失败后刷新验证码
+      loadCaptcha();
     } finally {
       setIsLoading(false);
     }
@@ -356,7 +462,10 @@ const LoginScreen: React.FC<LoginScreenProps> = ({
     setTwoFactorCode('');
     setUserName('');
     setDisplayName('');
+    setCaptchaCode('');
     setShowTwoFactorInput(false);
+    // 切换模式时重新加载验证码
+    loadCaptcha();
   };
 
   const logoRotation = logoRotateAnim.interpolate({
@@ -589,6 +698,50 @@ const LoginScreen: React.FC<LoginScreenProps> = ({
                 autoComplete="email"
                 wrapperStyle={styles.inputWrapper}
               />
+
+              {/* 图形验证码 */}
+              <View style={styles.captchaContainer}>
+                <View style={styles.captchaInputWrapper}>
+                  <Input
+                    label="图形验证码"
+                    placeholder="请输入验证码"
+                    value={captchaCode}
+                    onChangeText={(text) => {
+                      setCaptchaCode(text.toUpperCase());
+                      if (errors.captchaCode) {
+                        const newErrors = { ...errors };
+                        delete newErrors.captchaCode;
+                        setErrors(newErrors);
+                      }
+                    }}
+                    leftIcon={<Shield size={20} color="#a78bfa" />}
+                    error={errors.captchaCode}
+                    maxLength={4}
+                    autoCapitalize="characters"
+                    wrapperStyle={{ flex: 1 }}
+                  />
+                </View>
+                <TouchableOpacity
+                  onPress={loadCaptcha}
+                  disabled={isLoadingCaptcha}
+                  style={styles.captchaImageContainer}
+                  activeOpacity={0.7}
+                >
+                  {captcha && captcha.image ? (
+                    <Image
+                      source={{ uri: captcha.image }}
+                      style={styles.captchaImage}
+                      resizeMode="contain"
+                    />
+                  ) : (
+                    <View style={styles.captchaPlaceholder}>
+                      <Text style={styles.captchaPlaceholderText}>
+                        {isLoadingCaptcha ? '加载中...' : '点击刷新'}
+                      </Text>
+                    </View>
+                  )}
+                </TouchableOpacity>
+              </View>
 
               {/* 验证码输入 - 邮箱验证码登录时显示，且邮箱已配置 */}
               {mode === 'login' && loginType === 'email' && emailEnabled && (
@@ -1071,6 +1224,41 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(196, 181, 253, 0.2)',
     top: '40%',
     right: 20,
+  },
+  // 图形验证码样式
+  captchaContainer: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: 12,
+    marginBottom: 16,
+  },
+  captchaInputWrapper: {
+    flex: 1,
+  },
+  captchaImageContainer: {
+    width: 120,
+    height: 48,
+    marginTop: 28,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#e2e8f0',
+    backgroundColor: '#f8fafc',
+    overflow: 'hidden',
+  },
+  captchaImage: {
+    width: '100%',
+    height: '100%',
+  },
+  captchaPlaceholder: {
+    width: '100%',
+    height: '100%',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#f1f5f9',
+  },
+  captchaPlaceholderText: {
+    fontSize: 12,
+    color: '#64748b',
   },
 });
 
