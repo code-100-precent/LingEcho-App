@@ -109,9 +109,11 @@ const LoginScreen: React.FC<LoginScreenProps> = ({
         setCaptchaCode(''); // 清空验证码输入
       } else {
         console.error('验证码加载失败:', response);
+        Alert.alert('提示', '验证码加载失败，请重试');
       }
     } catch (error) {
       console.error('Failed to load captcha:', error);
+      Alert.alert('错误', '验证码加载失败，请检查网络连接');
     } finally {
       setIsLoadingCaptcha(false);
       console.log('验证码加载完成');
@@ -250,17 +252,19 @@ const LoginScreen: React.FC<LoginScreenProps> = ({
       newErrors.email = '邮箱格式不正确';
     }
     
-    // 验证图形验证码（只在验证码已加载时验证）
-    if (captcha) {
-      if (!captchaCode) {
-        newErrors.captchaCode = '请输入图形验证码';
-      } else if (captchaCode.length !== 4) {
-        newErrors.captchaCode = '验证码为4位';
+    // 验证图形验证码（必须）
+    if (!captcha || !captcha.id) {
+      if (isLoadingCaptcha) {
+        newErrors.captchaCode = '验证码加载中，请稍候';
+      } else {
+        // 如果验证码没有加载，尝试重新加载
+        loadCaptcha();
+        newErrors.captchaCode = '验证码加载失败，请刷新';
       }
-    } else if (!isLoadingCaptcha) {
-      // 如果验证码没有加载且不在加载中，尝试重新加载
-      loadCaptcha();
-      newErrors.captchaCode = '验证码加载中，请稍候';
+    } else if (!captchaCode) {
+      newErrors.captchaCode = '请输入图形验证码';
+    } else if (captchaCode.length !== 4) {
+      newErrors.captchaCode = '验证码为4位';
     }
 
     if (mode === 'login') {
