@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { motion } from 'framer-motion';
+import { useNavigate } from 'react-router-dom';
 import { getAssistantList, AssistantListItem } from '@/api/assistant';
 import { 
   bindDevice, 
@@ -19,11 +20,18 @@ import {
   Key, 
   CheckCircle, 
   XCircle,
-  Wifi,
   Cpu,
   Calendar,
   Bot,
-  Settings
+  Settings,
+  Activity,
+  Clock,
+  AlertTriangle,
+  Thermometer,
+  MemoryStick,
+  Headphones,
+  Mic,
+  Eye
 } from 'lucide-react';
 import Button from '@/components/UI/Button';
 import Input from '@/components/UI/Input';
@@ -36,6 +44,7 @@ import Badge from '@/components/UI/Badge';
 
 const DeviceManagement: React.FC = () => {
   const { t } = useI18nStore();
+  const navigate = useNavigate();
   const [assistants, setAssistants] = useState<AssistantListItem[]>([]);
   const [selectedAssistantId, setSelectedAssistantId] = useState<string | null>(null);
   const [devices, setDevices] = useState<Device[]>([]);
@@ -241,6 +250,31 @@ const DeviceManagement: React.FC = () => {
   };
 
   const fmtDate = (iso?: string) => (iso ? new Date(iso).toLocaleString() : 'N/A');
+  
+  const formatUptime = (seconds: number) => {
+    if (!seconds) return 'N/A';
+    const hours = Math.floor(seconds / 3600);
+    const minutes = Math.floor((seconds % 3600) / 60);
+    if (hours > 0) {
+      return `${hours}h ${minutes}m`;
+    }
+    return `${minutes}m`;
+  };
+
+  const getStatusColor = (isOnline: boolean) => {
+    return isOnline ? 'text-green-500' : 'text-red-500';
+  };
+
+  const getPerformanceColor = (value: number, type: 'cpu' | 'memory' | 'temperature') => {
+    if (type === 'temperature') {
+      if (value > 80) return 'text-red-500';
+      if (value > 60) return 'text-yellow-500';
+      return 'text-green-500';
+    }
+    if (value > 80) return 'text-red-500';
+    if (value > 60) return 'text-yellow-500';
+    return 'text-green-500';
+  };
 
   return (
     <div className="min-h-screen dark:bg-neutral-900 flex flex-col">
@@ -328,19 +362,30 @@ const DeviceManagement: React.FC = () => {
                       >
                         <div className="flex items-start justify-between mb-3">
                           <div className="flex items-center gap-2 flex-1 min-w-0">
-                            <Smartphone className="w-5 h-5 text-purple-500 flex-shrink-0" />
+                            <div className="relative">
+                              <Smartphone className="w-5 h-5 text-purple-500 flex-shrink-0" />
+                              <div className={`absolute -top-1 -right-1 w-3 h-3 rounded-full ${device.isOnline ? 'bg-green-500' : 'bg-red-500'}`} />
+                            </div>
                             <div className="min-w-0 flex-1">
                               <h3 className="font-semibold text-lg truncate text-gray-900 dark:text-gray-100">
-                                {device.alias || device.macAddress}
+                                {device.deviceName || device.macAddress}
                               </h3>
-                              {device.alias && (
-                                <p className="text-xs text-gray-500 dark:text-gray-400 truncate">
+                              {device.deviceName && (
+                                <p className="text-xs text-gray-500 dark:text-gray-400 truncate font-mono">
                                   {device.macAddress}
                                 </p>
                               )}
                             </div>
                           </div>
                           <div className="flex gap-1 flex-shrink-0">
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              onClick={() => navigate(`/devices/${device.id}`)}
+                              title="查看详情"
+                            >
+                              <Eye className="w-4 h-4" />
+                            </Button>
                             <Button
                               variant="ghost"
                               size="icon"
@@ -360,11 +405,59 @@ const DeviceManagement: React.FC = () => {
                           </div>
                         </div>
                         
-                        <div className="space-y-2 text-sm flex-1">
-                          <div className="flex items-center gap-2 text-gray-600 dark:text-gray-400">
-                            <Wifi className="w-4 h-4 flex-shrink-0" />
-                            <span className="font-mono text-xs truncate">{device.macAddress}</span>
+                        {/* 设备状态 */}
+                        <div className="flex items-center gap-4 mb-3 text-sm">
+                          <div className="flex items-center gap-1">
+                            <Activity className={`w-4 h-4 ${getStatusColor(device.isOnline)}`} />
+                            <span className={getStatusColor(device.isOnline)}>
+                              {device.isOnline ? t('device.online') : t('device.offline')}
+                            </span>
                           </div>
+                          {device.uptime > 0 && (
+                            <div className="flex items-center gap-1 text-gray-600 dark:text-gray-400">
+                              <Clock className="w-4 h-4" />
+                              <span className="text-xs">{formatUptime(device.uptime)}</span>
+                            </div>
+                          )}
+                          {device.errorCount > 0 && (
+                            <div className="flex items-center gap-1 text-red-500">
+                              <AlertTriangle className="w-4 h-4" />
+                              <span className="text-xs">{device.errorCount}</span>
+                            </div>
+                          )}
+                        </div>
+
+                        {/* 性能指标 */}
+                        {(device.cpuUsage > 0 || device.memoryUsage > 0 || device.temperature > 0) && (
+                          <div className="grid grid-cols-3 gap-2 mb-3 text-xs">
+                            {device.cpuUsage > 0 && (
+                              <div className="flex items-center gap-1">
+                                <Cpu className={`w-3 h-3 ${getPerformanceColor(device.cpuUsage, 'cpu')}`} />
+                                <span className={getPerformanceColor(device.cpuUsage, 'cpu')}>
+                                  {device.cpuUsage.toFixed(1)}%
+                                </span>
+                              </div>
+                            )}
+                            {device.memoryUsage > 0 && (
+                              <div className="flex items-center gap-1">
+                                <MemoryStick className={`w-3 h-3 ${getPerformanceColor(device.memoryUsage, 'memory')}`} />
+                                <span className={getPerformanceColor(device.memoryUsage, 'memory')}>
+                                  {device.memoryUsage.toFixed(1)}%
+                                </span>
+                              </div>
+                            )}
+                            {device.temperature > 0 && (
+                              <div className="flex items-center gap-1">
+                                <Thermometer className={`w-3 h-3 ${getPerformanceColor(device.temperature, 'temperature')}`} />
+                                <span className={getPerformanceColor(device.temperature, 'temperature')}>
+                                  {device.temperature.toFixed(1)}°C
+                                </span>
+                              </div>
+                            )}
+                          </div>
+                        )}
+                        
+                        <div className="space-y-2 text-sm flex-1">
                           {device.board && (
                             <div className="flex items-center gap-2 text-gray-600 dark:text-gray-400">
                               <Cpu className="w-4 h-4 flex-shrink-0" />
@@ -379,6 +472,21 @@ const DeviceManagement: React.FC = () => {
                               </span>
                             </div>
                           )}
+                          
+                          {/* 音频设备状态 */}
+                          {device.audioStatus && (
+                            <div className="flex items-center gap-2 text-xs">
+                              <div className="flex items-center gap-1 text-green-500">
+                                <Mic className="w-3 h-3" />
+                                <span>Mic</span>
+                              </div>
+                              <div className="flex items-center gap-1 text-blue-500">
+                                <Headphones className="w-3 h-3" />
+                                <span>Speaker</span>
+                              </div>
+                            </div>
+                          )}
+                          
                           <div className="flex items-center gap-2">
                             <Badge
                               variant={device.autoUpdate === 1 ? 'success' : 'muted'}
@@ -388,10 +496,11 @@ const DeviceManagement: React.FC = () => {
                               {device.autoUpdate === 1 ? t('device.autoUpdate') + ': ' + t('device.enabled') : t('device.autoUpdate') + ': ' + t('device.disabled')}
                             </Badge>
                           </div>
-                          {device.lastConnected && (
+                          
+                          {device.lastSeen && (
                             <div className="flex items-center gap-2 text-xs text-gray-500 dark:text-gray-400">
                               <Calendar className="w-4 h-4 flex-shrink-0" />
-                              <span>{t('device.lastConnected')}: {fmtDate(device.lastConnected)}</span>
+                              <span>{t('device.lastSeen')}: {fmtDate(device.lastSeen)}</span>
                             </div>
                           )}
                         </div>
@@ -589,12 +698,12 @@ const DeviceManagement: React.FC = () => {
           }}
           onConfirm={handleUnbindDevice}
           title={t('device.messages.confirmUnbindTitle')}
-          description={t('device.messages.confirmUnbindDescription', { 
+          message={t('device.messages.confirmUnbindDescription', { 
             deviceName : deviceToUnbind?.alias || deviceToUnbind?.macAddress || '未知设备'
           })}
           confirmText={t('device.messages.confirmUnbind')}
           cancelText={t('device.cancel')}
-          variant="danger"
+          type="danger"
         />
       </div>
     </div>

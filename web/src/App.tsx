@@ -36,6 +36,8 @@ import AlertRuleForm from '@/pages/AlertRuleForm.tsx';
 import AlertDetail from '@/pages/AlertDetail.tsx';
 import UserQuotas from '@/pages/UserQuotas.tsx';
 import DeviceManagement from '@/pages/DeviceManagement.tsx';
+import DeviceDetail from '@/pages/DeviceDetail.tsx';
+import RedirectToDevices from '@/components/RedirectToDevices.tsx';
 import WorkflowManager from '@/pages/WorkflowManager.tsx';
 import Overview from '@/pages/Overview.tsx';
 import CallCenter from '@/pages/CallCenter.tsx';
@@ -96,6 +98,16 @@ function App() {
                                 </Layout>
                             </ProtectedRoute>
                         } />
+                        <Route path="/devices/:deviceId" element={
+                            <ProtectedRoute>
+                                <Layout>
+                                    <DeviceDetail />
+                                </Layout>
+                            </ProtectedRoute>
+                        } />
+                        {/* Redirect old device-management URLs to new devices URLs */}
+                        <Route path="/device-management" element={<Navigate to="/devices" replace />} />
+                        <Route path="/device-management/:deviceId" element={<RedirectToDevices />} />
                         <Route path="/assistants" element={
                             <ProtectedRoute>
                                 <Layout>

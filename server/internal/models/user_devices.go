@@ -205,15 +205,6 @@ func CreateOrUpdateUserDevice(db *gorm.DB, userID uint, deviceID, deviceName, de
 	return &device, err
 }
 
-// GetUserDevices 获取用户的所有设备
-func GetUserDevices(db *gorm.DB, userID uint) ([]UserDevice, error) {
-	var devices []UserDevice
-	err := db.Where("user_id = ? AND is_active = ?", userID, true).
-		Order("last_used_at DESC").
-		Find(&devices).Error
-	return devices, err
-}
-
 // DeleteUserDevice 删除用户设备
 func DeleteUserDevice(db *gorm.DB, userID uint, deviceID string) error {
 	return db.Where("user_id = ? AND device_id = ?", userID, deviceID).
@@ -255,4 +246,13 @@ func CheckDeviceTrust(db *gorm.DB, userID uint, deviceID string) (bool, error) {
 		return false, nil
 	}
 	return device.IsTrusted, nil
+}
+
+// GetUserLoginDevices 获取用户的登录设备列表
+func GetUserLoginDevices(db *gorm.DB, userID uint) ([]UserDevice, error) {
+	var devices []UserDevice
+	err := db.Where("user_id = ? AND is_active = ?", userID, true).
+		Order("last_used_at DESC").
+		Find(&devices).Error
+	return devices, err
 }

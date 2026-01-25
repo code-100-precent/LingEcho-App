@@ -381,6 +381,24 @@ func (h *Handlers) registerDeviceRoutes(r *gin.RouterGroup) {
 
 		// Manually add device
 		device.POST("/manual-add", h.ManualAddDevice)
+
+		// Device monitoring and management
+		device.GET("/:deviceId", h.GetDeviceDetail)                                 // Get device detail
+		device.GET("/:deviceId/error-logs", h.GetDeviceErrorLogs)                   // Get device error logs
+		device.GET("/:deviceId/performance-history", h.GetDevicePerformanceHistory) // Get performance history
+		device.GET("/call-recordings", h.GetCallRecordings)                         // Get call recordings
+
+		// AI分析相关路由
+		device.POST("/call-recordings/:id/analyze", h.AnalyzeCallRecording)         // 分析单个录音
+		device.POST("/call-recordings/batch-analyze", h.BatchAnalyzeCallRecordings) // 批量分析录音
+		device.GET("/call-recordings/:id/analysis", h.GetCallRecordingAnalysis)     // 获取分析结果
+
+		// Device status updates (for hardware devices to report status)
+		device.POST("/status", h.UpdateDeviceStatus) // Update device status
+		device.POST("/error", h.LogDeviceError)      // Log device error
+
+		// Recording file access
+		device.GET("/recordings/*filepath", h.ServeRecordingFile) // Serve recording files
 	}
 }
 
