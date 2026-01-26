@@ -653,6 +653,11 @@ func (h *Handlers) handleUserSigninByPassword(c *gin.Context) {
 		isTokenLogin := form.AuthToken != ""
 
 		if !isTokenLogin {
+			// 先创建设备记录（即使是不信任的），这样设备验证时才能更新它
+			if _, err := models.CreateOrUpdateUserDevice(db, user.ID, deviceID, fmt.Sprintf("%s on %s", browser, os), deviceType, os, browser, userAgent, clientIP, location); err != nil {
+				logger.Warn("Failed to create/update user device before verification", zap.Error(err))
+			}
+
 			// 记录可疑登录尝试
 			if err := models.RecordLoginHistory(db, user.ID, form.Email, clientIP, location, country, city, userAgent, deviceID, "password", false, "untrusted device", true); err != nil {
 				logger.Warn("Failed to record login history for untrusted device", zap.Error(err))
