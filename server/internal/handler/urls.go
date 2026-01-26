@@ -182,6 +182,8 @@ func (h *Handlers) Register(engine *gin.Engine) {
 	if h.sipHandler != nil {
 		h.registerSipRoutes(r)
 	}
+	// Register Scheme routes (代接方案管理)
+	h.registerSchemeRoutes(r)
 	// Register Business Module Routes
 	h.registerAuthRoutes(r)
 	h.registerNotificationRoutes(r)
@@ -796,5 +798,27 @@ func (h *Handlers) registerWorkflowPluginRoutes(r *gin.RouterGroup) {
 		// 用户插件
 		pluginsAuth.GET("/installed", pluginHandler.ListInstalledWorkflowPlugins)
 		pluginsAuth.GET("/my-plugins", pluginHandler.GetUserWorkflowPlugins)
+	}
+}
+
+// registerSchemeRoutes 代接方案管理模块
+func (h *Handlers) registerSchemeRoutes(r *gin.RouterGroup) {
+	schemeHandler := NewSchemeHandler(h.db)
+
+	schemes := r.Group("schemes")
+	schemes.Use(models.AuthRequired)
+	{
+		// 获取当前激活的方案（放在前面避免被 /:id 匹配）
+		schemes.GET("/active", schemeHandler.GetActiveScheme)
+
+		// 方案管理
+		schemes.GET("", schemeHandler.ListSchemes)
+		schemes.POST("", schemeHandler.CreateScheme)
+		schemes.GET("/:id", schemeHandler.GetScheme)
+		schemes.PUT("/:id", schemeHandler.UpdateScheme)
+		schemes.DELETE("/:id", schemeHandler.DeleteScheme)
+
+		// 激活方案
+		schemes.POST("/:id/activate", schemeHandler.ActivateScheme)
 	}
 }

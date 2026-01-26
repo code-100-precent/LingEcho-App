@@ -172,7 +172,7 @@ func main() {
 		// Start SIP server in background (pass empty targetURI to avoid auto-call)
 		go func() {
 			logger.Info("Starting SIP server", zap.Int("sip_port", sipPort), zap.Int("rtp_port", rtpPort))
-			//sipServer.Start(sipPort, "") // Empty targetURI means no auto-call
+			sipServer.Start(sipPort, "") // Empty targetURI means no auto-call
 		}()
 
 		logger.Info("SIP server initialized", zap.Int("sip_port", sipPort), zap.Int("rtp_port", rtpPort))
