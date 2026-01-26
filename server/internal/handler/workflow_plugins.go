@@ -452,6 +452,81 @@ func (h *WorkflowPluginHandler) ListInstalledWorkflowPlugins(c *gin.Context) {
 	response.Success(c, "查询成功", installations)
 }
 
+// DeleteWorkflowPlugin 删除工作流插件
+func (h *WorkflowPluginHandler) DeleteWorkflowPlugin(c *gin.Context) {
+	userID := getUserID(c)
+	if userID == 0 {
+		response.Fail(c, "未授权", nil)
+		return
+	}
+
+	pluginID, err := strconv.ParseUint(c.Param("id"), 10, 32)
+	if err != nil {
+		response.Fail(c, "无效的插件ID", nil)
+		return
+	}
+
+	var plugin models.WorkflowPlugin
+	if err := h.db.First(&plugin, pluginID).Error; err != nil {
+		if err == gorm.ErrRecordNotFound {
+			response.Fail(c, "插件不存在", nil)
+		} else {
+			response.Fail(c, "查询失败: "+err.Error(), nil)
+		}
+		return
+	}
+
+	// 检查权限
+	if plugin.UserID != userID {
+		response.Fail(c, "无权限操作", nil)
+		return
+	}
+
+	// 开始事务
+	tx := h.db.Begin()
+	defer func() {
+		if r := recover(); r != nil {
+			tx.Rollback()
+		}
+	}()
+
+	// 删除相关的版本记录
+	if err := tx.Where("plugin_id = ?", pluginID).Delete(&models.WorkflowPluginVersion{}).Error; err != nil {
+		tx.Rollback()
+		response.Fail(c, "删除版本记录失败: "+err.Error(), nil)
+		return
+	}
+
+	// 删除相关的评价记录
+	if err := tx.Where("plugin_id = ?", pluginID).Delete(&models.WorkflowPluginReview{}).Error; err != nil {
+		tx.Rollback()
+		response.Fail(c, "删除评价记录失败: "+err.Error(), nil)
+		return
+	}
+
+	// 删除相关的安装记录
+	if err := tx.Where("plugin_id = ?", pluginID).Delete(&models.WorkflowPluginInstallation{}).Error; err != nil {
+		tx.Rollback()
+		response.Fail(c, "删除安装记录失败: "+err.Error(), nil)
+		return
+	}
+
+	// 删除插件本身
+	if err := tx.Delete(&plugin).Error; err != nil {
+		tx.Rollback()
+		response.Fail(c, "删除插件失败: "+err.Error(), nil)
+		return
+	}
+
+	// 提交事务
+	if err := tx.Commit().Error; err != nil {
+		response.Fail(c, "删除失败: "+err.Error(), nil)
+		return
+	}
+
+	response.Success(c, "删除成功", gin.H{"message": "删除成功"})
+}
+
 // GetUserWorkflowPlugins 获取用户创建的工作流插件
 func (h *WorkflowPluginHandler) GetUserWorkflowPlugins(c *gin.Context) {
 	userID := getUserID(c)

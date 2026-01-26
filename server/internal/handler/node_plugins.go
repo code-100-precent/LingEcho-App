@@ -414,6 +414,81 @@ func (h *NodePluginHandler) InstallPlugin(c *gin.Context) {
 	response.Success(c, "安装成功", gin.H{"message": "安装成功"})
 }
 
+// DeletePlugin 删除插件
+func (h *NodePluginHandler) DeletePlugin(c *gin.Context) {
+	userID := getUserID(c)
+	if userID == 0 {
+		response.Fail(c, "未授权", nil)
+		return
+	}
+
+	pluginID, err := strconv.ParseUint(c.Param("id"), 10, 32)
+	if err != nil {
+		response.Fail(c, "无效的插件ID", nil)
+		return
+	}
+
+	var plugin models.NodePlugin
+	if err := h.db.First(&plugin, pluginID).Error; err != nil {
+		if err == gorm.ErrRecordNotFound {
+			response.Fail(c, "插件不存在", nil)
+		} else {
+			response.Fail(c, "查询失败: "+err.Error(), nil)
+		}
+		return
+	}
+
+	// 检查权限
+	if plugin.UserID != userID {
+		response.Fail(c, "无权限操作", nil)
+		return
+	}
+
+	// 开始事务
+	tx := h.db.Begin()
+	defer func() {
+		if r := recover(); r != nil {
+			tx.Rollback()
+		}
+	}()
+
+	// 删除相关的版本记录
+	if err := tx.Where("plugin_id = ?", pluginID).Delete(&models.NodePluginVersion{}).Error; err != nil {
+		tx.Rollback()
+		response.Fail(c, "删除版本记录失败: "+err.Error(), nil)
+		return
+	}
+
+	// 删除相关的评价记录
+	if err := tx.Where("plugin_id = ?", pluginID).Delete(&models.NodePluginReview{}).Error; err != nil {
+		tx.Rollback()
+		response.Fail(c, "删除评价记录失败: "+err.Error(), nil)
+		return
+	}
+
+	// 删除相关的安装记录
+	if err := tx.Where("plugin_id = ?", pluginID).Delete(&models.NodePluginInstallation{}).Error; err != nil {
+		tx.Rollback()
+		response.Fail(c, "删除安装记录失败: "+err.Error(), nil)
+		return
+	}
+
+	// 删除插件本身
+	if err := tx.Delete(&plugin).Error; err != nil {
+		tx.Rollback()
+		response.Fail(c, "删除插件失败: "+err.Error(), nil)
+		return
+	}
+
+	// 提交事务
+	if err := tx.Commit().Error; err != nil {
+		response.Fail(c, "删除失败: "+err.Error(), nil)
+		return
+	}
+
+	response.Success(c, "删除成功", gin.H{"message": "删除成功"})
+}
+
 // ListInstalledPlugins 获取已安装插件列表
 func (h *NodePluginHandler) ListInstalledPlugins(c *gin.Context) {
 	userID := getUserID(c)
