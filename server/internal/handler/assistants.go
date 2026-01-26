@@ -444,7 +444,8 @@ func (h *Handlers) ServeVoiceSculptorLoaderJS(c *gin.Context) {
 	}
 
 	// Inject SDK at the beginning of the template content (if not already loaded)
-	sdkPath := fmt.Sprintf("%s/static/js/lingecho-sdk.js", baseURL)
+	// 使用固定的CDN地址而不是本地地址
+	sdkPath := "https://store.lingecho.com/uploads/buckets/default/lingecho-sdk.js"
 	sdkInjection := fmt.Sprintf(`
 // LingEcho SDK - auto load
 (function() {
