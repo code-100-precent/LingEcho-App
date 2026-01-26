@@ -242,7 +242,7 @@ const NodePluginMarket: React.FC = () => {
                   {plugin.displayName}
                 </h3>
                 <p className="text-sm text-gray-500 dark:text-gray-400 truncate">
-                  by {plugin.author}
+                  by {plugin.author || '未知作者'}
                 </p>
               </div>
             </div>
@@ -257,7 +257,7 @@ const NodePluginMarket: React.FC = () => {
           {/* 插件描述 */}
           <div className="flex-1 mb-4">
             <p className="text-gray-600 dark:text-gray-300 text-sm line-clamp-3">
-              {plugin.description}
+              {plugin.description || '暂无描述'}
             </p>
           </div>
 
@@ -285,14 +285,14 @@ const NodePluginMarket: React.FC = () => {
             <div className="flex items-center gap-4">
               <div className="flex items-center gap-1">
                 <Download className="w-4 h-4 flex-shrink-0" />
-                <span>{plugin.downloadCount}</span>
+                <span>{plugin.downloadCount || 0}</span>
               </div>
               <div className="flex items-center gap-1">
                 <Star className="w-4 h-4 flex-shrink-0" />
                 <span>{(plugin.rating || 0).toFixed(1)}</span>
               </div>
             </div>
-            <span className="text-xs flex-shrink-0">v{plugin.version}</span>
+            <span className="text-xs flex-shrink-0">v{plugin.version || '1.0.0'}</span>
           </div>
 
           {/* 操作按钮 */}
@@ -550,16 +550,16 @@ const PluginDetailModal: React.FC<{
             {plugin.displayName}
           </h2>
           <p className="text-gray-600 dark:text-gray-400 mt-1">
-            by {plugin.author} • v{plugin.version}
+            by {plugin.author || '未知作者'} • v{plugin.version || '1.0.0'}
           </p>
           <div className="flex items-center gap-4 mt-2 text-sm text-gray-500 dark:text-gray-400">
             <div className="flex items-center gap-1">
               <Download className="w-4 h-4" />
-              <span>{plugin.downloadCount} 下载</span>
+              <span>{(plugin.downloadCount || 0)} 下载</span>
             </div>
             <div className="flex items-center gap-1">
               <Star className="w-4 h-4" />
-              <span>{plugin.rating.toFixed(1)} 评分</span>
+              <span>{(plugin.rating || 0).toFixed(1)} 评分</span>
             </div>
             <div className="flex items-center gap-1">
               <Calendar className="w-4 h-4" />
@@ -582,7 +582,7 @@ const PluginDetailModal: React.FC<{
           描述
         </h3>
         <p className="text-gray-600 dark:text-gray-400">
-          {plugin.description}
+          {plugin.description || '暂无描述'}
         </p>
       </div>
 
@@ -592,7 +592,7 @@ const PluginDetailModal: React.FC<{
           <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-2">
             输入参数
           </h3>
-          {plugin.inputSchema?.parameters?.length > 0 ? (
+          {plugin.inputSchema?.parameters && plugin.inputSchema.parameters.length > 0 ? (
             <div className="space-y-2">
               {plugin.inputSchema.parameters.map((param, index) => (
                 <div key={index} className="p-3 bg-gray-50 dark:bg-gray-800 rounded-lg">
@@ -626,7 +626,7 @@ const PluginDetailModal: React.FC<{
           <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-2">
             输出参数
           </h3>
-          {plugin.outputSchema?.parameters?.length > 0 ? (
+          {plugin.outputSchema?.parameters && plugin.outputSchema.parameters.length > 0 ? (
             <div className="space-y-2">
               {plugin.outputSchema.parameters.map((param, index) => (
                 <div key={index} className="p-3 bg-gray-50 dark:bg-gray-800 rounded-lg">

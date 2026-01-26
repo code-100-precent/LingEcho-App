@@ -37,23 +37,23 @@ export interface WorkflowPlugin {
   name: string
   slug: string
   displayName: string
-  description: string
+  description?: string
   category: WorkflowPluginCategory
-  version: string
+  version?: string
   status: WorkflowPluginStatus
-  icon: string
-  color: string
-  tags: string[]
-  inputSchema: WorkflowPluginIOSchema
-  outputSchema: WorkflowPluginIOSchema
-  workflowSnapshot: any
-  downloadCount: number
-  starCount: number
-  rating: number
-  author: string
-  homepage: string
-  repository: string
-  license: string
+  icon?: string
+  color?: string
+  tags?: string[]
+  inputSchema?: WorkflowPluginIOSchema
+  outputSchema?: WorkflowPluginIOSchema
+  workflowSnapshot?: any
+  downloadCount?: number
+  starCount?: number
+  rating?: number
+  author?: string
+  homepage?: string
+  repository?: string
+  license?: string
   createdAt: string
   updatedAt: string
 }
