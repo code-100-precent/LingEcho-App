@@ -122,11 +122,8 @@ export interface ListWorkflowPluginsParams {
   pageSize?: number
 }
 
-// API响应类型
-export interface ApiResponse<T> {
-  data: T
-  message?: string
-}
+// API响应类型 - 使用统一的响应格式
+import { ApiResponse } from '@/utils/request'
 
 // 工作流插件服务
 export const workflowPluginService = {
@@ -153,6 +150,11 @@ export const workflowPluginService = {
   // 更新工作流插件
   updateWorkflowPlugin: (id: number, data: UpdateWorkflowPluginRequest): Promise<ApiResponse<{ message: string }>> => {
     return put(`/workflow-plugins/${id}`, data)
+  },
+
+  // 删除工作流插件
+  deleteWorkflowPlugin: (id: number): Promise<ApiResponse<{ message: string }>> => {
+    return del(`/workflow-plugins/${id}`)
   },
 
   // 发布工作流插件

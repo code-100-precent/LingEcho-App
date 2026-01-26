@@ -4,22 +4,18 @@ import {
   Search, 
   Download, 
   Star, 
-  Eye, 
   Package, 
   Code, 
   Zap, 
   Bell, 
   Wrench,
-  Plus,
   Grid3X3,
   List,
   ExternalLink,
   Calendar,
   Tag,
   Settings,
-  Workflow,
-  X,
-  User
+  Workflow
 } from 'lucide-react'
 
 import Button from '@/components/UI/Button'
@@ -27,6 +23,8 @@ import Input from '@/components/UI/Input'
 import Card from '@/components/UI/Card'
 import Badge from '@/components/UI/Badge'
 import Modal from '@/components/UI/Modal'
+import ConfirmDialog from '@/components/UI/ConfirmDialog'
+import { useToast } from '@/components/UI/ToastContainer'
 import { workflowPluginService, WorkflowPlugin, WorkflowPluginCategory } from '@/api/workflowPlugin'
 import { workflowService } from '@/api/workflow'
 import { useAuthStore } from '@/stores/authStore'
@@ -55,6 +53,7 @@ const categoryColors = {
 
 const NodePluginMarket: React.FC = () => {
   const { isAuthenticated, user } = useAuthStore()
+  const toast = useToast()
   const [plugins, setPlugins] = useState<WorkflowPlugin[]>([])
   const [loading, setLoading] = useState(true)
   const [searchKeyword, setSearchKeyword] = useState('')
@@ -66,6 +65,11 @@ const NodePluginMarket: React.FC = () => {
   const [showCreatePlugin, setShowCreatePlugin] = useState(false)
   const [installedPlugins, setInstalledPlugins] = useState<Set<number>>(new Set())
   const [showMyPlugins, setShowMyPlugins] = useState(false)
+
+  // 确认删除对话框状态
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false)
+  const [pluginToDelete, setPluginToDelete] = useState<WorkflowPlugin | null>(null)
+  const [deleteLoading, setDeleteLoading] = useState(false)
 
   // 分页状态
   const [currentPage, setCurrentPage] = useState(1)
@@ -96,9 +100,11 @@ const NodePluginMarket: React.FC = () => {
         setTotalPages(Math.ceil(response.data.total / pageSize))
       } else {
         console.error('加载插件失败:', response.msg)
+        toast.error('加载失败', response.msg || '无法加载插件列表')
       }
-    } catch (error) {
+    } catch (error: any) {
       console.error('加载插件失败:', error)
+      toast.error('加载失败', error.message || '网络错误，请稍后重试')
     } finally {
       setLoading(false)
     }
@@ -116,14 +122,20 @@ const NodePluginMarket: React.FC = () => {
         const installedIds = new Set(response.data.map((item: any) => item.pluginId))
         setInstalledPlugins(installedIds)
       }
-    } catch (error) {
+    } catch (error: any) {
       console.error('加载已安装插件失败:', error)
+      toast.error('加载失败', '无法加载已安装插件列表')
     }
   }
 
   useEffect(() => {
+    setCurrentPage(1) // 重置页码
     loadPlugins()
-  }, [selectedCategory, selectedStatus, searchKeyword, currentPage, showMyPlugins])
+  }, [selectedCategory, selectedStatus, searchKeyword, showMyPlugins])
+
+  useEffect(() => {
+    loadPlugins()
+  }, [currentPage])
 
   useEffect(() => {
     loadInstalledPlugins()
@@ -132,7 +144,7 @@ const NodePluginMarket: React.FC = () => {
   // 安装插件
   const handleInstallPlugin = async (plugin: WorkflowPlugin) => {
     if (!isAuthenticated) {
-      alert('请先登录后再安装插件')
+      toast.warning('请先登录', '请先登录后再安装插件')
       return
     }
     
@@ -140,12 +152,47 @@ const NodePluginMarket: React.FC = () => {
       const response = await workflowPluginService.installWorkflowPlugin(plugin.id)
       if (response.data) {
         setInstalledPlugins(prev => new Set([...prev, plugin.id]))
-        alert('安装成功！')
+        toast.success('安装成功', `插件 "${plugin.displayName}" 已成功安装`)
       }
-    } catch (error) {
+    } catch (error: any) {
       console.error('安装插件失败:', error)
-      alert('安装失败，请稍后重试')
+      toast.error('安装失败', error.message || '安装插件时发生错误，请稍后重试')
     }
+  }
+
+  // 删除插件
+  const handleDeletePlugin = async (plugin: WorkflowPlugin) => {
+    setPluginToDelete(plugin)
+    setShowDeleteConfirm(true)
+  }
+
+  // 确认删除插件
+  const confirmDeletePlugin = async () => {
+    if (!pluginToDelete) return
+    
+    setDeleteLoading(true)
+    try {
+      const response = await workflowPluginService.deleteWorkflowPlugin(pluginToDelete.id)
+      if (response.data) {
+        toast.success('删除成功', `插件 "${pluginToDelete.displayName}" 已成功删除`)
+        // 重新加载插件列表
+        loadPlugins()
+        setShowDeleteConfirm(false)
+        setPluginToDelete(null)
+      }
+    } catch (error: any) {
+      console.error('删除插件失败:', error)
+      toast.error('删除失败', error.message || '删除插件时发生错误，请稍后重试')
+    } finally {
+      setDeleteLoading(false)
+    }
+  }
+
+  // 取消删除
+  const cancelDelete = () => {
+    setShowDeleteConfirm(false)
+    setPluginToDelete(null)
+    setDeleteLoading(false)
   }
 
   // 查看插件详情
@@ -156,8 +203,9 @@ const NodePluginMarket: React.FC = () => {
         setSelectedPlugin(response.data)
         setShowPluginDetail(true)
       }
-    } catch (error) {
+    } catch (error: any) {
       console.error('获取插件详情失败:', error)
+      toast.error('加载失败', '无法获取插件详情，请稍后重试')
     }
   }
 
@@ -176,12 +224,12 @@ const NodePluginMarket: React.FC = () => {
         whileHover={{ y: -4 }}
         className="group"
       >
-        <Card className="h-full p-6 hover:shadow-xl transition-all duration-300 border-2 hover:border-blue-200 dark:hover:border-blue-800">
+        <Card className="h-full flex flex-col p-6 hover:shadow-xl transition-all duration-300 border-2 hover:border-blue-200 dark:hover:border-blue-800">
           {/* 插件头部 */}
-          <div className="flex items-start justify-between mb-4">
-            <div className="flex items-center gap-3">
+          <div className="flex items-center justify-between mb-4">
+            <div className="flex items-center gap-3 flex-1 min-w-0">
               <div 
-                className="p-3 rounded-xl shadow-md"
+                className="p-3 rounded-xl shadow-md flex-shrink-0"
                 style={{ 
                   backgroundColor: plugin.color || '#6366f1',
                   color: 'white'
@@ -189,27 +237,29 @@ const NodePluginMarket: React.FC = () => {
               >
                 <CategoryIcon className="w-6 h-6" />
               </div>
-              <div>
-                <h3 className="font-bold text-lg text-gray-900 dark:text-white group-hover:text-blue-600 dark:group-hover:text-blue-400 transition-colors">
+              <div className="flex-1 min-w-0">
+                <h3 className="font-bold text-lg text-gray-900 dark:text-white group-hover:text-blue-600 dark:group-hover:text-blue-400 transition-colors truncate">
                   {plugin.displayName}
                 </h3>
-                <p className="text-sm text-gray-500 dark:text-gray-400">
+                <p className="text-sm text-gray-500 dark:text-gray-400 truncate">
                   by {plugin.author}
                 </p>
               </div>
             </div>
             <Badge 
               variant={categoryColors[plugin.category] as any}
-              className="text-xs"
+              className="text-xs flex-shrink-0 ml-2"
             >
               {plugin.category}
             </Badge>
           </div>
 
           {/* 插件描述 */}
-          <p className="text-gray-600 dark:text-gray-300 text-sm mb-4 line-clamp-2">
-            {plugin.description}
-          </p>
+          <div className="flex-1 mb-4">
+            <p className="text-gray-600 dark:text-gray-300 text-sm line-clamp-3">
+              {plugin.description}
+            </p>
+          </div>
 
           {/* 标签 */}
           {plugin.tags && plugin.tags.length > 0 && (
@@ -230,51 +280,53 @@ const NodePluginMarket: React.FC = () => {
             </div>
           )}
 
-          {/* 统计信息 */}
+          {/* 统计信息和版本 */}
           <div className="flex items-center justify-between text-sm text-gray-500 dark:text-gray-400 mb-4">
             <div className="flex items-center gap-4">
               <div className="flex items-center gap-1">
-                <Download className="w-4 h-4" />
+                <Download className="w-4 h-4 flex-shrink-0" />
                 <span>{plugin.downloadCount}</span>
               </div>
               <div className="flex items-center gap-1">
-                <Star className="w-4 h-4" />
-                <span>{plugin.rating.toFixed(1)}</span>
+                <Star className="w-4 h-4 flex-shrink-0" />
+                <span>{(plugin.rating || 0).toFixed(1)}</span>
               </div>
             </div>
-            <span className="text-xs">v{plugin.version}</span>
+            <span className="text-xs flex-shrink-0">v{plugin.version}</span>
           </div>
 
           {/* 操作按钮 */}
-          <div className="flex gap-2">
+          <div className="flex gap-2 mt-auto">
             <Button
               variant="outline"
               size="sm"
               onClick={() => handleViewPlugin(plugin)}
-              className="flex-1 flex items-center justify-center gap-2"
+              className="flex-1"
             >
-              <Eye className="w-4 h-4" />
-              <span>查看</span>
+              查看
             </Button>
-            <Button
-              variant={isInstalled ? "secondary" : "primary"}
-              size="sm"
-              onClick={() => !isInstalled && handleInstallPlugin(plugin)}
-              disabled={isInstalled}
-              className="flex-1 flex items-center justify-center gap-2"
-            >
-              {isInstalled ? (
-                <>
-                  <Package className="w-4 h-4" />
-                  <span>已安装</span>
-                </>
-              ) : (
-                <>
-                  <Download className="w-4 h-4" />
-                  <span>安装</span>
-                </>
-              )}
-            </Button>
+            
+            {/* 如果是当前用户的插件，显示删除按钮 */}
+            {showMyPlugins && user && plugin.userId === user.id ? (
+              <Button
+                variant="destructive"
+                size="sm"
+                onClick={() => handleDeletePlugin(plugin)}
+                className="flex-1"
+              >
+                删除
+              </Button>
+            ) : (
+              <Button
+                variant={isInstalled ? "secondary" : "primary"}
+                size="sm"
+                onClick={() => !isInstalled && handleInstallPlugin(plugin)}
+                disabled={isInstalled}
+                className="flex-1"
+              >
+                {isInstalled ? '已安装' : '安装'}
+              </Button>
+            )}
           </div>
         </Card>
       </motion.div>
@@ -298,7 +350,7 @@ const NodePluginMarket: React.FC = () => {
             <Button
               onClick={() => {
                 if (!isAuthenticated) {
-                  alert('请先登录后再发布工作流')
+                  toast.warning('请先登录', '请先登录后再发布工作流')
                   return
                 }
                 console.log('发布工作流按钮被点击')
@@ -310,7 +362,6 @@ const NodePluginMarket: React.FC = () => {
                 }
               }}
               disabled={!isAuthenticated}
-              leftIcon={<Plus className="w-4 h-4" />}
             >
               {isAuthenticated ? '发布工作流' : '请先登录'}
             </Button>
@@ -359,18 +410,16 @@ const NodePluginMarket: React.FC = () => {
           </select>
 
           {/* 我的插件按钮 */}
-          <Button
-            variant={showMyPlugins ? "primary" : "outline"}
-            size="sm"
-            onClick={() => {
-              setShowMyPlugins(!showMyPlugins)
-              // 重新加载插件列表
-              loadPlugins()
-            }}
-            leftIcon={<User className="w-4 h-4" />}
-          >
-            我的插件
-          </Button>
+            <Button
+              variant={showMyPlugins ? "primary" : "outline"}
+              size="sm"
+              onClick={() => {
+                setShowMyPlugins(!showMyPlugins)
+                setCurrentPage(1) // 重置页码
+              }}
+            >
+              我的插件
+            </Button>
 
           {/* 视图模式 */}
           <div className="flex border border-gray-300 dark:border-gray-600 rounded-lg overflow-hidden">
@@ -456,8 +505,21 @@ const NodePluginMarket: React.FC = () => {
         title="发布工作流为插件"
         size="xl"
       >
-        <PublishWorkflowModal onClose={() => setShowCreatePlugin(false)} />
+        <PublishWorkflowModal onClose={() => setShowCreatePlugin(false)} toast={toast} />
       </Modal>
+
+      {/* 删除确认对话框 */}
+      <ConfirmDialog
+        isOpen={showDeleteConfirm}
+        onClose={cancelDelete}
+        onConfirm={confirmDeletePlugin}
+        title="删除插件"
+        message={`确定要删除插件 "${pluginToDelete?.displayName}" 吗？此操作不可撤销。`}
+        confirmText="删除"
+        cancelText="取消"
+        type="danger"
+        loading={deleteLoading}
+      />
     </div>
   )
 }
@@ -510,7 +572,7 @@ const PluginDetailModal: React.FC<{
           onClick={onInstall}
           disabled={isInstalled}
         >
-          {isInstalled ? '已安装' : '安装插件'}
+          {isInstalled ? '已安装' : '安装'}
         </Button>
       </div>
 
@@ -639,7 +701,8 @@ const PluginDetailModal: React.FC<{
 // 发布工作流组件
 const PublishWorkflowModal: React.FC<{
   onClose: () => void
-}> = ({ onClose }) => {
+  toast: any
+}> = ({ onClose, toast }) => {
   const [workflows, setWorkflows] = useState<any[]>([])
   const [selectedWorkflow, setSelectedWorkflow] = useState<any>(null)
   const [formData, setFormData] = useState({
@@ -673,8 +736,9 @@ const PublishWorkflowModal: React.FC<{
         if (response.data) {
           setWorkflows(response.data)
         }
-      } catch (error) {
+      } catch (error: any) {
         console.error('加载工作流失败:', error)
+        toast.error('加载失败', '无法加载工作流列表')
       }
     }
     
@@ -706,16 +770,16 @@ const PublishWorkflowModal: React.FC<{
 
       const response = await workflowPluginService.publishWorkflowAsPlugin(selectedWorkflow.id, pluginData)
       if (response.code === 200 && response.data) {
-        alert('发布成功！插件已创建为草稿状态，请在状态过滤器中选择"草稿"查看。')
+        toast.success('发布成功', '插件已创建为草稿状态，请在状态过滤器中选择"草稿"查看')
         onClose()
         // 刷新插件列表
         window.location.reload()
       } else {
-        alert('发布失败：' + (response.msg || '未知错误'))
+        toast.error('发布失败', response.msg || '未知错误')
       }
     } catch (error: any) {
       console.error('发布工作流失败:', error)
-      alert('发布失败：' + (error.msg || error.message || '网络错误'))
+      toast.error('发布失败', error.msg || error.message || '网络错误')
     } finally {
       setLoading(false)
     }
@@ -905,7 +969,6 @@ const PublishWorkflowModal: React.FC<{
                   }
                 })
               }}
-              leftIcon={<Plus className="w-4 h-4" />}
             >
               添加
             </Button>
@@ -984,7 +1047,6 @@ const PublishWorkflowModal: React.FC<{
                         inputSchema: { parameters: newParams }
                       })
                     }}
-                    leftIcon={<X className="w-4 h-4" />}
                   >
                     删除
                   </Button>
@@ -1012,7 +1074,6 @@ const PublishWorkflowModal: React.FC<{
                   }
                 })
               }}
-              leftIcon={<Plus className="w-4 h-4" />}
             >
               添加
             </Button>
@@ -1076,7 +1137,6 @@ const PublishWorkflowModal: React.FC<{
                         outputSchema: { parameters: newParams }
                       })
                     }}
-                    leftIcon={<X className="w-4 h-4" />}
                   >
                     删除
                   </Button>

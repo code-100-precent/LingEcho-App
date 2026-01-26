@@ -762,6 +762,7 @@ func (h *Handlers) registerNodePluginRoutes(r *gin.RouterGroup) {
 	{
 		pluginsAuth.POST("", pluginHandler.CreatePlugin)
 		pluginsAuth.PUT("/:id", pluginHandler.UpdatePlugin)
+		pluginsAuth.DELETE("/:id", pluginHandler.DeletePlugin)
 		pluginsAuth.POST("/:id/publish", pluginHandler.PublishPlugin)
 		pluginsAuth.POST("/:id/install", pluginHandler.InstallPlugin)
 		pluginsAuth.GET("/installed", pluginHandler.ListInstalledPlugins)
@@ -788,6 +789,7 @@ func (h *Handlers) registerWorkflowPluginRoutes(r *gin.RouterGroup) {
 
 		// 插件管理
 		pluginsAuth.PUT("/:id", pluginHandler.UpdateWorkflowPlugin)
+		pluginsAuth.DELETE("/:id", pluginHandler.DeleteWorkflowPlugin)
 		pluginsAuth.POST("/:id/publish", pluginHandler.PublishWorkflowPlugin)
 		pluginsAuth.POST("/:id/install", pluginHandler.InstallWorkflowPlugin)
 
