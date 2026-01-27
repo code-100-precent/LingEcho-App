@@ -869,6 +869,35 @@ func (p *Processor) HandleTextMessage(ctx context.Context, data []byte) {
 	case "hello":
 		// xiaozhi协议hello消息，由session处理
 		p.logger.Debug("收到hello消息，由session处理")
+
+	case "abort":
+		// 处理硬件按钮中断消息
+		p.logger.Info("收到abort消息，中断对话")
+
+		// 1. 取消TTS播放
+		if p.stateManager.IsTTSPlaying() {
+			p.logger.Info("中断TTS播放")
+			p.stateManager.SetTTSPlaying(false)
+			p.stateManager.CancelTTS()
+
+			// 发送TTS结束消息，通知前端停止播放
+			if err := p.writer.SendTTSEnd(); err != nil {
+				p.logger.Warn("发送TTS结束消息失败", zap.Error(err))
+			}
+		}
+
+		// 2. 停止LLM处理
+		if p.stateManager.IsProcessing() {
+			p.logger.Info("中断LLM处理")
+			p.stateManager.SetProcessing(false)
+		}
+
+		// 3. 清空消息历史（可选，根据需求决定）
+		p.mu.Lock()
+		p.messages = make([]llm.Message, 0)
+		p.mu.Unlock()
+
+		p.logger.Info("对话已中断")
 	}
 }
 
