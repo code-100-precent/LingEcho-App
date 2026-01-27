@@ -1,7 +1,6 @@
 package handlers
 
 import (
-	"encoding/json"
 	"strconv"
 
 	"github.com/code-100-precent/LingEcho/internal/models"
@@ -112,25 +111,9 @@ func (h *CallRecordingHandler) GetCallRecordingDetail(c *gin.Context) {
 		CallRecording: &recording,
 	}
 
-	// 解析详细对话记录
-	if recording.ConversationDetails != "" {
-		var conversationDetails conversation.ConversationDetails
-		if err := json.Unmarshal([]byte(recording.ConversationDetails), &conversationDetails); err != nil {
-			h.logger.Warn("解析对话详情失败", zap.Error(err), zap.Uint64("recordingID", recordingID))
-		} else {
-			detailResponse.ConversationDetailsData = &conversationDetails
-		}
-	}
-
-	// 解析时间指标
-	if recording.TimingMetrics != "" {
-		var timingMetrics conversation.TimingMetrics
-		if err := json.Unmarshal([]byte(recording.TimingMetrics), &timingMetrics); err != nil {
-			h.logger.Warn("解析时间指标失败", zap.Error(err), zap.Uint64("recordingID", recordingID))
-		} else {
-			detailResponse.TimingMetricsData = &timingMetrics
-		}
-	}
+	// 注意：ConversationDetails 和 TimingMetrics 字段在当前模型中不存在
+	// 如果需要这些功能，需要在 CallRecording 模型中添加相应字段
+	// 或者从其他来源获取这些数据
 
 	response.Success(c, "获取成功", detailResponse)
 }
