@@ -44,13 +44,27 @@ func main() {
 	fmt.Println("✓ 数据库连接成功")
 	
 	// 执行自动迁移
-	fmt.Println("\n开始迁移 SipUser 模型...")
+	fmt.Println("\n开始迁移模型...")
 	
+	// 迁移 SipUser
+	fmt.Println("  - SipUser")
 	if err := db.AutoMigrate(&models.SipUser{}); err != nil {
-		log.Fatalf("迁移失败: %v", err)
+		log.Fatalf("迁移 SipUser 失败: %v", err)
 	}
 	
-	fmt.Println("✓ SipUser 模型迁移成功")
+	// 迁移 PhoneNumber
+	fmt.Println("  - PhoneNumber")
+	if err := db.AutoMigrate(&models.PhoneNumber{}); err != nil {
+		log.Fatalf("迁移 PhoneNumber 失败: %v", err)
+	}
+	
+	// 迁移 Voicemail
+	fmt.Println("  - Voicemail")
+	if err := db.AutoMigrate(&models.Voicemail{}); err != nil {
+		log.Fatalf("迁移 Voicemail 失败: %v", err)
+	}
+	
+	fmt.Println("✓ 所有模型迁移成功")
 	
 	// 验证字段
 	fmt.Println("\n验证新字段...")

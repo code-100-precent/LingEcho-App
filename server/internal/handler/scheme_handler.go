@@ -67,9 +67,13 @@ type UpdateSchemeRequest struct {
 // @Success 200 {object} response.Response{data=[]models.SipUser}
 // @Router /api/schemes [get]
 func (h *SchemeHandler) ListSchemes(c *gin.Context) {
-	userID := c.GetUint("userID")
+	user := models.CurrentUser(c)
+	if user == nil {
+		response.Fail(c, "未授权", "请先登录")
+		return
+	}
 
-	schemes, err := models.GetSipUsersByUserID(h.db, userID)
+	schemes, err := models.GetSipUsersByUserID(h.db, user.ID)
 	if err != nil {
 		response.Fail(c, "获取方案列表失败", err.Error())
 		return
@@ -88,7 +92,12 @@ func (h *SchemeHandler) ListSchemes(c *gin.Context) {
 // @Success 200 {object} response.Response{data=models.SipUser}
 // @Router /api/schemes/{id} [get]
 func (h *SchemeHandler) GetScheme(c *gin.Context) {
-	userID := c.GetUint("userID")
+	user := models.CurrentUser(c)
+	if user == nil {
+		response.Fail(c, "未授权", "请先登录")
+		return
+	}
+
 	schemeID, err := strconv.ParseUint(c.Param("id"), 10, 32)
 	if err != nil {
 		response.Fail(c, "无效的方案ID", err.Error())
@@ -102,7 +111,7 @@ func (h *SchemeHandler) GetScheme(c *gin.Context) {
 	}
 
 	// 检查权限
-	if scheme.UserID == nil || *scheme.UserID != userID {
+	if scheme.UserID == nil || *scheme.UserID != user.ID {
 		response.Fail(c, "无权访问此方案", nil)
 		return
 	}
@@ -120,7 +129,11 @@ func (h *SchemeHandler) GetScheme(c *gin.Context) {
 // @Success 200 {object} response.Response{data=models.SipUser}
 // @Router /api/schemes [post]
 func (h *SchemeHandler) CreateScheme(c *gin.Context) {
-	userID := c.GetUint("userID")
+	user := models.CurrentUser(c)
+	if user == nil {
+		response.Fail(c, "未授权", "请先登录")
+		return
+	}
 
 	var req CreateSchemeRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
@@ -129,13 +142,13 @@ func (h *SchemeHandler) CreateScheme(c *gin.Context) {
 	}
 
 	// 生成唯一的 username
-	username := generateSchemeUsername(userID)
+	username := generateSchemeUsername(user.ID)
 
 	scheme := &models.SipUser{
 		SchemeName:       req.SchemeName,
 		Description:      req.Description,
 		Username:         username,
-		UserID:           &userID,
+		UserID:           &user.ID,
 		AssistantID:      req.AssistantID,
 		AutoAnswer:       req.AutoAnswer,
 		AutoAnswerDelay:  req.AutoAnswerDelay,
@@ -178,7 +191,12 @@ func (h *SchemeHandler) CreateScheme(c *gin.Context) {
 // @Success 200 {object} response.Response{data=models.SipUser}
 // @Router /api/schemes/{id} [put]
 func (h *SchemeHandler) UpdateScheme(c *gin.Context) {
-	userID := c.GetUint("userID")
+	user := models.CurrentUser(c)
+	if user == nil {
+		response.Fail(c, "未授权", "请先登录")
+		return
+	}
+
 	schemeID, err := strconv.ParseUint(c.Param("id"), 10, 32)
 	if err != nil {
 		response.Fail(c, "无效的方案ID", err.Error())
@@ -198,7 +216,7 @@ func (h *SchemeHandler) UpdateScheme(c *gin.Context) {
 	}
 
 	// 检查权限
-	if scheme.UserID == nil || *scheme.UserID != userID {
+	if scheme.UserID == nil || *scheme.UserID != user.ID {
 		response.Fail(c, "无权修改此方案", nil)
 		return
 	}
@@ -268,7 +286,12 @@ func (h *SchemeHandler) UpdateScheme(c *gin.Context) {
 // @Success 200 {object} response.Response
 // @Router /api/schemes/{id} [delete]
 func (h *SchemeHandler) DeleteScheme(c *gin.Context) {
-	userID := c.GetUint("userID")
+	user := models.CurrentUser(c)
+	if user == nil {
+		response.Fail(c, "未授权", "请先登录")
+		return
+	}
+
 	schemeID, err := strconv.ParseUint(c.Param("id"), 10, 32)
 	if err != nil {
 		response.Fail(c, "无效的方案ID", err.Error())
@@ -282,7 +305,7 @@ func (h *SchemeHandler) DeleteScheme(c *gin.Context) {
 	}
 
 	// 检查权限
-	if scheme.UserID == nil || *scheme.UserID != userID {
+	if scheme.UserID == nil || *scheme.UserID != user.ID {
 		response.Fail(c, "无权删除此方案", nil)
 		return
 	}
@@ -305,7 +328,12 @@ func (h *SchemeHandler) DeleteScheme(c *gin.Context) {
 // @Success 200 {object} response.Response
 // @Router /api/schemes/{id}/activate [post]
 func (h *SchemeHandler) ActivateScheme(c *gin.Context) {
-	userID := c.GetUint("userID")
+	user := models.CurrentUser(c)
+	if user == nil {
+		response.Fail(c, "未授权", "请先登录")
+		return
+	}
+
 	schemeID, err := strconv.ParseUint(c.Param("id"), 10, 32)
 	if err != nil {
 		response.Fail(c, "无效的方案ID", err.Error())
@@ -319,17 +347,64 @@ func (h *SchemeHandler) ActivateScheme(c *gin.Context) {
 	}
 
 	// 检查权限
-	if scheme.UserID == nil || *scheme.UserID != userID {
+	if scheme.UserID == nil || *scheme.UserID != user.ID {
 		response.Fail(c, "无权激活此方案", nil)
 		return
 	}
 
-	if err := models.ActivateSipUser(h.db, userID, uint(schemeID)); err != nil {
+	if err := models.ActivateSipUser(h.db, user.ID, uint(schemeID)); err != nil {
 		response.Fail(c, "激活方案失败", err.Error())
 		return
 	}
 
 	response.Success(c, "方案已激活", map[string]interface{}{
+		"id": schemeID,
+	})
+}
+
+// DeactivateScheme 停用方案
+// @Summary 停用代接方案
+// @Tags Scheme
+// @Accept json
+// @Produce json
+// @Security BearerAuth
+// @Param id path int true "方案ID"
+// @Success 200 {object} response.Response
+// @Router /api/schemes/{id}/deactivate [post]
+func (h *SchemeHandler) DeactivateScheme(c *gin.Context) {
+	user := models.CurrentUser(c)
+	if user == nil {
+		response.Fail(c, "未授权", "请先登录")
+		return
+	}
+
+	schemeID, err := strconv.ParseUint(c.Param("id"), 10, 32)
+	if err != nil {
+		response.Fail(c, "无效的方案ID", err.Error())
+		return
+	}
+
+	scheme, err := models.GetSipUserByID(h.db, uint(schemeID))
+	if err != nil {
+		response.Fail(c, "方案不存在", err.Error())
+		return
+	}
+
+	// 检查权限
+	if scheme.UserID == nil || *scheme.UserID != user.ID {
+		response.Fail(c, "无权停用此方案", nil)
+		return
+	}
+
+	// 停用方案（将 is_active 设为 false）
+	if err := h.db.Model(&models.SipUser{}).
+		Where("id = ?", schemeID).
+		Update("is_active", false).Error; err != nil {
+		response.Fail(c, "停用方案失败", err.Error())
+		return
+	}
+
+	response.Success(c, "方案已停用", map[string]interface{}{
 		"id": schemeID,
 	})
 }
@@ -343,9 +418,13 @@ func (h *SchemeHandler) ActivateScheme(c *gin.Context) {
 // @Success 200 {object} response.Response{data=models.SipUser}
 // @Router /api/schemes/active [get]
 func (h *SchemeHandler) GetActiveScheme(c *gin.Context) {
-	userID := c.GetUint("userID")
+	user := models.CurrentUser(c)
+	if user == nil {
+		response.Fail(c, "未授权", "请先登录")
+		return
+	}
 
-	scheme, err := models.GetActiveSipUserByUserID(h.db, userID)
+	scheme, err := models.GetActiveSipUserByUserID(h.db, user.ID)
 	if err != nil {
 		if err == gorm.ErrRecordNotFound {
 			response.Success(c, "success", nil)

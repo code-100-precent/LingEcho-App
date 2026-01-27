@@ -359,22 +359,38 @@ func (h *SipHandler) HangupOutgoingCall(c *gin.Context) {
 // @Param userId query int false "用户ID"
 // @Param status query string false "状态筛选"
 // @Param limit query int false "限制数量" default(20)
+// @Param page query int false "页码" default(1)
 // @Success 200 {object} response.Response{data=[]models.SipCall}
 // @Router /api/sip/calls [get]
 func (h *SipHandler) GetCallHistory(c *gin.Context) {
+	// 如果有认证，获取当前用户
+	user := models.CurrentUser(c)
+	
 	userIDStr := c.Query("userId")
 	status := c.Query("status")
 	limitStr := c.DefaultQuery("limit", "20")
+	pageStr := c.DefaultQuery("page", "1")
 
 	limit := 20
-	if l, err := strconv.Atoi(limitStr); err == nil && l > 0 {
+	if l, err := strconv.Atoi(limitStr); err == nil && l > 0 && l <= 100 {
 		limit = l
 	}
+	
+	page := 1
+	if p, err := strconv.Atoi(pageStr); err == nil && p > 0 {
+		page = p
+	}
+	
+	offset := (page - 1) * limit
 
 	var calls []models.SipCall
-	query := h.db.Order("created_at DESC")
+	var total int64
+	query := h.db.Model(&models.SipCall{})
 
-	if userIDStr != "" {
+	// 如果有用户登录，只返回该用户的记录
+	if user != nil {
+		query = query.Where("user_id = ?", user.ID)
+	} else if userIDStr != "" {
 		if userID, err := strconv.ParseUint(userIDStr, 10, 32); err == nil {
 			query = query.Where("user_id = ?", uint(userID))
 		}
@@ -383,14 +399,53 @@ func (h *SipHandler) GetCallHistory(c *gin.Context) {
 	if status != "" {
 		query = query.Where("status = ?", status)
 	}
+	
+	// 获取总数
+	query.Count(&total)
 
-	if err := query.Limit(limit).Find(&calls).Error; err != nil {
+	if err := query.Order("created_at DESC").Limit(limit).Offset(offset).Find(&calls).Error; err != nil {
 		logrus.WithError(err).Error("Failed to get call history")
 		response.Fail(c, "Failed to get call history: "+err.Error(), nil)
 		return
 	}
 
-	response.Success(c, "Success", calls)
+	response.Success(c, "Success", gin.H{
+		"list":  calls,
+		"total": total,
+		"page":  page,
+		"limit": limit,
+	})
+}
+
+// GetCallDetail 获取通话详情
+// @Summary 获取通话详情
+// @Description 获取通话记录详情，包括录音、转录等信息
+// @Tags SIP
+// @Produce json
+// @Param callId path string true "通话ID"
+// @Success 200 {object} response.Response{data=models.SipCall}
+// @Router /api/sip/calls/{callId}/detail [get]
+func (h *SipHandler) GetCallDetail(c *gin.Context) {
+	callID := c.Param("callId")
+	if callID == "" {
+		response.Fail(c, "callId is required", nil)
+		return
+	}
+
+	sipCall, err := models.GetSipCallByCallID(h.db, callID)
+	if err != nil {
+		response.Fail(c, "Call not found", nil)
+		return
+	}
+	
+	// 检查权限
+	user := models.CurrentUser(c)
+	if user != nil && sipCall.UserID != nil && *sipCall.UserID != user.ID {
+		response.Fail(c, "无权访问此通话记录", nil)
+		return
+	}
+
+	response.Success(c, "Success", sipCall)
 }
 
 // GetSipUsers 获取SIP用户列表

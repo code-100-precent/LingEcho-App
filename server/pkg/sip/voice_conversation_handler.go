@@ -2,6 +2,7 @@ package sip
 
 import (
 	"context"
+	"fmt"
 	"net"
 	"sync"
 	"time"
@@ -13,6 +14,7 @@ import (
 	"github.com/code-100-precent/LingEcho/pkg/synthesizer"
 	"github.com/pion/rtp"
 	"github.com/sirupsen/logrus"
+	"gorm.io/gorm"
 )
 
 // VoiceConversationHandler 处理智能语音对话
@@ -49,6 +51,14 @@ type VoiceConversationHandler struct {
 	lastAudioTime  time.Time
 	silenceCounter int
 	
+	// 录音相关
+	isRecording        bool      // 是否正在录音
+	recordingBuffer    []byte    // 全程录音缓冲
+	recordingMutex     sync.Mutex
+	isInMessageMode    bool      // 是否进入留言阶段
+	messageStartTime   time.Time // 留言开始时间
+	conversationCount  int       // 对话轮次计数
+	
 	// 控制
 	ctx    context.Context
 	cancel context.CancelFunc
@@ -74,33 +84,43 @@ func NewVoiceConversationHandler(
 ) *VoiceConversationHandler {
 	ctx, cancel := context.WithCancel(context.Background())
 	
+	// 判断是否需要录音
+	isRecording := sipUser != nil && sipUser.RecordingEnabled
+	
 	return &VoiceConversationHandler{
-		callID:         callID,
-		clientRTPAddr:  clientRTPAddr,
-		rtpConn:        rtpConn,
-		credential:     credential,
-		asrTranscriber: asrTranscriber,
-		ttsService:     ttsService,
-		llmProvider:    llmProvider,
-		sipUser:        sipUser,
-		audioBuffer:    make([]byte, 0, 64000), // 8秒缓冲区
-		bufferDuration: 500 * time.Millisecond,
-		silenceTimeout: 800 * time.Millisecond,
-		minAudioLength: 8000, // 1秒 @ 8kHz PCMU
-		lastAudioTime:  time.Now(),
-		silenceCounter: 0,
-		isFirstMessage: true,
-		ctx:            ctx,
-		cancel:         cancel,
-		rtpSSRC:        12345678,
-		rtpSeqNum:      0,
-		rtpTimestamp:   0,
+		callID:            callID,
+		clientRTPAddr:     clientRTPAddr,
+		rtpConn:           rtpConn,
+		credential:        credential,
+		asrTranscriber:    asrTranscriber,
+		ttsService:        ttsService,
+		llmProvider:       llmProvider,
+		sipUser:           sipUser,
+		audioBuffer:       make([]byte, 0, 64000), // 8秒缓冲区
+		bufferDuration:    500 * time.Millisecond,
+		silenceTimeout:    800 * time.Millisecond,
+		minAudioLength:    8000, // 1秒 @ 8kHz PCMU
+		lastAudioTime:     time.Now(),
+		silenceCounter:    0,
+		isFirstMessage:    true,
+		isRecording:       isRecording,
+		recordingBuffer:   make([]byte, 0, 240000), // 30秒缓冲区（足够容纳对话+留言）
+		isInMessageMode:   false,
+		conversationCount: 0,
+		ctx:               ctx,
+		cancel:            cancel,
+		rtpSSRC:           12345678,
+		rtpSeqNum:         0,
+		rtpTimestamp:      0,
 	}
 }
 
 // Start 启动语音对话处理
 func (h *VoiceConversationHandler) Start() {
-	logrus.WithField("call_id", h.callID).Info("🎙️  启动智能语音对话处理器")
+	logrus.WithFields(logrus.Fields{
+		"call_id":     h.callID,
+		"recording":   h.isRecording,
+	}).Info("🎙️  启动智能语音对话处理器")
 	
 	// 启动音频处理协程
 	h.wg.Add(1)
@@ -138,6 +158,32 @@ func (h *VoiceConversationHandler) Stop() {
 
 // ProcessAudioPacket 处理接收到的音频包
 func (h *VoiceConversationHandler) ProcessAudioPacket(audioData []byte) {
+	// 如果启用了录音，收集所有音频（全程录音）
+	if h.isRecording {
+		h.recordingMutex.Lock()
+		h.recordingBuffer = append(h.recordingBuffer, audioData...)
+		h.recordingMutex.Unlock()
+	}
+	
+	// 如果在留言阶段，检查是否超时
+	if h.isInMessageMode {
+		h.recordingMutex.Lock()
+		duration := time.Since(h.messageStartTime)
+		h.recordingMutex.Unlock()
+		
+		// 检查留言时长，超过15秒自动结束
+		if duration >= 15*time.Second {
+			logrus.WithFields(logrus.Fields{
+				"call_id":  h.callID,
+				"duration": duration.Seconds(),
+			}).Info("📞 留言时间到，准备挂断")
+			h.cancel() // 触发挂断
+			return
+		}
+		// 在留言阶段不处理语音识别，只录音
+		return
+	}
+	
 	h.bufferMutex.Lock()
 	h.audioBuffer = append(h.audioBuffer, audioData...)
 	bufferLen := len(h.audioBuffer)
@@ -488,13 +534,35 @@ func (h *VoiceConversationHandler) processBufferedAudio() {
 		}
 	}
 	
+	// 增加对话轮次计数
+	h.conversationCount++
+	
+	// 检查是否需要进入留言阶段（对话2轮后且启用了录音）
+	shouldEnterMessage := false
+	if h.sipUser != nil && h.sipUser.RecordingEnabled && h.conversationCount >= 2 {
+		shouldEnterMessage = true
+	}
+	
 	// 5. TTS 合成 - 使用独立的 context
 	ttsCtx, ttsCancel := context.WithTimeout(context.Background(), 15*time.Second)
 	defer ttsCancel()
 	
+	// 如果需要进入留言阶段，在AI回复后添加留言提示
+	ttsText := aiResponse
+	if shouldEnterMessage {
+		// 固定提示语
+		messagePrompt := "您有15秒的时间进行留言"
+		ttsText = aiResponse + "。" + messagePrompt
+		
+		logrus.WithFields(logrus.Fields{
+			"call_id": h.callID,
+			"prompt":  messagePrompt,
+		}).Info("📞 准备进入留言阶段")
+	}
+	
 	// 创建 TTS handler 来接收音频数据
 	ttsBuffer := &synthesizer.SynthesisBuffer{}
-	if err := h.ttsService.Synthesize(ttsCtx, ttsBuffer, aiResponse); err != nil {
+	if err := h.ttsService.Synthesize(ttsCtx, ttsBuffer, ttsText); err != nil {
 		logrus.WithFields(logrus.Fields{
 			"call_id": h.callID,
 			"error":   err,
@@ -509,8 +577,47 @@ func (h *VoiceConversationHandler) processBufferedAudio() {
 		"bytes":   len(audioResponse),
 	}).Info("🔊 TTS 合成成功")
 	
-	// 5. 发送音频到客户端
+	// 6. 发送音频到客户端
 	h.sendAudioToClient(audioResponse)
+	
+	// 7. 如果需要进入留言阶段，播放完后进入留言状态
+	if shouldEnterMessage {
+		// 等待音频播放完成（估算播放时间）
+		playbackDuration := time.Duration(len(audioResponse)/32) * time.Millisecond // 16kHz PCM16 = 32000 bytes/sec
+		time.Sleep(playbackDuration + 500*time.Millisecond) // 额外等待500ms
+		
+		h.enterMessageMode()
+	} else if !h.isRecording {
+		// 如果未启用录音且对话2轮后，直接挂断
+		if h.conversationCount >= 2 {
+			logrus.WithField("call_id", h.callID).Info("📞 对话结束，未启用录音，准备挂断")
+			time.Sleep(2 * time.Second) // 等待2秒后挂断
+			h.cancel()
+		}
+	}
+}
+
+// enterMessageMode 进入留言阶段
+func (h *VoiceConversationHandler) enterMessageMode() {
+	h.recordingMutex.Lock()
+	h.isInMessageMode = true
+	h.messageStartTime = time.Now()
+	h.recordingMutex.Unlock()
+	
+	logrus.WithField("call_id", h.callID).Info("📞 已进入留言阶段，继续录音15秒")
+	
+	// 启动定时器，15秒后自动结束
+	go func() {
+		time.Sleep(15 * time.Second)
+		h.recordingMutex.Lock()
+		if h.isInMessageMode {
+			h.recordingMutex.Unlock()
+			logrus.WithField("call_id", h.callID).Info("📞 留言时间到，自动挂断")
+			h.cancel() // 触发挂断
+		} else {
+			h.recordingMutex.Unlock()
+		}
+	}()
 }
 
 // checkKeywordReply 检查是否匹配关键词回复
@@ -721,4 +828,86 @@ func (h *VoiceConversationHandler) processAudioLoop() {
 			}
 		}
 	}
+}
+
+// GetRecordingAudio 获取全程录音数据
+func (h *VoiceConversationHandler) GetRecordingAudio() []byte {
+	h.recordingMutex.Lock()
+	defer h.recordingMutex.Unlock()
+	
+	if len(h.recordingBuffer) == 0 {
+		return nil
+	}
+	
+	// 复制一份返回
+	audio := make([]byte, len(h.recordingBuffer))
+	copy(audio, h.recordingBuffer)
+	return audio
+}
+
+// IsInMessageMode 检查是否在留言阶段
+func (h *VoiceConversationHandler) IsInMessageMode() bool {
+	h.recordingMutex.Lock()
+	defer h.recordingMutex.Unlock()
+	return h.isInMessageMode
+}
+
+// IsRecording 检查是否启用了录音
+func (h *VoiceConversationHandler) IsRecording() bool {
+	return h.isRecording
+}
+
+
+// SaveVoicemail 保存留言到数据库
+func (h *VoiceConversationHandler) SaveVoicemail(db *gorm.DB, callerNumber string, sipCallID *uint) (*models.Voicemail, error) {
+	h.recordingMutex.Lock()
+	defer h.recordingMutex.Unlock()
+	
+	if len(h.recordingBuffer) == 0 {
+		return nil, fmt.Errorf("没有录音数据")
+	}
+	
+	// 获取用户ID
+	var userID uint
+	if h.sipUser != nil && h.sipUser.UserID != nil {
+		userID = *h.sipUser.UserID
+	} else {
+		return nil, fmt.Errorf("无法确定用户ID")
+	}
+	
+	// 创建留言记录（实际上是通话录音）
+	voicemail := &models.Voicemail{
+		UserID:           userID,
+		CallerNumber:     callerNumber,
+		AudioFormat:      "pcmu",
+		AudioSize:        int64(len(h.recordingBuffer)),
+		Duration:         len(h.recordingBuffer) / 8000, // 估算时长（秒）
+		SampleRate:       8000,
+		Channels:         1,
+		Status:           models.VoicemailStatusNew,
+		IsRead:           false,
+		TranscribeStatus: "pending",
+	}
+	
+	if h.sipUser != nil {
+		voicemail.SipUserID = &h.sipUser.ID
+	}
+	
+	if sipCallID != nil {
+		voicemail.SipCallID = sipCallID
+	}
+	
+	// 保存到数据库
+	if err := models.CreateVoicemail(db, voicemail); err != nil {
+		return nil, fmt.Errorf("创建留言记录失败: %w", err)
+	}
+	
+	logrus.WithFields(logrus.Fields{
+		"voicemail_id":  voicemail.ID,
+		"caller_number": callerNumber,
+		"audio_size":    len(h.recordingBuffer),
+		"duration":      voicemail.Duration,
+	}).Info("✅ 通话录音已保存到数据库")
+	
+	return voicemail, nil
 }

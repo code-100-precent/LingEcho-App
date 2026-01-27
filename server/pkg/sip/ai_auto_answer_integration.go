@@ -18,28 +18,58 @@ import (
 // checkAIAutoAnswer 检查是否需要启动 AI 代接
 // 返回值：(是否启动AI代接, SipUser, Assistant, error)
 func (as *SipServer) checkAIAutoAnswer(req *sip.Request) (bool, *models.SipUser, *models.Assistant, error) {
+	logrus.Debug("🔍 开始检查 AI 自动接听")
+	
 	if as.db == nil {
+		logrus.Warn("❌ 数据库连接为空，无法检查 AI 自动接听")
 		return false, nil, nil, nil
 	}
 	
 	// 获取被叫号码（To 头中的用户名）
 	to := req.To()
 	if to == nil {
+		logrus.Debug("❌ To 头为空")
 		return false, nil, nil, nil
 	}
 	
 	toUsername := to.Address.User
 	if toUsername == "" {
+		logrus.Debug("❌ To 用户名为空")
 		return false, nil, nil, nil
 	}
 	
-	// 查询 SipUser
+	logrus.WithField("to_username", toUsername).Info("🔍 检查被叫号码是否有代接方案")
+	
+	// 查询 SipUser（同时匹配 username 和 bound_phone_number）
 	var sipUser models.SipUser
-	err := as.db.Where("username = ? AND enabled = ?", toUsername, true).First(&sipUser).Error
+	query := as.db.Where("(username = ? OR bound_phone_number = ?) AND enabled = ?", toUsername, toUsername, true)
+	
+	// 先检查是否有匹配的记录（不管是否启用）
+	var count int64
+	as.db.Model(&models.SipUser{}).Where("username = ? OR bound_phone_number = ?", toUsername, toUsername).Count(&count)
+	logrus.WithFields(logrus.Fields{
+		"to_username":   toUsername,
+		"total_matches": count,
+	}).Info("📊 数据库查询统计")
+	
+	err := query.First(&sipUser).Error
 	if err != nil {
 		// 用户不存在或未启用，不启动 AI 代接
+		logrus.WithFields(logrus.Fields{
+			"to_username": toUsername,
+			"error":       err.Error(),
+		}).Warn("❌ 未找到匹配的代接方案")
 		return false, nil, nil, nil
 	}
+	
+	logrus.WithFields(logrus.Fields{
+		"to_username":  toUsername,
+		"sip_user_id":  sipUser.ID,
+		"scheme_name":  sipUser.SchemeName,
+		"auto_answer":  sipUser.AutoAnswer,
+		"assistant_id": sipUser.AssistantID,
+		"enabled":      sipUser.Enabled,
+	}).Info("✅ 找到匹配的代接方案")
 	
 	// 检查是否绑定了 AI 助手
 	if sipUser.AssistantID == nil || *sipUser.AssistantID == 0 {
@@ -86,29 +116,67 @@ func (as *SipServer) startAIVoiceSession(
 		"client_addr":  clientRTPAddr.String(),
 	}).Info("🤖 启动 AI 语音会话")
 	
-	// 获取用户凭证（如果有关联的系统用户）
+	// 获取用户凭证
+	// 如果 Assistant 配置了 ApiKey 和 ApiSecret，通过它们查找对应的凭证
+	// 否则使用 Assistant 用户的第一个凭证
 	var credential *models.UserCredential
-	if sipUser.UserID != nil {
-		var user models.User
-		if err := as.db.First(&user, *sipUser.UserID).Error; err == nil {
-			// 查询用户凭证
-			var cred models.UserCredential
-			if err := as.db.Where("user_id = ?", user.ID).First(&cred).Error; err == nil {
-				credential = &cred
-			}
+	
+	// 方案1：如果 Assistant 有 ApiKey 和 ApiSecret，通过它们查找凭证
+	if assistant.ApiKey != "" && assistant.ApiSecret != "" {
+		var cred models.UserCredential
+		if err := as.db.Where("api_key = ? AND api_secret = ?", assistant.ApiKey, assistant.ApiSecret).First(&cred).Error; err == nil {
+			credential = &cred
+			logrus.WithFields(logrus.Fields{
+				"call_id":       callID,
+				"api_key":       assistant.ApiKey,
+				"credential_id": cred.ID,
+				"user_id":       cred.UserID,
+				"asr_provider":  cred.GetASRProvider(),
+				"tts_provider":  cred.GetTTSProvider(),
+			}).Info("✓ 通过 ApiKey/ApiSecret 找到凭证")
+		} else {
+			logrus.WithFields(logrus.Fields{
+				"call_id": callID,
+				"api_key": assistant.ApiKey,
+				"error":   err,
+			}).Warn("⚠️  未找到 ApiKey/ApiSecret 对应的凭证")
 		}
 	}
 	
-	// 如果没有凭证，使用默认凭证或创建临时凭证
+	// 方案2：尝试从 Assistant 的用户获取凭证
+	if credential == nil && assistant.UserID > 0 {
+		var cred models.UserCredential
+		if err := as.db.Where("user_id = ?", assistant.UserID).First(&cred).Error; err == nil {
+			credential = &cred
+			logrus.WithFields(logrus.Fields{
+				"call_id":        callID,
+				"user_id":        assistant.UserID,
+				"credential_id":  cred.ID,
+				"asr_provider":   cred.GetASRProvider(),
+				"tts_provider":   cred.GetTTSProvider(),
+				"has_asr_config": cred.AsrConfig != nil && len(cred.AsrConfig) > 0,
+				"has_tts_config": cred.TtsConfig != nil && len(cred.TtsConfig) > 0,
+			}).Info("✓ 使用 Assistant 用户的凭证")
+		} else {
+			logrus.WithFields(logrus.Fields{
+				"call_id": callID,
+				"user_id": assistant.UserID,
+				"error":   err,
+			}).Warn("⚠️  未找到 Assistant 用户的凭证")
+		}
+	}
+	
+	// 方案3：如果还是没有，使用第一个可用凭证
 	if credential == nil {
-		// 查询默认凭证或第一个可用凭证
 		var cred models.UserCredential
 		if err := as.db.First(&cred).Error; err == nil {
 			credential = &cred
+			logrus.WithField("call_id", callID).Warn("⚠️  使用默认凭证（第一个可用凭证）")
 		} else {
 			return fmt.Errorf("no credential available for AI session")
 		}
 	}
+
 	
 	// 创建服务工厂
 	transcriberFactory := recognizer.GetGlobalFactory()

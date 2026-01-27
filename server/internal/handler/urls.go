@@ -204,6 +204,8 @@ func (h *Handlers) Register(engine *gin.Engine) {
 	h.registerWorkflowRoutes(r)
 	h.registerWorkflowPluginRoutes(r) // Add workflow plugin routes
 	h.registerNodePluginRoutes(r)     // Add node plugin routes
+	h.registerVoicemailRoutes(r)      // Add voicemail routes
+	h.registerPhoneNumberRoutes(r)    // Add phone number routes
 	// Register public workflow routes (no auth required)
 	h.RegisterPublicWorkflowRoutes(r)
 	objs := h.GetObjs()
@@ -744,6 +746,7 @@ func (h *Handlers) registerSipRoutes(r *gin.RouterGroup) {
 
 		// 通话历史
 		sip.GET("/calls", models.AuthRequired, h.sipHandler.GetCallHistory)
+		sip.GET("/calls/:callId/detail", models.AuthRequired, h.sipHandler.GetCallDetail)
 	}
 }
 
@@ -820,5 +823,53 @@ func (h *Handlers) registerSchemeRoutes(r *gin.RouterGroup) {
 
 		// 激活方案
 		schemes.POST("/:id/activate", schemeHandler.ActivateScheme)
+		// 停用方案
+		schemes.POST("/:id/deactivate", schemeHandler.DeactivateScheme)
+	}
+}
+
+
+// registerVoicemailRoutes Voicemail Module
+func (h *Handlers) registerVoicemailRoutes(r *gin.RouterGroup) {
+	voicemailHandler := NewVoicemailHandler(h.db)
+
+	voicemail := r.Group("voicemails")
+	voicemail.Use(models.AuthRequired)
+	{
+		// 特殊路由必须在 /:id 之前，避免被参数路由匹配
+		voicemail.GET("/stats", voicemailHandler.GetVoicemailStats)                 // 获取统计信息
+		voicemail.GET("/unread/count", voicemailHandler.GetUnreadCount)             // 获取未读数量
+		voicemail.POST("/batch-process", voicemailHandler.BatchProcessVoicemails)   // 批量处理
+		
+		// 列表和详情
+		voicemail.GET("", voicemailHandler.ListVoicemails)                          // 获取留言列表
+		voicemail.GET("/:id", voicemailHandler.GetVoicemail)                        // 获取留言详情
+		
+		// 单个留言操作
+		voicemail.POST("/:id/read", voicemailHandler.MarkAsRead)                    // 标记为已读
+		voicemail.POST("/:id/transcribe", voicemailHandler.TranscribeVoicemail)     // 转录留言
+		voicemail.POST("/:id/summary", voicemailHandler.GenerateSummary)            // 生成摘要
+		voicemail.PUT("/:id", voicemailHandler.UpdateVoicemail)                     // 更新留言
+		voicemail.DELETE("/:id", voicemailHandler.DeleteVoicemail)                  // 删除留言
+	}
+}
+
+// registerPhoneNumberRoutes PhoneNumber Module
+func (h *Handlers) registerPhoneNumberRoutes(r *gin.RouterGroup) {
+	phoneNumberHandler := NewPhoneNumberHandler(h.db)
+
+	phoneNumbers := r.Group("phone-numbers")
+	phoneNumbers.Use(models.AuthRequired)
+	{
+		phoneNumbers.GET("", phoneNumberHandler.ListPhoneNumbers)                      // 获取号码列表
+		phoneNumbers.POST("", phoneNumberHandler.CreatePhoneNumber)                    // 创建号码
+		phoneNumbers.GET("/call-forward-guide", phoneNumberHandler.GetCallForwardGuide) // 获取呼叫转移指引
+		phoneNumbers.GET("/:id", phoneNumberHandler.GetPhoneNumber)                    // 获取号码详情
+		phoneNumbers.PUT("/:id", phoneNumberHandler.UpdatePhoneNumber)                 // 更新号码
+		phoneNumbers.DELETE("/:id", phoneNumberHandler.DeletePhoneNumber)              // 删除号码
+		phoneNumbers.POST("/:id/set-primary", phoneNumberHandler.SetPrimaryPhoneNumber) // 设置主号码
+		phoneNumbers.POST("/:id/bind-scheme", phoneNumberHandler.BindScheme)           // 绑定方案
+		phoneNumbers.POST("/:id/unbind-scheme", phoneNumberHandler.UnbindScheme)       // 解绑方案
+		phoneNumbers.POST("/:id/call-forward-status", phoneNumberHandler.UpdateCallForwardStatus) // 更新呼叫转移状态
 	}
 }
