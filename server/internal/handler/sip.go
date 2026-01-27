@@ -1,8 +1,4 @@
-<<<<<<< HEAD
 package handlers
-=======
-package handler
->>>>>>> bacc4679b6354ad1d679dc9b00723ccf3d71a87d
 
 import (
 	"reflect"
@@ -363,7 +359,6 @@ func (h *SipHandler) HangupOutgoingCall(c *gin.Context) {
 // @Param userId query int false "用户ID"
 // @Param status query string false "状态筛选"
 // @Param limit query int false "限制数量" default(20)
-<<<<<<< HEAD
 // @Param page query int false "页码" default(1)
 // @Success 200 {object} response.Response{data=[]models.SipCall}
 // @Router /api/sip/calls [get]
@@ -396,24 +391,6 @@ func (h *SipHandler) GetCallHistory(c *gin.Context) {
 	if user != nil {
 		query = query.Where("user_id = ?", user.ID)
 	} else if userIDStr != "" {
-=======
-// @Success 200 {object} response.Response{data=[]models.SipCall}
-// @Router /api/sip/calls [get]
-func (h *SipHandler) GetCallHistory(c *gin.Context) {
-	userIDStr := c.Query("userId")
-	status := c.Query("status")
-	limitStr := c.DefaultQuery("limit", "20")
-
-	limit := 20
-	if l, err := strconv.Atoi(limitStr); err == nil && l > 0 {
-		limit = l
-	}
-
-	var calls []models.SipCall
-	query := h.db.Order("created_at DESC")
-
-	if userIDStr != "" {
->>>>>>> bacc4679b6354ad1d679dc9b00723ccf3d71a87d
 		if userID, err := strconv.ParseUint(userIDStr, 10, 32); err == nil {
 			query = query.Where("user_id = ?", uint(userID))
 		}
@@ -422,22 +399,16 @@ func (h *SipHandler) GetCallHistory(c *gin.Context) {
 	if status != "" {
 		query = query.Where("status = ?", status)
 	}
-<<<<<<< HEAD
 	
 	// 获取总数
 	query.Count(&total)
 
 	if err := query.Order("created_at DESC").Limit(limit).Offset(offset).Find(&calls).Error; err != nil {
-=======
-
-	if err := query.Limit(limit).Find(&calls).Error; err != nil {
->>>>>>> bacc4679b6354ad1d679dc9b00723ccf3d71a87d
 		logrus.WithError(err).Error("Failed to get call history")
 		response.Fail(c, "Failed to get call history: "+err.Error(), nil)
 		return
 	}
 
-<<<<<<< HEAD
 	response.Success(c, "Success", gin.H{
 		"list":  calls,
 		"total": total,
@@ -475,9 +446,6 @@ func (h *SipHandler) GetCallDetail(c *gin.Context) {
 	}
 
 	response.Success(c, "Success", sipCall)
-=======
-	response.Success(c, "Success", calls)
->>>>>>> bacc4679b6354ad1d679dc9b00723ccf3d71a87d
 }
 
 // GetSipUsers 获取SIP用户列表

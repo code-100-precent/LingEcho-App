@@ -1,8 +1,4 @@
-<<<<<<< HEAD
 package handlers
-=======
-package handler
->>>>>>> bacc4679b6354ad1d679dc9b00723ccf3d71a87d
 
 import (
 	"context"
