@@ -44,6 +44,7 @@ import Overview from '@/pages/Overview.tsx';
 import CallCenter from '@/pages/CallCenter.tsx';
 import DeviceLifecycle from '@/pages/DeviceLifecycle.tsx';
 import NodePluginMarket from '@/pages/NodePluginMarket.tsx';
+import CallRecordingAnalytics from '@/pages/CallRecordingAnalytics.tsx';
 
 function App() {
     const [showPerformanceMonitor, setShowPerformanceMonitor] = useState(false);
@@ -113,6 +114,13 @@ function App() {
                             <ProtectedRoute>
                                 <Layout>
                                     <DeviceLifecycle />
+                                </Layout>
+                            </ProtectedRoute>
+                        } />
+                        <Route path="/call-recording-analytics/:deviceId" element={
+                            <ProtectedRoute>
+                                <Layout>
+                                    <CallRecordingAnalytics />
                                 </Layout>
                             </ProtectedRoute>
                         } />

@@ -223,3 +223,109 @@ export const getCallRecordingAnalysis = async (recordingId: number): Promise<Api
   return get(`/device/call-recordings/${recordingId}/analysis`)
 }
 
+// 获取通话录音详情（包含详细指标）
+export const getCallRecordingDetail = async (recordingId: number): Promise<ApiResponse<{
+  id: number
+  userId: number
+  assistantId: number
+  deviceId?: number
+  macAddress: string
+  sessionId: string
+  audioPath: string
+  storageUrl?: string
+  audioFormat: string
+  audioSize: number
+  duration: number
+  sampleRate: number
+  channels: number
+  callType: string
+  callStatus: string
+  startTime: string
+  endTime: string
+  userInput: string
+  aiResponse: string
+  summary: string
+  keywords: string
+  audioQuality: number
+  noiseLevel: number
+  tags: string
+  category: string
+  isImportant: boolean
+  isArchived: boolean
+  // 详细对话指标
+  conversationDetailsData?: {
+    sessionId: string
+    startTime: string
+    endTime: string
+    totalTurns: number
+    userTurns: number
+    aiTurns: number
+    interruptions: number
+    turns: Array<{
+      turnId: number
+      timestamp: string
+      type: 'user' | 'ai'
+      content: string
+      startTime: string
+      endTime: string
+      duration: number
+      // 用户输入特有字段
+      asrStartTime?: string
+      asrEndTime?: string
+      asrDuration?: number
+      // AI回复特有字段
+      llmStartTime?: string
+      llmEndTime?: string
+      llmDuration?: number
+      ttsStartTime?: string
+      ttsEndTime?: string
+      ttsDuration?: number
+      // 延迟指标
+      responseDelay?: number
+      totalDelay?: number
+    }>
+  }
+  // 时间指标
+  timingMetricsData?: {
+    sessionDuration: number
+    // ASR指标
+    asrCalls: number
+    asrTotalTime: number
+    asrAverageTime: number
+    asrMinTime: number
+    asrMaxTime: number
+    // LLM指标
+    llmCalls: number
+    llmTotalTime: number
+    llmAverageTime: number
+    llmMinTime: number
+    llmMaxTime: number
+    // TTS指标
+    ttsCalls: number
+    ttsTotalTime: number
+    ttsAverageTime: number
+    ttsMinTime: number
+    ttsMaxTime: number
+    // 响应延迟指标
+    responseDelays: number[]
+    averageResponseDelay: number
+    minResponseDelay: number
+    maxResponseDelay: number
+    // 总延迟指标
+    totalDelays: number[]
+    averageTotalDelay: number
+    minTotalDelay: number
+    maxTotalDelay: number
+  }
+  // AI分析相关字段
+  aiAnalysis?: string
+  analysisStatus?: 'pending' | 'analyzing' | 'completed' | 'failed'
+  analysisError?: string
+  analyzedAt?: string
+  autoAnalyzed?: boolean
+  analysisVersion?: number
+  createdAt: string
+}>> => {
+  return get(`/call-recordings/${recordingId}`)
+}
+

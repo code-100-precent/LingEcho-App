@@ -299,6 +299,11 @@ func (s *Session) Start() error {
 			s.config.Logger.Info("录音已启动",
 				zap.String("session_id", recordingConfig.SessionID),
 				zap.String("mac_address", recordingConfig.MacAddress))
+
+			// 将录音会话设置到消息处理器
+			if s.processor != nil {
+				s.processor.SetRecordingSession(recordingSession)
+			}
 		}
 	}
 

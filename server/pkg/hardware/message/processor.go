@@ -192,6 +192,9 @@ type Processor struct {
 	// 录音回调
 	aiResponseCallback func(text string) // 新增：AI回复回调函数
 	userInputCallback  func(text string) // 新增：用户输入回调函数
+
+	// 录音会话支持 - 新增
+	recordingSession interface{} // 录音会话接口，避免循环依赖
 }
 
 // NewProcessor 创建消息处理器
@@ -244,6 +247,13 @@ func NewProcessor(
 	return processor
 }
 
+// SetRecordingSession 设置录音会话
+func (p *Processor) SetRecordingSession(session interface{}) {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	p.recordingSession = session
+}
+
 // SetAudioConfig 设置音频配置（用于OPUS编码）
 func (p *Processor) SetAudioConfig(audioFormat string, sampleRate, channels int, opusEncoder media.EncoderFunc) {
 	p.mu.Lock()
@@ -277,11 +287,17 @@ func (p *Processor) ProcessASRResult(ctx context.Context, text string) {
 		return
 	}
 
+	// 记录用户输入开始（录音会话）
+	p.recordUserTurnStart()
+
 	// 如果 TTS 正在播放，取消 TTS 播放（用户打断）
 	if p.stateManager.IsTTSPlaying() {
 		p.logger.Info("ASR检测到用户说话，中断TTS播放",
 			zap.String("user_text", text),
 		)
+		// 记录中断事件
+		p.recordInterruption()
+
 		// 优雅地取消 TTS：先设置状态，再取消context，最后发送结束消息
 		p.stateManager.SetTTSPlaying(false)
 		p.stateManager.CancelTTS()
@@ -296,6 +312,9 @@ func (p *Processor) ProcessASRResult(ctx context.Context, text string) {
 		p.logger.Error("发送ASR结果失败", zap.Error(err))
 		// 发送失败不影响后续处理
 	}
+
+	// 记录用户输入结束（录音会话）
+	p.recordUserTurnEnd(text)
 
 	// 检查是否在过滤词黑名单中
 	if p.filterManager != nil && p.filterManager.IsFiltered(text) {
@@ -351,6 +370,9 @@ func (p *Processor) processText(ctx context.Context, text string) {
 		return
 	}
 
+	// 记录AI回复开始（录音会话）
+	p.recordAITurnStart()
+
 	// 添加用户消息（最小化锁持有时间）
 	userMsg := llm.Message{
 		Role:    "user",
@@ -380,6 +402,9 @@ func (p *Processor) processText(ctx context.Context, text string) {
 		p.logger.Warn("LLM返回空响应")
 		return
 	}
+
+	// 记录LLM处理结束（录音会话）
+	p.recordLLMProcessingEnd()
 
 	// 添加助手回复（最小化锁持有时间）
 	assistantMsg := llm.Message{
@@ -435,6 +460,8 @@ func (p *Processor) synthesizeTTS(ctx context.Context, text string) {
 		if err := p.writer.SendTTSEnd(); err != nil {
 			p.logger.Error("发送TTS结束消息失败", zap.Error(err))
 		}
+		// 记录AI回复结束（录音会话）
+		p.recordAITurnEnd(text)
 	}()
 
 	// 获取音频格式并发送TTS开始消息
@@ -1012,4 +1039,85 @@ func (p *Processor) safeSendTTSAudio(data []byte, ctx context.Context) error {
 
 	// 使用固定延迟（60ms）发送，避免长时间播放时时间同步累积误差导致发送过快
 	return p.writer.SendTTSAudioWithFlowControl(data, 60, 60)
+}
+
+// 录音会话相关方法
+
+// recordUserTurnStart 记录用户发言开始
+func (p *Processor) recordUserTurnStart() {
+	p.mu.RLock()
+	session := p.recordingSession
+	p.mu.RUnlock()
+
+	if session != nil {
+		// 使用类型断言调用方法，避免循环依赖
+		if rs, ok := session.(interface{ StartUserTurn() }); ok {
+			rs.StartUserTurn()
+		}
+	}
+}
+
+// recordUserTurnEnd 记录用户发言结束
+func (p *Processor) recordUserTurnEnd(content string) {
+	p.mu.RLock()
+	session := p.recordingSession
+	p.mu.RUnlock()
+
+	if session != nil {
+		if rs, ok := session.(interface{ EndUserTurn(string) }); ok {
+			rs.EndUserTurn(content)
+		}
+	}
+}
+
+// recordAITurnStart 记录AI回复开始
+func (p *Processor) recordAITurnStart() {
+	p.mu.RLock()
+	session := p.recordingSession
+	p.mu.RUnlock()
+
+	if session != nil {
+		if rs, ok := session.(interface{ StartAITurn() }); ok {
+			rs.StartAITurn()
+		}
+	}
+}
+
+// recordLLMProcessingEnd 记录LLM处理结束
+func (p *Processor) recordLLMProcessingEnd() {
+	p.mu.RLock()
+	session := p.recordingSession
+	p.mu.RUnlock()
+
+	if session != nil {
+		if rs, ok := session.(interface{ EndLLMProcessing() }); ok {
+			rs.EndLLMProcessing()
+		}
+	}
+}
+
+// recordAITurnEnd 记录AI回复结束
+func (p *Processor) recordAITurnEnd(content string) {
+	p.mu.RLock()
+	session := p.recordingSession
+	p.mu.RUnlock()
+
+	if session != nil {
+		if rs, ok := session.(interface{ EndAITurn(string) }); ok {
+			rs.EndAITurn(content)
+		}
+	}
+}
+
+// recordInterruption 记录中断事件
+func (p *Processor) recordInterruption() {
+	p.mu.RLock()
+	session := p.recordingSession
+	p.mu.RUnlock()
+
+	if session != nil {
+		if rs, ok := session.(interface{ RecordInterruption() }); ok {
+			rs.RecordInterruption()
+		}
+	}
 }

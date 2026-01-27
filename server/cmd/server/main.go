@@ -9,7 +9,7 @@ import (
 
 	"github.com/code-100-precent/LingEcho"
 	"github.com/code-100-precent/LingEcho/cmd/bootstrap"
-	handlers "github.com/code-100-precent/LingEcho/internal/handler"
+	"github.com/code-100-precent/LingEcho/internal/handler"
 	"github.com/code-100-precent/LingEcho/internal/listeners"
 	"github.com/code-100-precent/LingEcho/internal/models"
 	"github.com/code-100-precent/LingEcho/internal/task"
@@ -33,23 +33,23 @@ import (
 )
 
 type LingEchoApp struct {
-	db       *gorm.DB
-	handlers *handlers.Handlers
+	db      *gorm.DB
+	handler *handler.Handlers
 }
 
 func NewLingEchoApp(db *gorm.DB) *LingEchoApp {
 	return &LingEchoApp{
-		db:       db,
-		handlers: handlers.NewHandlers(db),
+		db:      db,
+		handler: handler.NewHandlers(db),
 	}
 }
 
 func (app *LingEchoApp) RegisterRoutes(r *gin.Engine) {
 	// Register system routes (with /api prefix)
-	app.handlers.Register(r)
+	app.handler.Register(r)
 
 	// Register file upload handler
-	handlers.NewUploadHandler().Register(r)
+	handler.NewUploadHandler().Register(r)
 }
 
 func main() {
@@ -85,7 +85,7 @@ func main() {
 	// 7. Load Data Source
 	db, err := bootstrap.SetupDatabase(os.Stdout, &bootstrap.Options{
 		InitSQLPath: *initSQL,                             // Can be specified via --init-sql
-		AutoMigrate: false,                                // Whether to migrate entities
+		AutoMigrate: true,                                 // Whether to migrate entities
 		SeedNonProd: os.Getenv("APP_ENV") != "production", // Non-production default configuration
 	})
 	if err != nil {
@@ -167,7 +167,7 @@ func main() {
 		sipServer.SetDBConfig(db)
 
 		// Set SIP server to handlers (wrap to match interface)
-		app.handlers.SetSipServer(sipServer)
+		app.handler.SetSipServer(sipServer)
 
 		// Start SIP server in background (pass empty targetURI to avoid auto-call)
 		go func() {
@@ -385,8 +385,8 @@ func main() {
 	if searchEnabled {
 		// Get search engine instance
 		var searchEngine search.Engine
-		if app.handlers.GetSearchHandler() != nil {
-			searchEngine = app.handlers.GetSearchHandler().GetEngine()
+		if app.handler.GetSearchHandler() != nil {
+			searchEngine = app.handler.GetSearchHandler().GetEngine()
 		}
 		if searchEngine != nil {
 			// Start scheduled task

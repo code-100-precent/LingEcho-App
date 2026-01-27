@@ -1,4 +1,4 @@
-package handlers
+package handler
 
 import (
 	"log"
@@ -198,6 +198,7 @@ func (h *Handlers) Register(engine *gin.Engine) {
 	h.registerVoiceTrainingRoutes(r)
 	h.registerJSTemplateRoutes(r)
 	h.registerBillingRoutes(r)
+	h.registerCallRecordingRoutes(r) // 新增：通话记录路由
 	h.registerMiddlewareRoutes(r)
 	h.registerWorkflowRoutes(r)
 	h.registerWorkflowPluginRoutes(r) // Add workflow plugin routes
@@ -810,5 +811,19 @@ func (h *Handlers) registerWorkflowPluginRoutes(r *gin.RouterGroup) {
 		// 用户插件
 		pluginsAuth.GET("/installed", pluginHandler.ListInstalledWorkflowPlugins)
 		pluginsAuth.GET("/my-plugins", pluginHandler.GetUserWorkflowPlugins)
+	}
+}
+
+// registerCallRecordingRoutes 注册通话记录路由
+func (h *Handlers) registerCallRecordingRoutes(r *gin.RouterGroup) {
+	callRecordingHandler := NewCallRecordingHandler(h.db)
+
+	recordings := r.Group("call-recordings")
+	recordings.Use(models.AuthRequired)
+	{
+		recordings.GET("/", callRecordingHandler.GetCallRecordings)
+		recordings.GET("/:id", callRecordingHandler.GetCallRecordingDetail)
+		recordings.DELETE("/:id", callRecordingHandler.DeleteCallRecording)
+		recordings.GET("/stats", callRecordingHandler.GetCallRecordingStats)
 	}
 }

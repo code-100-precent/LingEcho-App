@@ -20,12 +20,14 @@ import {
   Loader2,
   CheckCircle,
   XCircle,
-  RefreshCw
+  RefreshCw,
+  BarChart3
 } from 'lucide-react';
 import { 
   getDeviceDetail, 
   getDeviceErrorLogs, 
   getCallRecordings, 
+  getCallRecordingDetail,
   getDevicePerformanceHistory,
   analyzeCallRecording,
   batchAnalyzeCallRecordings,
@@ -39,6 +41,7 @@ import Card from '@/components/UI/Card';
 import Badge from '@/components/UI/Badge';
 import Modal from '@/components/UI/Modal';
 import CallAudioPlayer from '@/components/CallAudioPlayer';
+import CallRecordingDetail from '@/components/CallRecordingDetail';
 
 interface CallRecording {
   id: number;
@@ -100,6 +103,7 @@ const DeviceDetail: React.FC = () => {
   // 模态框状态
   const [showRecordingModal, setShowRecordingModal] = useState(false);
   const [selectedRecording, setSelectedRecording] = useState<CallRecording | null>(null);
+  const [selectedRecordingDetail, setSelectedRecordingDetail] = useState<any>(null);
   const [showErrorModal, setShowErrorModal] = useState(false);
   const [selectedError, setSelectedError] = useState<ErrorLog | null>(null);
   
@@ -209,9 +213,19 @@ const DeviceDetail: React.FC = () => {
     }
   };
 
-  const handlePlayRecording = (recording: CallRecording) => {
+  const handlePlayRecording = async (recording: CallRecording) => {
     setSelectedRecording(recording);
     setShowRecordingModal(true);
+    
+    // 获取详细的通话记录数据
+    try {
+      const response = await getCallRecordingDetail(recording.id);
+      if (response.code === 200) {
+        setSelectedRecordingDetail(response.data);
+      }
+    } catch (error) {
+      console.error('获取通话记录详情失败:', error);
+    }
   };
 
   const handleViewError = (error: ErrorLog) => {
@@ -553,6 +567,14 @@ const DeviceDetail: React.FC = () => {
                   通话记录
                 </h3>
                 <div className="flex items-center gap-2">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => navigate(`/call-recording-analytics/${deviceId}`)}
+                    className="inline-flex items-center gap-1 whitespace-nowrap"
+                  >
+                    <BarChart3 className="w-4 h-4" />
+                  </Button>
                   <button
                     onClick={handleBatchAnalyze}
                     disabled={isBatchAnalyzing}
@@ -719,60 +741,18 @@ const DeviceDetail: React.FC = () => {
         {/* 通话记录详情模态框 */}
         <Modal
           isOpen={showRecordingModal}
-          onClose={() => setShowRecordingModal(false)}
+          onClose={() => {
+            setShowRecordingModal(false);
+            setSelectedRecordingDetail(null);
+          }}
           title="通话记录详情"
           size="lg"
         >
           {selectedRecording && (
-            <div className="space-y-4">
-              <div className="grid grid-cols-2 gap-4 text-sm">
-                <div>
-                  <span className="text-gray-600 dark:text-gray-400">会话ID:</span>
-                  <p className="font-mono text-xs">{selectedRecording.sessionId}</p>
-                </div>
-                <div>
-                  <span className="text-gray-600 dark:text-gray-400">通话时长:</span>
-                  <p>{formatDuration(selectedRecording.duration)}</p>
-                </div>
-                <div>
-                  <span className="text-gray-600 dark:text-gray-400">音频质量:</span>
-                  <p>{(selectedRecording.audioQuality * 100).toFixed(1)}%</p>
-                </div>
-                <div>
-                  <span className="text-gray-600 dark:text-gray-400">文件大小:</span>
-                  <p>{formatFileSize(selectedRecording.audioSize)}</p>
-                </div>
-              </div>
-              
-              {selectedRecording.userInput && (
-                <div>
-                  <h4 className="font-medium text-gray-900 dark:text-gray-100 mb-2">用户输入:</h4>
-                  <div className="p-3 bg-blue-50 dark:bg-blue-900/20 rounded-lg text-sm">
-                    {selectedRecording.userInput}
-                  </div>
-                </div>
-              )}
-              
-              {selectedRecording.aiResponse && (
-                <div>
-                  <h4 className="font-medium text-gray-900 dark:text-gray-100 mb-2">AI回复:</h4>
-                  <div className="p-3 bg-green-50 dark:bg-green-900/20 rounded-lg text-sm">
-                    {selectedRecording.aiResponse}
-                  </div>
-                </div>
-              )}
-              
-              {/* 使用CallAudioPlayer组件播放录音 */}
-              <div>
-                <h4 className="font-medium text-gray-900 dark:text-gray-100 mb-2">录音播放:</h4>
-                <CallAudioPlayer
-                  callId={selectedRecording.sessionId}
-                  audioUrl={selectedRecording.storageUrl || `/api/recordings/${selectedRecording.audioPath}`}
-                  hasAudio={true}
-                  durationSeconds={selectedRecording.duration}
-                />
-              </div>
-            </div>
+            <CallRecordingDetail 
+              recording={selectedRecording}
+              recordingDetail={selectedRecordingDetail}
+            />
           )}
         </Modal>
 
