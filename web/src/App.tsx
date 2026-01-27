@@ -42,6 +42,7 @@ import RedirectToDevices from '@/components/RedirectToDevices.tsx';
 import WorkflowManager from '@/pages/WorkflowManager.tsx';
 import Overview from '@/pages/Overview.tsx';
 import CallCenter from '@/pages/CallCenter.tsx';
+import DeviceLifecycle from '@/pages/DeviceLifecycle.tsx';
 import NodePluginMarket from '@/pages/NodePluginMarket.tsx';
 
 function App() {
@@ -105,6 +106,13 @@ function App() {
                             <ProtectedRoute>
                                 <Layout>
                                     <DeviceDetail />
+                                </Layout>
+                            </ProtectedRoute>
+                        } />
+                        <Route path="/devices/:deviceId/lifecycle" element={
+                            <ProtectedRoute>
+                                <Layout>
+                                    <DeviceLifecycle />
                                 </Layout>
                             </ProtectedRoute>
                         } />

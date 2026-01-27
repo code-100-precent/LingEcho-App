@@ -415,16 +415,12 @@ func main() {
 	eventListener := workflowdef.NewWorkflowEventListener(db)
 	if err := eventListener.Start(); err != nil {
 		logger.Error("Failed to start workflow event listener", zap.Error(err))
-	} else {
-		logger.Info("Workflow event listener started")
 	}
 
 	// Start workflow scheduler
 	scheduler := workflowdef.GetWorkflowScheduler(db)
 	if err := scheduler.Start(); err != nil {
 		logger.Error("Failed to start workflow scheduler", zap.Error(err))
-	} else {
-		logger.Info("Workflow scheduler started")
 	}
 
 	// 22. Start HTTP/HTTPS Server

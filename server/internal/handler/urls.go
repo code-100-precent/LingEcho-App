@@ -401,6 +401,20 @@ func (h *Handlers) registerDeviceRoutes(r *gin.RouterGroup) {
 
 		// Recording file access
 		device.GET("/recordings/*filepath", h.ServeRecordingFile) // Serve recording files
+
+		// Device lifecycle management routes
+		device.GET("/:deviceId/lifecycle", h.GetDeviceLifecycle)
+		device.GET("/:deviceId/lifecycle/overview", h.GetLifecycleOverview)
+		device.GET("/:deviceId/lifecycle/history", h.GetLifecycleHistory)
+		device.POST("/:deviceId/lifecycle/transition", h.TransitionDeviceStatus)
+		device.GET("/:deviceId/lifecycle/metrics", h.GetLifecycleMetrics)
+		device.POST("/:deviceId/lifecycle/metrics/calculate", h.CalculateCurrentMetrics)
+
+		// Maintenance management
+		device.GET("/:deviceId/lifecycle/maintenance", h.GetMaintenanceRecords)
+		device.POST("/:deviceId/lifecycle/maintenance/schedule", h.ScheduleMaintenance)
+		device.POST("/:deviceId/lifecycle/maintenance/start", h.StartMaintenance)
+		device.POST("/:deviceId/lifecycle/maintenance/complete", h.CompleteMaintenance)
 	}
 }
 

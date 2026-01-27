@@ -389,6 +389,14 @@ const DeviceManagement: React.FC = () => {
                             <Button
                               variant="ghost"
                               size="icon"
+                              onClick={() => navigate(`/devices/${device.id}/lifecycle`)}
+                              title="生命周期管理"
+                            >
+                              <Activity className="w-4 h-4" />
+                            </Button>
+                            <Button
+                              variant="ghost"
+                              size="icon"
                               onClick={() => openEditModal(device)}
                               title={t('device.edit')}
                             >
