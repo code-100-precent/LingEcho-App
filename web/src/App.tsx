@@ -42,9 +42,11 @@ import RedirectToDevices from '@/components/RedirectToDevices.tsx';
 import WorkflowManager from '@/pages/WorkflowManager.tsx';
 import Overview from '@/pages/Overview.tsx';
 import CallCenter from '@/pages/CallCenter.tsx';
-import DeviceLifecycle from '@/pages/DeviceLifecycle.tsx';
 import NodePluginMarket from '@/pages/NodePluginMarket.tsx';
-import CallRecordingAnalytics from '@/pages/CallRecordingAnalytics.tsx';
+import SchemeManager from '@/pages/SchemeManager.tsx';
+import PhoneNumberManager from '@/pages/PhoneNumberManager.tsx';
+import VoicemailBox from '@/pages/VoicemailBox.tsx';
+import VoicemailDetail from '@/pages/VoicemailDetail.tsx';
 
 function App() {
     const [showPerformanceMonitor, setShowPerformanceMonitor] = useState(false);
@@ -107,20 +109,6 @@ function App() {
                             <ProtectedRoute>
                                 <Layout>
                                     <DeviceDetail />
-                                </Layout>
-                            </ProtectedRoute>
-                        } />
-                        <Route path="/devices/:deviceId/lifecycle" element={
-                            <ProtectedRoute>
-                                <Layout>
-                                    <DeviceLifecycle />
-                                </Layout>
-                            </ProtectedRoute>
-                        } />
-                        <Route path="/call-recording-analytics/:deviceId" element={
-                            <ProtectedRoute>
-                                <Layout>
-                                    <CallRecordingAnalytics />
                                 </Layout>
                             </ProtectedRoute>
                         } />
@@ -293,6 +281,34 @@ function App() {
                             <ProtectedRoute>
                                 <Layout>
                                     <CallCenter />
+                                </Layout>
+                            </ProtectedRoute>
+                        } />
+                        <Route path="/schemes" element={
+                            <ProtectedRoute>
+                                <Layout>
+                                    <SchemeManager />
+                                </Layout>
+                            </ProtectedRoute>
+                        } />
+                        <Route path="/phone-numbers" element={
+                            <ProtectedRoute>
+                                <Layout>
+                                    <PhoneNumberManager />
+                                </Layout>
+                            </ProtectedRoute>
+                        } />
+                        <Route path="/voicemail" element={
+                            <ProtectedRoute>
+                                <Layout>
+                                    <VoicemailBox />
+                                </Layout>
+                            </ProtectedRoute>
+                        } />
+                        <Route path="/voicemail/:id" element={
+                            <ProtectedRoute>
+                                <Layout>
+                                    <VoicemailDetail />
                                 </Layout>
                             </ProtectedRoute>
                         } />

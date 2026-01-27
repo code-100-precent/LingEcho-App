@@ -299,11 +299,6 @@ func (s *Session) Start() error {
 			s.config.Logger.Info("录音已启动",
 				zap.String("session_id", recordingConfig.SessionID),
 				zap.String("mac_address", recordingConfig.MacAddress))
-
-			// 将录音会话设置到消息处理器
-			if s.processor != nil {
-				s.processor.SetRecordingSession(recordingSession)
-			}
 		}
 	}
 
@@ -553,11 +548,6 @@ func (s *Session) HandleAudio(data []byte) error {
 	}
 
 	// 发送到ASR服务
-	// 记录用户输入开始（第一次发送音频数据给ASR时）
-	if s.processor != nil {
-		s.processor.RecordUserTurnStartIfNeeded()
-	}
-
 	return s.asrService.SendAudio(processedData)
 }
 

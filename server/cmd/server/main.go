@@ -9,7 +9,7 @@ import (
 
 	"github.com/code-100-precent/LingEcho"
 	"github.com/code-100-precent/LingEcho/cmd/bootstrap"
-	"github.com/code-100-precent/LingEcho/internal/handler"
+	handlers "github.com/code-100-precent/LingEcho/internal/handler"
 	"github.com/code-100-precent/LingEcho/internal/listeners"
 	"github.com/code-100-precent/LingEcho/internal/models"
 	"github.com/code-100-precent/LingEcho/internal/task"
@@ -33,23 +33,23 @@ import (
 )
 
 type LingEchoApp struct {
-	db      *gorm.DB
-	handler *handler.Handlers
+	db       *gorm.DB
+	handlers *handlers.Handlers
 }
 
 func NewLingEchoApp(db *gorm.DB) *LingEchoApp {
 	return &LingEchoApp{
-		db:      db,
-		handler: handler.NewHandlers(db),
+		db:       db,
+		handlers: handlers.NewHandlers(db),
 	}
 }
 
 func (app *LingEchoApp) RegisterRoutes(r *gin.Engine) {
 	// Register system routes (with /api prefix)
-	app.handler.Register(r)
+	app.handlers.Register(r)
 
 	// Register file upload handler
-	handler.NewUploadHandler().Register(r)
+	handlers.NewUploadHandler().Register(r)
 }
 
 func main() {
@@ -85,7 +85,7 @@ func main() {
 	// 7. Load Data Source
 	db, err := bootstrap.SetupDatabase(os.Stdout, &bootstrap.Options{
 		InitSQLPath: *initSQL,                             // Can be specified via --init-sql
-		AutoMigrate: true,                                 // Whether to migrate entities
+		AutoMigrate: false,                                // Whether to migrate entities
 		SeedNonProd: os.Getenv("APP_ENV") != "production", // Non-production default configuration
 	})
 	if err != nil {
@@ -167,12 +167,12 @@ func main() {
 		sipServer.SetDBConfig(db)
 
 		// Set SIP server to handlers (wrap to match interface)
-		app.handler.SetSipServer(sipServer)
+		app.handlers.SetSipServer(sipServer)
 
 		// Start SIP server in background (pass empty targetURI to avoid auto-call)
 		go func() {
 			logger.Info("Starting SIP server", zap.Int("sip_port", sipPort), zap.Int("rtp_port", rtpPort))
-			//sipServer.Start(sipPort, "") // Empty targetURI means no auto-call
+			sipServer.Start(sipPort, "") // Empty targetURI means no auto-call
 		}()
 
 		logger.Info("SIP server initialized", zap.Int("sip_port", sipPort), zap.Int("rtp_port", rtpPort))
@@ -385,8 +385,8 @@ func main() {
 	if searchEnabled {
 		// Get search engine instance
 		var searchEngine search.Engine
-		if app.handler.GetSearchHandler() != nil {
-			searchEngine = app.handler.GetSearchHandler().GetEngine()
+		if app.handlers.GetSearchHandler() != nil {
+			searchEngine = app.handlers.GetSearchHandler().GetEngine()
 		}
 		if searchEngine != nil {
 			// Start scheduled task
@@ -415,12 +415,16 @@ func main() {
 	eventListener := workflowdef.NewWorkflowEventListener(db)
 	if err := eventListener.Start(); err != nil {
 		logger.Error("Failed to start workflow event listener", zap.Error(err))
+	} else {
+		logger.Info("Workflow event listener started")
 	}
 
 	// Start workflow scheduler
 	scheduler := workflowdef.GetWorkflowScheduler(db)
 	if err := scheduler.Start(); err != nil {
 		logger.Error("Failed to start workflow scheduler", zap.Error(err))
+	} else {
+		logger.Info("Workflow scheduler started")
 	}
 
 	// 22. Start HTTP/HTTPS Server

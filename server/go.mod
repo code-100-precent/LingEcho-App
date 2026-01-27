@@ -21,7 +21,6 @@ require (
 	github.com/deepgram/deepgram-go-sdk v1.9.0
 	github.com/emiago/sipgo v0.18.0
 	github.com/gen2brain/malgo v0.11.24
-	github.com/getcharzp/go-speech v0.0.0-20251222122705-daf547507c5b
 	github.com/getkin/kin-openapi v0.133.0
 	github.com/gin-contrib/sessions v1.0.2
 	github.com/gin-gonic/gin v1.10.1
@@ -224,12 +223,10 @@ require (
 	github.com/tklauser/numcpus v0.6.1 // indirect
 	github.com/twitchyliquid64/golang-asm v0.15.1 // indirect
 	github.com/ugorji/go/codec v1.3.0 // indirect
-	github.com/up-zero/gotool v0.0.0-20251219081745-85f734bac77c // indirect
 	github.com/vcaesar/cedar v0.20.2 // indirect
 	github.com/wk8/go-ordered-map/v2 v2.1.8 // indirect
 	github.com/wlynxg/anet v0.0.3 // indirect
 	github.com/woodsbury/decimal128 v1.3.0 // indirect
-	github.com/yalue/onnxruntime_go v1.25.0 // indirect
 	github.com/youpy/go-riff v0.1.0 // indirect
 	github.com/yusufpapurcu/wmi v1.2.4 // indirect
 	github.com/zaf/g711 v0.0.0-20190814101024-76a4a538f52b // indirect
