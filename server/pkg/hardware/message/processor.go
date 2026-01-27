@@ -192,6 +192,12 @@ type Processor struct {
 	// 录音回调
 	aiResponseCallback func(text string) // 新增：AI回复回调函数
 	userInputCallback  func(text string) // 新增：用户输入回调函数
+<<<<<<< HEAD
+=======
+
+	// 录音会话支持 - 新增
+	recordingSession interface{} // 录音会话接口，避免循环依赖
+>>>>>>> bacc4679b6354ad1d679dc9b00723ccf3d71a87d
 }
 
 // NewProcessor 创建消息处理器
@@ -244,6 +250,16 @@ func NewProcessor(
 	return processor
 }
 
+<<<<<<< HEAD
+=======
+// SetRecordingSession 设置录音会话
+func (p *Processor) SetRecordingSession(session interface{}) {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	p.recordingSession = session
+}
+
+>>>>>>> bacc4679b6354ad1d679dc9b00723ccf3d71a87d
 // SetAudioConfig 设置音频配置（用于OPUS编码）
 func (p *Processor) SetAudioConfig(audioFormat string, sampleRate, channels int, opusEncoder media.EncoderFunc) {
 	p.mu.Lock()
@@ -277,6 +293,7 @@ func (p *Processor) ProcessASRResult(ctx context.Context, text string) {
 		return
 	}
 
+<<<<<<< HEAD
 	// 如果 TTS 正在播放，取消 TTS 播放（用户打断）
 	if p.stateManager.IsTTSPlaying() {
 		p.logger.Info("ASR检测到用户说话，中断TTS播放",
@@ -296,6 +313,10 @@ func (p *Processor) ProcessASRResult(ctx context.Context, text string) {
 		p.logger.Error("发送ASR结果失败", zap.Error(err))
 		// 发送失败不影响后续处理
 	}
+=======
+	// 记录用户输入结束（ASR识别完成）
+	p.recordUserTurnEnd(text)
+>>>>>>> bacc4679b6354ad1d679dc9b00723ccf3d71a87d
 
 	// 检查是否在过滤词黑名单中
 	if p.filterManager != nil && p.filterManager.IsFiltered(text) {
@@ -351,6 +372,12 @@ func (p *Processor) processText(ctx context.Context, text string) {
 		return
 	}
 
+<<<<<<< HEAD
+=======
+	// 记录AI回复开始（录音会话）
+	p.recordAITurnStart()
+
+>>>>>>> bacc4679b6354ad1d679dc9b00723ccf3d71a87d
 	// 添加用户消息（最小化锁持有时间）
 	userMsg := llm.Message{
 		Role:    "user",
@@ -381,6 +408,12 @@ func (p *Processor) processText(ctx context.Context, text string) {
 		return
 	}
 
+<<<<<<< HEAD
+=======
+	// 记录LLM处理结束（录音会话）
+	p.recordLLMProcessingEnd()
+
+>>>>>>> bacc4679b6354ad1d679dc9b00723ccf3d71a87d
 	// 添加助手回复（最小化锁持有时间）
 	assistantMsg := llm.Message{
 		Role:    "assistant",
@@ -426,6 +459,12 @@ func (p *Processor) synthesizeTTS(ctx context.Context, text string) {
 
 	p.logger.Info("开始TTS合成", zap.String("text", text))
 
+<<<<<<< HEAD
+=======
+	// 记录TTS开始时间
+	p.recordTTSStart()
+
+>>>>>>> bacc4679b6354ad1d679dc9b00723ccf3d71a87d
 	// 设置TTS播放状态
 	p.stateManager.SetTTSPlaying(true)
 	defer func() {
@@ -435,6 +474,11 @@ func (p *Processor) synthesizeTTS(ctx context.Context, text string) {
 		if err := p.writer.SendTTSEnd(); err != nil {
 			p.logger.Error("发送TTS结束消息失败", zap.Error(err))
 		}
+<<<<<<< HEAD
+=======
+		// 记录AI回复结束（录音会话）
+		p.recordAITurnEnd(text)
+>>>>>>> bacc4679b6354ad1d679dc9b00723ccf3d71a87d
 	}()
 
 	// 获取音频格式并发送TTS开始消息
@@ -467,6 +511,12 @@ func (p *Processor) synthesizeTTS(ctx context.Context, text string) {
 	// 合成语音
 	p.logger.Debug("TTS合成文本", zap.String("text", text))
 
+<<<<<<< HEAD
+=======
+	// 记录TTS开始时间（在实际调用TTS服务之前）
+	p.recordTTSStart()
+
+>>>>>>> bacc4679b6354ad1d679dc9b00723ccf3d71a87d
 	audioChan, err := p.ttsService.Synthesize(ttsCtx, text)
 	if err != nil {
 		p.logger.Error("TTS合成失败", zap.Error(err))
@@ -507,6 +557,13 @@ func (p *Processor) synthesizeTTS(ctx context.Context, text string) {
 					zap.Int("frameCount", frameCount),
 					zap.Int("bufferSize", len(pcmBuffer)),
 				)
+<<<<<<< HEAD
+=======
+
+				// 记录TTS结束时间（TTS合成完成，音频数据全部接收）
+				p.recordTTSEnd()
+
+>>>>>>> bacc4679b6354ad1d679dc9b00723ccf3d71a87d
 				// 发送缓冲区剩余数据
 				if audioFormat == "opus" && opusEncoder != nil && len(pcmBuffer) > 0 {
 					// 检查context状态再发送剩余帧
@@ -869,6 +926,38 @@ func (p *Processor) HandleTextMessage(ctx context.Context, data []byte) {
 	case "hello":
 		// xiaozhi协议hello消息，由session处理
 		p.logger.Debug("收到hello消息，由session处理")
+<<<<<<< HEAD
+=======
+
+	case "abort":
+		// 处理硬件按钮中断消息
+		p.logger.Info("收到abort消息，中断对话")
+
+		// 1. 取消TTS播放
+		if p.stateManager.IsTTSPlaying() {
+			p.logger.Info("中断TTS播放")
+			p.stateManager.SetTTSPlaying(false)
+			p.stateManager.CancelTTS()
+
+			// 发送TTS结束消息，通知前端停止播放
+			if err := p.writer.SendTTSEnd(); err != nil {
+				p.logger.Warn("发送TTS结束消息失败", zap.Error(err))
+			}
+		}
+
+		// 2. 停止LLM处理
+		if p.stateManager.IsProcessing() {
+			p.logger.Info("中断LLM处理")
+			p.stateManager.SetProcessing(false)
+		}
+
+		// 3. 清空消息历史（可选，根据需求决定）
+		p.mu.Lock()
+		p.messages = make([]llm.Message, 0)
+		p.mu.Unlock()
+
+		p.logger.Info("对话已中断")
+>>>>>>> bacc4679b6354ad1d679dc9b00723ccf3d71a87d
 	}
 }
 
@@ -984,3 +1073,127 @@ func (p *Processor) safeSendTTSAudio(data []byte, ctx context.Context) error {
 	// 使用固定延迟（60ms）发送，避免长时间播放时时间同步累积误差导致发送过快
 	return p.writer.SendTTSAudioWithFlowControl(data, 60, 60)
 }
+<<<<<<< HEAD
+=======
+
+// 录音会话相关方法
+
+// recordUserTurnStart 记录用户发言开始
+func (p *Processor) recordUserTurnStart() {
+	p.mu.RLock()
+	session := p.recordingSession
+	p.mu.RUnlock()
+
+	if session != nil {
+		// 使用类型断言调用方法，避免循环依赖
+		if rs, ok := session.(interface{ StartUserTurn() }); ok {
+			rs.StartUserTurn()
+		}
+	}
+}
+
+// RecordUserTurnStartIfNeeded 如果需要的话记录用户发言开始（避免重复记录）
+func (p *Processor) RecordUserTurnStartIfNeeded() {
+	p.mu.RLock()
+	session := p.recordingSession
+	p.mu.RUnlock()
+
+	if session != nil {
+		// 使用类型断言调用方法，避免循环依赖
+		if rs, ok := session.(interface{ StartUserTurnIfNeeded() }); ok {
+			rs.StartUserTurnIfNeeded()
+		}
+	}
+}
+
+// recordUserTurnEnd 记录用户发言结束
+func (p *Processor) recordUserTurnEnd(content string) {
+	p.mu.RLock()
+	session := p.recordingSession
+	p.mu.RUnlock()
+
+	if session != nil {
+		if rs, ok := session.(interface{ EndUserTurn(string) }); ok {
+			rs.EndUserTurn(content)
+		}
+	}
+}
+
+// recordAITurnStart 记录AI回复开始
+func (p *Processor) recordAITurnStart() {
+	p.mu.RLock()
+	session := p.recordingSession
+	p.mu.RUnlock()
+
+	if session != nil {
+		if rs, ok := session.(interface{ StartAITurn() }); ok {
+			rs.StartAITurn()
+		}
+	}
+}
+
+// recordLLMProcessingEnd 记录LLM处理结束
+func (p *Processor) recordLLMProcessingEnd() {
+	p.mu.RLock()
+	session := p.recordingSession
+	p.mu.RUnlock()
+
+	if session != nil {
+		if rs, ok := session.(interface{ EndLLMProcessing() }); ok {
+			rs.EndLLMProcessing()
+		}
+	}
+}
+
+// recordAITurnEnd 记录AI回复结束
+func (p *Processor) recordAITurnEnd(content string) {
+	p.mu.RLock()
+	session := p.recordingSession
+	p.mu.RUnlock()
+
+	if session != nil {
+		if rs, ok := session.(interface{ EndAITurn(string) }); ok {
+			rs.EndAITurn(content)
+		}
+	}
+}
+
+// recordTTSStart 记录TTS开始
+func (p *Processor) recordTTSStart() {
+	p.mu.RLock()
+	session := p.recordingSession
+	p.mu.RUnlock()
+
+	if session != nil {
+		if rs, ok := session.(interface{ StartTTSProcessing() }); ok {
+			rs.StartTTSProcessing()
+		}
+	}
+}
+
+// recordTTSEnd 记录TTS结束
+func (p *Processor) recordTTSEnd() {
+	p.mu.RLock()
+	session := p.recordingSession
+	p.mu.RUnlock()
+
+	if session != nil {
+		if rs, ok := session.(interface{ EndTTSProcessing() }); ok {
+			rs.EndTTSProcessing()
+		}
+	}
+}
+
+// recordInterruption 记录中断事件
+func (p *Processor) recordInterruption() {
+	p.mu.RLock()
+	session := p.recordingSession
+	p.mu.RUnlock()
+
+	if session != nil {
+		if rs, ok := session.(interface{ RecordInterruption() }); ok {
+			rs.RecordInterruption()
+		}
+	}
+}
+>>>>>>> bacc4679b6354ad1d679dc9b00723ccf3d71a87d

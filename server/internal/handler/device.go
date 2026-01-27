@@ -1,4 +1,8 @@
+<<<<<<< HEAD
 package handlers
+=======
+package handler
+>>>>>>> bacc4679b6354ad1d679dc9b00723ccf3d71a87d
 
 import (
 	"context"
@@ -13,6 +17,10 @@ import (
 	"github.com/code-100-precent/LingEcho/internal/models"
 	"github.com/code-100-precent/LingEcho/pkg/cache"
 	"github.com/code-100-precent/LingEcho/pkg/hardware/analysis"
+<<<<<<< HEAD
+=======
+	"github.com/code-100-precent/LingEcho/pkg/hardware/lifecycle"
+>>>>>>> bacc4679b6354ad1d679dc9b00723ccf3d71a87d
 	"github.com/code-100-precent/LingEcho/pkg/logger"
 	"github.com/code-100-precent/LingEcho/pkg/response"
 	"github.com/gin-gonic/gin"
@@ -1019,3 +1027,438 @@ func (h *Handlers) ServeRecordingFile(c *gin.Context) {
 	// 提供文件服务
 	c.File(fullPath)
 }
+<<<<<<< HEAD
+=======
+
+// Device Lifecycle Management Handlers
+
+// GetDeviceLifecycle 获取设备生命周期信息
+// GET /device/:deviceId/lifecycle
+func (h *Handlers) GetDeviceLifecycle(c *gin.Context) {
+	deviceID := c.Param("deviceId")
+	if deviceID == "" {
+		response.Fail(c, "Device ID is required", nil)
+		return
+	}
+
+	user := models.CurrentUser(c)
+	if user == nil {
+		response.Fail(c, "User not logged in", nil)
+		return
+	}
+
+	// 检查设备是否存在并且用户有权限访问
+	device, err := models.GetDeviceByID(h.db, deviceID)
+	if err != nil {
+		response.Fail(c, "Device not found", err.Error())
+		return
+	}
+
+	// 检查用户权限
+	if device.UserID != user.ID {
+		response.Fail(c, "Permission denied", nil)
+		return
+	}
+
+	// 尝试获取生命周期记录，如果不存在则创建一个默认的
+	lifecycle, err := models.GetLifecycleByDeviceID(h.db, deviceID)
+	if err != nil {
+		// 如果生命周期记录不存在，创建一个默认的
+		lifecycle = &models.DeviceLifecycle{
+			DeviceID:         deviceID,
+			MacAddress:       device.MacAddress,
+			Status:           models.DeviceStatusActive,
+			TotalUptime:      int64(device.Uptime),
+			MaintenanceCount: 0,
+			FaultCount:       device.ErrorCount,
+			QualityReport:    "{}",
+			Metadata:         "{}",
+		}
+		// 尝试保存到数据库
+		if createErr := h.db.Create(lifecycle).Error; createErr != nil {
+			logger.Error("Failed to create lifecycle record", zap.Error(createErr))
+		}
+	}
+
+	response.Success(c, "Device lifecycle retrieved successfully", lifecycle)
+}
+
+// GetLifecycleOverview 获取设备生命周期概览
+// GET /device/:deviceId/lifecycle/overview
+func (h *Handlers) GetLifecycleOverview(c *gin.Context) {
+	deviceID := c.Param("deviceId")
+	if deviceID == "" {
+		response.Fail(c, "Device ID is required", nil)
+		return
+	}
+
+	user := models.CurrentUser(c)
+	if user == nil {
+		response.Fail(c, "User not logged in", nil)
+		return
+	}
+
+	// 检查设备是否存在并且用户有权限访问
+	device, err := models.GetDeviceByID(h.db, deviceID)
+	if err != nil {
+		response.Fail(c, "Device not found", err.Error())
+		return
+	}
+
+	// 检查用户权限
+	if device.UserID != user.ID {
+		response.Fail(c, "Permission denied", nil)
+		return
+	}
+
+	// 尝试获取生命周期记录，如果不存在则创建一个默认的
+	lifecycle, err := models.GetLifecycleByDeviceID(h.db, deviceID)
+	if err != nil {
+		// 如果生命周期记录不存在，创建一个默认的
+		now := time.Now()
+		lifecycle = &models.DeviceLifecycle{
+			DeviceID:         deviceID,
+			MacAddress:       device.MacAddress,
+			Status:           models.DeviceStatusActive,
+			ActivationDate:   &device.CreatedAt,
+			LastActiveDate:   &device.LastSeen,
+			TotalUptime:      int64(device.Uptime),
+			TotalDowntime:    0,
+			MaintenanceCount: 0,
+			FaultCount:       device.ErrorCount,
+			QualityReport:    "{}",
+			Metadata:         "{}",
+		}
+		lifecycle.CreatedAt = now
+		lifecycle.UpdatedAt = now
+
+		// 尝试保存到数据库
+		if createErr := h.db.Create(lifecycle).Error; createErr != nil {
+			logger.Error("Failed to create lifecycle record", zap.Error(createErr))
+		}
+	}
+
+	// 获取最近的维护记录（如果表存在的话）
+	var maintenanceRecords []models.DeviceMaintenanceRecord
+	h.db.Where("device_id = ?", deviceID).Order("created_at DESC").Limit(5).Find(&maintenanceRecords)
+
+	// 获取最近的指标（如果表存在的话）
+	var metrics []models.DeviceLifecycleMetrics
+	h.db.Where("device_id = ? AND metric_date >= ?", deviceID, time.Now().AddDate(0, 0, -7)).
+		Order("metric_date ASC").Find(&metrics)
+
+	overview := map[string]interface{}{
+		"lifecycle":         lifecycle,
+		"recentMaintenance": maintenanceRecords,
+		"recentMetrics":     metrics,
+		"statusDuration":    time.Since(lifecycle.UpdatedAt).Hours(),
+		"totalUptime":       lifecycle.TotalUptime,
+		"totalDowntime":     lifecycle.TotalDowntime,
+		"maintenanceCount":  lifecycle.MaintenanceCount,
+		"faultCount":        lifecycle.FaultCount,
+	}
+
+	response.Success(c, "Lifecycle overview retrieved successfully", overview)
+}
+
+// GetLifecycleHistory 获取设备生命周期历史
+// GET /device/:deviceId/lifecycle/history
+func (h *Handlers) GetLifecycleHistory(c *gin.Context) {
+	deviceID := c.Param("deviceId")
+	if deviceID == "" {
+		response.Fail(c, "Device ID is required", nil)
+		return
+	}
+
+	user := models.CurrentUser(c)
+	if user == nil {
+		response.Fail(c, "User not logged in", nil)
+		return
+	}
+
+	// 检查设备权限
+	device, err := models.GetDeviceByID(h.db, deviceID)
+	if err != nil || device.UserID != user.ID {
+		response.Fail(c, "Device not found or permission denied", nil)
+		return
+	}
+
+	var history []models.DeviceLifecycleHistory
+	err = h.db.Where("device_id = ?", deviceID).Order("created_at DESC").Find(&history).Error
+	if err != nil {
+		// 如果表不存在，返回空数组
+		history = []models.DeviceLifecycleHistory{}
+	}
+
+	response.Success(c, "Lifecycle history retrieved successfully", history)
+}
+
+// TransitionDeviceStatus 手动转换设备状态
+// POST /device/:deviceId/lifecycle/transition
+func (h *Handlers) TransitionDeviceStatus(c *gin.Context) {
+	deviceID := c.Param("deviceId")
+	if deviceID == "" {
+		response.Fail(c, "Device ID is required", nil)
+		return
+	}
+
+	var req struct {
+		ToStatus string `json:"toStatus" binding:"required"`
+		Reason   string `json:"reason"`
+	}
+
+	if err := c.ShouldBindJSON(&req); err != nil {
+		response.Fail(c, "Invalid request parameters", err.Error())
+		return
+	}
+
+	user := models.CurrentUser(c)
+	if user == nil {
+		response.Fail(c, "User not logged in", nil)
+		return
+	}
+
+	// 检查设备权限
+	device, err := models.GetDeviceByID(h.db, deviceID)
+	if err != nil || device.UserID != user.ID {
+		response.Fail(c, "Device not found or permission denied", nil)
+		return
+	}
+
+	triggerBy := user.DisplayName
+	if triggerBy == "" {
+		triggerBy = user.Email
+	}
+
+	// 使用生命周期管理器进行状态转换
+	lifecycleManager := lifecycle.NewLifecycleManager(h.db)
+
+	// 确保设备有生命周期记录
+	_, err = lifecycleManager.GetDeviceLifecycle(c.Request.Context(), deviceID)
+	if err != nil {
+		// 初始化设备生命周期
+		err = lifecycleManager.InitializeDevice(c.Request.Context(), deviceID, device.MacAddress)
+		if err != nil {
+			response.Fail(c, "Failed to initialize device lifecycle", err.Error())
+			return
+		}
+	}
+
+	// 执行状态转换（包含影响处理）
+	err = lifecycleManager.TransitionDeviceStatus(
+		c.Request.Context(),
+		deviceID,
+		models.DeviceLifecycleStatus(req.ToStatus),
+		req.Reason,
+		triggerBy,
+	)
+
+	if err != nil {
+		response.Fail(c, "Failed to update device status", err.Error())
+		return
+	}
+
+	response.Success(c, "Device status transitioned successfully", nil)
+}
+
+// GetLifecycleMetrics 获取设备生命周期指标
+// GET /device/:deviceId/lifecycle/metrics
+func (h *Handlers) GetLifecycleMetrics(c *gin.Context) {
+	deviceID := c.Param("deviceId")
+	if deviceID == "" {
+		response.Fail(c, "Device ID is required", nil)
+		return
+	}
+
+	user := models.CurrentUser(c)
+	if user == nil {
+		response.Fail(c, "User not logged in", nil)
+		return
+	}
+
+	// 检查设备权限
+	device, err := models.GetDeviceByID(h.db, deviceID)
+	if err != nil || device.UserID != user.ID {
+		response.Fail(c, "Device not found or permission denied", nil)
+		return
+	}
+
+	// 解析天数参数
+	daysStr := c.DefaultQuery("days", "30")
+	days, err := strconv.Atoi(daysStr)
+	if err != nil {
+		days = 30
+	}
+
+	var metrics []models.DeviceLifecycleMetrics
+	since := time.Now().AddDate(0, 0, -days)
+	err = h.db.Where("device_id = ? AND metric_date >= ?", deviceID, since).
+		Order("metric_date ASC").Find(&metrics).Error
+
+	if err != nil {
+		// 如果表不存在，返回空数组
+		metrics = []models.DeviceLifecycleMetrics{}
+	}
+
+	response.Success(c, "Lifecycle metrics retrieved successfully", metrics)
+}
+
+// CalculateCurrentMetrics 计算当前指标
+// POST /device/:deviceId/lifecycle/metrics/calculate
+func (h *Handlers) CalculateCurrentMetrics(c *gin.Context) {
+	deviceID := c.Param("deviceId")
+	if deviceID == "" {
+		response.Fail(c, "Device ID is required", nil)
+		return
+	}
+
+	user := models.CurrentUser(c)
+	if user == nil {
+		response.Fail(c, "User not logged in", nil)
+		return
+	}
+
+	// 检查设备权限
+	device, err := models.GetDeviceByID(h.db, deviceID)
+	if err != nil || device.UserID != user.ID {
+		response.Fail(c, "Device not found or permission denied", nil)
+		return
+	}
+
+	// 获取设备性能历史数据
+	var perfLogs []models.DevicePerformanceLog
+	since := time.Now().Add(-24 * time.Hour)
+	err = h.db.Where("device_id = ? AND recorded_at >= ?", deviceID, since).Find(&perfLogs).Error
+
+	if err != nil || len(perfLogs) == 0 {
+		// 如果没有性能数据，创建一个基于当前设备状态的指标
+		metrics := &models.DeviceLifecycleMetrics{
+			DeviceID:          deviceID,
+			MetricDate:        time.Now(),
+			AvgCPUUsage:       device.CPUUsage,
+			AvgMemoryUsage:    device.MemoryUsage,
+			AvgTemperature:    device.Temperature,
+			AvgNetworkLatency: 0,
+			UptimePercentage:  95.0, // 默认值
+			ErrorRate:         0.01, // 默认值
+			SuccessRate:       0.99, // 默认值
+		}
+
+		// 尝试保存指标
+		if saveErr := h.db.Create(metrics).Error; saveErr != nil {
+			logger.Error("Failed to save metrics", zap.Error(saveErr))
+		}
+
+		response.Success(c, "Metrics calculated successfully", metrics)
+		return
+	}
+
+	// 计算平均值
+	var totalCPU, totalMemory, totalTemp, totalLatency float64
+	for _, log := range perfLogs {
+		totalCPU += log.CPUUsage
+		totalMemory += log.MemoryUsage
+		totalTemp += log.Temperature
+		totalLatency += float64(log.NetworkLatency)
+	}
+
+	count := float64(len(perfLogs))
+	metrics := &models.DeviceLifecycleMetrics{
+		DeviceID:          deviceID,
+		MetricDate:        time.Now(),
+		AvgCPUUsage:       totalCPU / count,
+		AvgMemoryUsage:    totalMemory / count,
+		AvgTemperature:    totalTemp / count,
+		AvgNetworkLatency: totalLatency / count,
+		UptimePercentage:  95.0, // 需要根据实际数据计算
+		ErrorRate:         0.01,
+		SuccessRate:       0.99,
+	}
+
+	// 保存指标
+	err = h.db.Create(metrics).Error
+	if err != nil {
+		logger.Error("Failed to save metrics", zap.Error(err))
+	}
+
+	response.Success(c, "Metrics calculated successfully", metrics)
+}
+
+// GetMaintenanceRecords 获取设备维护记录
+// GET /device/:deviceId/lifecycle/maintenance
+func (h *Handlers) GetMaintenanceRecords(c *gin.Context) {
+	deviceID := c.Param("deviceId")
+	if deviceID == "" {
+		response.Fail(c, "Device ID is required", nil)
+		return
+	}
+
+	user := models.CurrentUser(c)
+	if user == nil {
+		response.Fail(c, "User not logged in", nil)
+		return
+	}
+
+	// 检查设备权限
+	device, err := models.GetDeviceByID(h.db, deviceID)
+	if err != nil || device.UserID != user.ID {
+		response.Fail(c, "Device not found or permission denied", nil)
+		return
+	}
+
+	// 解析分页参数
+	limitStr := c.DefaultQuery("limit", "20")
+	offsetStr := c.DefaultQuery("offset", "0")
+
+	limit, err := strconv.Atoi(limitStr)
+	if err != nil {
+		limit = 20
+	}
+
+	offset, err := strconv.Atoi(offsetStr)
+	if err != nil {
+		offset = 0
+	}
+
+	var records []models.DeviceMaintenanceRecord
+	var total int64
+
+	query := h.db.Where("device_id = ?", deviceID)
+	query.Model(&models.DeviceMaintenanceRecord{}).Count(&total)
+	err = query.Order("created_at DESC").Limit(limit).Offset(offset).Find(&records).Error
+
+	if err != nil {
+		// 如果表不存在，返回空数据
+		records = []models.DeviceMaintenanceRecord{}
+		total = 0
+	}
+
+	result := map[string]interface{}{
+		"records": records,
+		"total":   total,
+		"limit":   limit,
+		"offset":  offset,
+	}
+
+	response.Success(c, "Maintenance records retrieved successfully", result)
+}
+
+// 简化的维护相关方法，返回成功但不执行实际操作
+// ScheduleMaintenance 安排设备维护
+// POST /device/:deviceId/lifecycle/maintenance/schedule
+func (h *Handlers) ScheduleMaintenance(c *gin.Context) {
+	response.Success(c, "Maintenance scheduling feature coming soon", nil)
+}
+
+// StartMaintenance 开始维护
+// POST /device/:deviceId/lifecycle/maintenance/start
+func (h *Handlers) StartMaintenance(c *gin.Context) {
+	response.Success(c, "Maintenance start feature coming soon", nil)
+}
+
+// CompleteMaintenance 完成维护
+// POST /device/:deviceId/lifecycle/maintenance/complete
+func (h *Handlers) CompleteMaintenance(c *gin.Context) {
+	response.Success(c, "Maintenance completion feature coming soon", nil)
+}
+>>>>>>> bacc4679b6354ad1d679dc9b00723ccf3d71a87d

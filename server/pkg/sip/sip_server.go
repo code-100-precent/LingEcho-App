@@ -40,6 +40,7 @@ type SipServer struct {
 	outgoingMutex    sync.RWMutex
 	registeredUsers  map[string]string // username -> Contact address (从 REGISTER 请求中获取)
 	registerMutex    sync.RWMutex
+<<<<<<< HEAD
 	voiceHandlers    map[string]*VoiceConversationHandler // Call-ID -> AI voice handler
 	voiceHandlersMu  sync.RWMutex
 	aiSessionInfo    map[string]*AISessionInfo // Call-ID -> AI session info
@@ -53,6 +54,11 @@ type AISessionInfo struct {
 	Assistant *models.Assistant
 }
 
+=======
+	db               *gorm.DB
+}
+
+>>>>>>> bacc4679b6354ad1d679dc9b00723ccf3d71a87d
 type OutgoingSession struct {
 	RemoteRTPAddr string
 	CallID        string
@@ -120,8 +126,11 @@ func NewSipServer(rptPort int) *SipServer {
 		activeSessions:   make(map[string]*SessionInfo),
 		outgoingSessions: make(map[string]*OutgoingSession),
 		registeredUsers:  make(map[string]string),
+<<<<<<< HEAD
 		voiceHandlers:    make(map[string]*VoiceConversationHandler),
 		aiSessionInfo:    make(map[string]*AISessionInfo),
+=======
+>>>>>>> bacc4679b6354ad1d679dc9b00723ccf3d71a87d
 	}
 }
 
@@ -1064,7 +1073,10 @@ func (as *SipServer) RegisterFunc() {
 	as.server.OnRegister(as.handleRegister)
 	as.server.OnOptions(as.handleOptions)
 	as.server.OnAck(as.handleAck)
+<<<<<<< HEAD
 	logrus.Info("✅ ACK handler registered")
+=======
+>>>>>>> bacc4679b6354ad1d679dc9b00723ccf3d71a87d
 	as.server.OnBye(as.handleBye)
 	as.server.OnCancel(as.handleCancel)
 	as.server.OnPublish(as.handlePublish)
@@ -1097,6 +1109,7 @@ func (as *SipServer) handleInvite(req *sip.Request, tx sip.ServerTransaction) {
 	logrus.WithField("sdp", sdp).Debug("Generated SDP")
 
 	// Create 200 OK response
+<<<<<<< HEAD
 	// 先检查是否需要启动 AI 代接（在发送 200 OK 之前）
 	callID := req.CallID().Value()
 	shouldStartAI, sipUser, assistant, err := as.checkAIAutoAnswer(req)
@@ -1137,6 +1150,8 @@ func (as *SipServer) handleInvite(req *sip.Request, tx sip.ServerTransaction) {
 		"rtp_address": rtpAddrToSave,
 	}).Info("Session information saved")
 
+=======
+>>>>>>> bacc4679b6354ad1d679dc9b00723ccf3d71a87d
 	res := sip.NewResponseFromRequest(req, sip.StatusOK, "OK", sdpBytes)
 	cl := sip.ContentLengthHeader(len(sdpBytes))
 	res.AppendHeader(&cl)
@@ -1166,6 +1181,19 @@ func (as *SipServer) handleInvite(req *sip.Request, tx sip.ServerTransaction) {
 	logrus.Info("200 OK response sent with SDP and Contact header")
 	logrus.Info("200 OK response sent, waiting for ACK...")
 
+<<<<<<< HEAD
+=======
+	// Save session information, wait for ACK before sending audio
+	callID := req.CallID().Value()
+	as.sessionsMutex.Lock()
+	as.pendingSessions[callID] = clientRTPAddr
+	as.sessionsMutex.Unlock()
+	logrus.WithFields(logrus.Fields{
+		"call_id":     callID,
+		"rtp_address": clientRTPAddr,
+	}).Info("Session information saved")
+
+>>>>>>> bacc4679b6354ad1d679dc9b00723ccf3d71a87d
 	// 创建呼入通话的数据库记录
 	if as.db != nil {
 		now := time.Now()
@@ -1652,6 +1680,7 @@ func (as *SipServer) handleAck(req *sip.Request, tx sip.ServerTransaction) {
 	// Find corresponding session information
 	as.sessionsMutex.Lock()
 	clientRTPAddr, exists := as.pendingSessions[callID]
+<<<<<<< HEAD
 	// 不要立即删除，先检查是否是 AI 会话
 	as.sessionsMutex.Unlock()
 
@@ -1661,6 +1690,14 @@ func (as *SipServer) handleAck(req *sip.Request, tx sip.ServerTransaction) {
 		"clientRTPAddr":  clientRTPAddr,
 	}).Debug("Pending session info")
 
+=======
+	if exists {
+		// Delete pending session
+		delete(as.pendingSessions, callID)
+	}
+	as.sessionsMutex.Unlock()
+
+>>>>>>> bacc4679b6354ad1d679dc9b00723ccf3d71a87d
 	if !exists {
 		logrus.WithField("call_id", callID).Warn("Received ACK but could not find corresponding session")
 		logrus.Debug("Current pending sessions list:")
@@ -1674,6 +1711,7 @@ func (as *SipServer) handleAck(req *sip.Request, tx sip.ServerTransaction) {
 		as.sessionsMutex.RUnlock()
 		return
 	}
+<<<<<<< HEAD
 	
 	// 检查是否是 AI 代接会话（在删除之前检查！）
 	isAISession := false
@@ -1714,10 +1752,16 @@ func (as *SipServer) handleAck(req *sip.Request, tx sip.ServerTransaction) {
 
 	// Save active session information
 	clientAddr, err := net.ResolveUDPAddr("udp", actualRTPAddr)
+=======
+
+	// Save active session information
+	clientAddr, err := net.ResolveUDPAddr("udp", clientRTPAddr)
+>>>>>>> bacc4679b6354ad1d679dc9b00723ccf3d71a87d
 	if err != nil {
 		logrus.WithError(err).Error("Failed to resolve client address")
 		return
 	}
+<<<<<<< HEAD
 	logrus.WithField("client_rtp_addr", actualRTPAddr).Info("Session established, starting to send audio")
 	
 	// 如果是 AI 代接会话，启动 AI 语音处理
@@ -1747,6 +1791,10 @@ func (as *SipServer) handleAck(req *sip.Request, tx sip.ServerTransaction) {
 	}
 
 	// 普通模式：创建会话并发送音频
+=======
+	logrus.WithField("client_rtp_addr", clientRTPAddr).Info("Session established, starting to send audio")
+
+>>>>>>> bacc4679b6354ad1d679dc9b00723ccf3d71a87d
 	// Create context for session cancellation
 	ctx, cancel := context.WithCancel(context.Background())
 
@@ -1775,10 +1823,17 @@ func (as *SipServer) handleAck(req *sip.Request, tx sip.ServerTransaction) {
 	}
 
 	// 启动录音（持续录音直到通话结束）
+<<<<<<< HEAD
 	go as.recordAudioContinuous(actualRTPAddr, callID, recordingFile, ctx)
 
 	// Send audio in goroutine
 	go as.sendAudioWithCallback(actualRTPAddr, callID)
+=======
+	go as.recordAudioContinuous(clientRTPAddr, callID, recordingFile, ctx)
+
+	// Send audio in goroutine
+	go as.sendAudioWithCallback(clientRTPAddr, callID)
+>>>>>>> bacc4679b6354ad1d679dc9b00723ccf3d71a87d
 }
 
 func (as *SipServer) sendAudioWithCallback(clientAddr string, callID string) {
@@ -2329,6 +2384,7 @@ func (as *SipServer) handleBye(req *sip.Request, tx sip.ServerTransaction) {
 		"start_line": req.StartLine(),
 		"call_id":    callID,
 	}).Info("Received BYE request")
+<<<<<<< HEAD
 	
 	// 停止 AI 语音会话（如果存在）
 	as.stopAIVoiceSession(callID)
@@ -2337,6 +2393,8 @@ func (as *SipServer) handleBye(req *sip.Request, tx sip.ServerTransaction) {
 	as.aiSessionMutex.Lock()
 	delete(as.aiSessionInfo, callID)
 	as.aiSessionMutex.Unlock()
+=======
+>>>>>>> bacc4679b6354ad1d679dc9b00723ccf3d71a87d
 
 	// 更新呼出会话状态（如果存在）
 	now := time.Now()

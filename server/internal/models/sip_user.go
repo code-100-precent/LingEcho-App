@@ -1,8 +1,11 @@
 package models
 
 import (
+<<<<<<< HEAD
 	"database/sql/driver"
 	"encoding/json"
+=======
+>>>>>>> bacc4679b6354ad1d679dc9b00723ccf3d71a87d
 	"time"
 
 	"gorm.io/gorm"
@@ -17,6 +20,7 @@ const (
 	SipUserStatusExpired      SipUserStatus = "expired"      // 已过期
 )
 
+<<<<<<< HEAD
 // RecordingMode 录音模式
 type RecordingMode string
 
@@ -61,12 +65,16 @@ func (kr *KeywordReplies) Scan(value interface{}) error {
 }
 
 // SipUser SIP用户表（代接方案）
+=======
+// SipUser SIP用户表
+>>>>>>> bacc4679b6354ad1d679dc9b00723ccf3d71a87d
 type SipUser struct {
 	ID        uint       `json:"id" gorm:"primaryKey"`
 	CreatedAt time.Time  `json:"createdAt" gorm:"autoCreateTime"`
 	UpdatedAt time.Time  `json:"updatedAt" gorm:"autoUpdateTime"`
 	DeletedAt *time.Time `json:"-" gorm:"index"`
 
+<<<<<<< HEAD
 	// ========== 方案基本信息 ==========
 	SchemeName  string `json:"schemeName" gorm:"size:128;not null"` // 方案名称（如"工作模式"、"会议中"）
 	Description string `json:"description,omitempty" gorm:"type:text"` // 方案描述
@@ -76,27 +84,47 @@ type SipUser struct {
 	Password string `json:"-" gorm:"size:128"`                             // SIP密码（可选，用于认证）
 
 	// ========== SIP注册信息 ==========
+=======
+	// SIP认证信息
+	Username string `json:"username" gorm:"size:128;uniqueIndex;not null"` // SIP用户名（唯一）
+	Password string `json:"-" gorm:"size:128"`                             // SIP密码（可选，用于认证）
+
+	// SIP注册信息
+>>>>>>> bacc4679b6354ad1d679dc9b00723ccf3d71a87d
 	Contact     string     `json:"contact,omitempty" gorm:"size:256"`  // Contact地址（完整URI）
 	ContactIP   string     `json:"contactIp,omitempty" gorm:"size:64"` // Contact IP地址
 	ContactPort int        `json:"contactPort,omitempty"`              // Contact端口
 	Expires     int        `json:"expires" gorm:"default:3600"`        // 过期时间（秒）
 	ExpiresAt   *time.Time `json:"expiresAt,omitempty"`                // 过期时间点
 
+<<<<<<< HEAD
 	// ========== 注册状态 ==========
+=======
+	// 注册状态
+>>>>>>> bacc4679b6354ad1d679dc9b00723ccf3d71a87d
 	Status         SipUserStatus `json:"status" gorm:"size:20;default:'unregistered';index"` // 注册状态
 	LastRegister   *time.Time    `json:"lastRegister,omitempty"`                             // 最后注册时间
 	LastUnregister *time.Time    `json:"lastUnregister,omitempty"`                           // 最后注销时间
 
+<<<<<<< HEAD
 	// ========== 客户端信息 ==========
 	UserAgent string `json:"userAgent,omitempty" gorm:"size:256"` // 用户代理（User-Agent）
 	RemoteIP  string `json:"remoteIp,omitempty" gorm:"size:64"`   // 远程IP地址
 
 	// ========== 关联信息 ==========
+=======
+	// 客户端信息
+	UserAgent string `json:"userAgent,omitempty" gorm:"size:256"` // 用户代理（User-Agent）
+	RemoteIP  string `json:"remoteIp,omitempty" gorm:"size:64"`   // 远程IP地址
+
+	// 关联信息
+>>>>>>> bacc4679b6354ad1d679dc9b00723ccf3d71a87d
 	UserID  *uint `json:"userId,omitempty" gorm:"index"` // 关联到系统用户（可选）
 	User    User  `json:"user,omitempty" gorm:"foreignKey:UserID"`
 	GroupID *uint `json:"groupId,omitempty" gorm:"index"` // 关联到组织（可选）
 	Group   Group `json:"group,omitempty" gorm:"foreignKey:GroupID"`
 
+<<<<<<< HEAD
 	// ========== AI 代接配置 ==========
 	AssistantID     *uint     `json:"assistantId,omitempty" gorm:"index"`  // 绑定的 AI 助手 ID
 	Assistant       Assistant `json:"assistant,omitempty" gorm:"foreignKey:AssistantID"`
@@ -135,6 +163,20 @@ type SipUser struct {
 	Enabled   bool   `json:"enabled" gorm:"default:true"`      // 是否启用
 	IsActive  bool   `json:"isActive" gorm:"default:false"`    // 是否为当前激活方案（同一用户只能有一个激活方案）
 	Notes     string `json:"notes,omitempty" gorm:"type:text"` // 备注
+=======
+	// 显示信息
+	DisplayName string `json:"displayName,omitempty" gorm:"size:128"` // 显示名称
+	Alias       string `json:"alias,omitempty" gorm:"size:128"`       // 别名
+
+	// 统计信息
+	RegisterCount     int `json:"registerCount" gorm:"default:0"`     // 注册次数
+	CallCount         int `json:"callCount" gorm:"default:0"`         // 通话次数
+	TotalCallDuration int `json:"totalCallDuration" gorm:"default:0"` // 总通话时长（秒）
+
+	// 配置信息
+	Enabled bool   `json:"enabled" gorm:"default:true"`      // 是否启用
+	Notes   string `json:"notes,omitempty" gorm:"type:text"` // 备注
+>>>>>>> bacc4679b6354ad1d679dc9b00723ccf3d71a87d
 }
 
 // TableName 指定表名
@@ -163,7 +205,11 @@ func (su *SipUser) UpdateExpiresAt() {
 	}
 }
 
+<<<<<<< HEAD
 // CreateSipUser 创建SIP用户（代接方案）
+=======
+// CreateSipUser 创建SIP用户
+>>>>>>> bacc4679b6354ad1d679dc9b00723ccf3d71a87d
 func CreateSipUser(db *gorm.DB, sipUser *SipUser) error {
 	return db.Create(sipUser).Error
 }
@@ -205,13 +251,18 @@ func GetRegisteredSipUsers(db *gorm.DB) ([]SipUser, error) {
 	return sipUsers, err
 }
 
+<<<<<<< HEAD
 // GetSipUsersByUserID 根据系统用户ID获取SIP用户列表（代接方案列表）
+=======
+// GetSipUsersByUserID 根据系统用户ID获取SIP用户列表
+>>>>>>> bacc4679b6354ad1d679dc9b00723ccf3d71a87d
 func GetSipUsersByUserID(db *gorm.DB, userID uint) ([]SipUser, error) {
 	var sipUsers []SipUser
 	err := db.Where("user_id = ?", userID).Find(&sipUsers).Error
 	return sipUsers, err
 }
 
+<<<<<<< HEAD
 // GetActiveSipUserByUserID 获取用户当前激活的代接方案
 func GetActiveSipUserByUserID(db *gorm.DB, userID uint) (*SipUser, error) {
 	var sipUser SipUser
@@ -243,12 +294,15 @@ func ActivateSipUser(db *gorm.DB, userID uint, sipUserID uint) error {
 	})
 }
 
+=======
+>>>>>>> bacc4679b6354ad1d679dc9b00723ccf3d71a87d
 // GetSipUsersByGroupID 根据组织ID获取SIP用户列表
 func GetSipUsersByGroupID(db *gorm.DB, groupID uint) ([]SipUser, error) {
 	var sipUsers []SipUser
 	err := db.Where("group_id = ?", groupID).Find(&sipUsers).Error
 	return sipUsers, err
 }
+<<<<<<< HEAD
 
 // GetSipUserByPhoneNumber 根据手机号获取代接方案
 func GetSipUserByPhoneNumber(db *gorm.DB, phoneNumber string) (*SipUser, error) {
@@ -259,3 +313,5 @@ func GetSipUserByPhoneNumber(db *gorm.DB, phoneNumber string) (*SipUser, error) 
 	}
 	return &sipUser, nil
 }
+=======
+>>>>>>> bacc4679b6354ad1d679dc9b00723ccf3d71a87d

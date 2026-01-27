@@ -143,6 +143,7 @@ func NewTranscriberConfigFromMap(
 func buildQCloudConfig(config map[string]interface{}) (*QCloudASROption, error) {
 	cfg := NewConfigReader(config)
 
+<<<<<<< HEAD
 	// 优先使用配置中的值，如果没有则使用环境变量
 	appID := cfg.String("app_id", "appId")
 	if appID == "" {
@@ -162,6 +163,14 @@ func buildQCloudConfig(config map[string]interface{}) (*QCloudASROption, error) 
 	if appID == "" || secretID == "" || secretKey == "" {
 		return nil, fmt.Errorf("腾讯云ASR配置不完整：缺少appId、secretId或secretKey (配置: appId=%s, secretId=%s, secretKey=%s)", 
 			appID, secretID, secretKey)
+=======
+	appID := cfg.String("app_id", "appId", utils.GetEnv("QCLOUD_APP_ID"))
+	secretID := cfg.String("secret_id", "secretId", utils.GetEnv("QCLOUD_SECRET_ID"))
+	secretKey := cfg.String("secret_key", "secretKey", utils.GetEnv("QCLOUD_SECRET"))
+
+	if appID == "" || secretID == "" || secretKey == "" {
+		return nil, fmt.Errorf("腾讯云ASR配置不完整：缺少appId、secretId或secretKey")
+>>>>>>> bacc4679b6354ad1d679dc9b00723ccf3d71a87d
 	}
 
 	opt := NewQcloudASROption(appID, secretID, secretKey)

@@ -1,4 +1,8 @@
+<<<<<<< HEAD
 package handlers
+=======
+package handler
+>>>>>>> bacc4679b6354ad1d679dc9b00723ccf3d71a87d
 
 import (
 	"log"
@@ -182,8 +186,11 @@ func (h *Handlers) Register(engine *gin.Engine) {
 	if h.sipHandler != nil {
 		h.registerSipRoutes(r)
 	}
+<<<<<<< HEAD
 	// Register Scheme routes (代接方案管理)
 	h.registerSchemeRoutes(r)
+=======
+>>>>>>> bacc4679b6354ad1d679dc9b00723ccf3d71a87d
 	// Register Business Module Routes
 	h.registerAuthRoutes(r)
 	h.registerNotificationRoutes(r)
@@ -200,12 +207,19 @@ func (h *Handlers) Register(engine *gin.Engine) {
 	h.registerVoiceTrainingRoutes(r)
 	h.registerJSTemplateRoutes(r)
 	h.registerBillingRoutes(r)
+<<<<<<< HEAD
+=======
+	h.registerCallRecordingRoutes(r) // 新增：通话记录路由
+>>>>>>> bacc4679b6354ad1d679dc9b00723ccf3d71a87d
 	h.registerMiddlewareRoutes(r)
 	h.registerWorkflowRoutes(r)
 	h.registerWorkflowPluginRoutes(r) // Add workflow plugin routes
 	h.registerNodePluginRoutes(r)     // Add node plugin routes
+<<<<<<< HEAD
 	h.registerVoicemailRoutes(r)      // Add voicemail routes
 	h.registerPhoneNumberRoutes(r)    // Add phone number routes
+=======
+>>>>>>> bacc4679b6354ad1d679dc9b00723ccf3d71a87d
 	// Register public workflow routes (no auth required)
 	h.RegisterPublicWorkflowRoutes(r)
 	objs := h.GetObjs()
@@ -405,6 +419,23 @@ func (h *Handlers) registerDeviceRoutes(r *gin.RouterGroup) {
 
 		// Recording file access
 		device.GET("/recordings/*filepath", h.ServeRecordingFile) // Serve recording files
+<<<<<<< HEAD
+=======
+
+		// Device lifecycle management routes
+		device.GET("/:deviceId/lifecycle", h.GetDeviceLifecycle)
+		device.GET("/:deviceId/lifecycle/overview", h.GetLifecycleOverview)
+		device.GET("/:deviceId/lifecycle/history", h.GetLifecycleHistory)
+		device.POST("/:deviceId/lifecycle/transition", h.TransitionDeviceStatus)
+		device.GET("/:deviceId/lifecycle/metrics", h.GetLifecycleMetrics)
+		device.POST("/:deviceId/lifecycle/metrics/calculate", h.CalculateCurrentMetrics)
+
+		// Maintenance management
+		device.GET("/:deviceId/lifecycle/maintenance", h.GetMaintenanceRecords)
+		device.POST("/:deviceId/lifecycle/maintenance/schedule", h.ScheduleMaintenance)
+		device.POST("/:deviceId/lifecycle/maintenance/start", h.StartMaintenance)
+		device.POST("/:deviceId/lifecycle/maintenance/complete", h.CompleteMaintenance)
+>>>>>>> bacc4679b6354ad1d679dc9b00723ccf3d71a87d
 	}
 }
 
@@ -746,7 +777,10 @@ func (h *Handlers) registerSipRoutes(r *gin.RouterGroup) {
 
 		// 通话历史
 		sip.GET("/calls", models.AuthRequired, h.sipHandler.GetCallHistory)
+<<<<<<< HEAD
 		sip.GET("/calls/:callId/detail", models.AuthRequired, h.sipHandler.GetCallDetail)
+=======
+>>>>>>> bacc4679b6354ad1d679dc9b00723ccf3d71a87d
 	}
 }
 
@@ -804,6 +838,7 @@ func (h *Handlers) registerWorkflowPluginRoutes(r *gin.RouterGroup) {
 	}
 }
 
+<<<<<<< HEAD
 // registerSchemeRoutes 代接方案管理模块
 func (h *Handlers) registerSchemeRoutes(r *gin.RouterGroup) {
 	schemeHandler := NewSchemeHandler(h.db)
@@ -871,5 +906,18 @@ func (h *Handlers) registerPhoneNumberRoutes(r *gin.RouterGroup) {
 		phoneNumbers.POST("/:id/bind-scheme", phoneNumberHandler.BindScheme)           // 绑定方案
 		phoneNumbers.POST("/:id/unbind-scheme", phoneNumberHandler.UnbindScheme)       // 解绑方案
 		phoneNumbers.POST("/:id/call-forward-status", phoneNumberHandler.UpdateCallForwardStatus) // 更新呼叫转移状态
+=======
+// registerCallRecordingRoutes 注册通话记录路由
+func (h *Handlers) registerCallRecordingRoutes(r *gin.RouterGroup) {
+	callRecordingHandler := NewCallRecordingHandler(h.db)
+
+	recordings := r.Group("call-recordings")
+	recordings.Use(models.AuthRequired)
+	{
+		recordings.GET("/", callRecordingHandler.GetCallRecordings)
+		recordings.GET("/:id", callRecordingHandler.GetCallRecordingDetail)
+		recordings.DELETE("/:id", callRecordingHandler.DeleteCallRecording)
+		recordings.GET("/stats", callRecordingHandler.GetCallRecordingStats)
+>>>>>>> bacc4679b6354ad1d679dc9b00723ccf3d71a87d
 	}
 }

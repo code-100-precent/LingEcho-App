@@ -111,6 +111,7 @@ func (qs *QCloudService) Synthesize(ctx context.Context, handler SynthesisHandle
 	if err != nil {
 		return err
 	}
+<<<<<<< HEAD
 	err = synthesizer.Wait()
 	if err != nil {
 		return err
@@ -126,6 +127,9 @@ func (qs *QCloudService) Synthesize(ctx context.Context, handler SynthesisHandle
 	}
 	
 	return nil
+=======
+	return synthesizer.Wait()
+>>>>>>> bacc4679b6354ad1d679dc9b00723ccf3d71a87d
 }
 
 func (qs *QCloudService) Close() error {
@@ -134,8 +138,11 @@ func (qs *QCloudService) Close() error {
 
 type qcloudSpeechSynthesisListener struct {
 	handler SynthesisHandler
+<<<<<<< HEAD
 	err     error
 	mu      sync.Mutex
+=======
+>>>>>>> bacc4679b6354ad1d679dc9b00723ccf3d71a87d
 }
 
 func (q *qcloudSpeechSynthesisListener) OnCancel(*tts.SpeechSynthesisResponse) {
@@ -147,10 +154,14 @@ func (q *qcloudSpeechSynthesisListener) OnComplete(*tts.SpeechSynthesisResponse)
 }
 
 func (q *qcloudSpeechSynthesisListener) OnFail(_ *tts.SpeechSynthesisResponse, err error) {
+<<<<<<< HEAD
 	logrus.WithFields(logrus.Fields{}).WithError(err).Error("qcloud tts: fail")
 	q.mu.Lock()
 	q.err = err
 	q.mu.Unlock()
+=======
+	logrus.WithFields(logrus.Fields{}).WithError(err).Info("qcloud tts: fail")
+>>>>>>> bacc4679b6354ad1d679dc9b00723ccf3d71a87d
 }
 
 func (q *qcloudSpeechSynthesisListener) OnMessage(resp *tts.SpeechSynthesisResponse) {
