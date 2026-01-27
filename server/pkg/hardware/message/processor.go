@@ -287,33 +287,7 @@ func (p *Processor) ProcessASRResult(ctx context.Context, text string) {
 		return
 	}
 
-	// 记录用户输入开始（录音会话）
-	p.recordUserTurnStart()
-
-	// 如果 TTS 正在播放，取消 TTS 播放（用户打断）
-	if p.stateManager.IsTTSPlaying() {
-		p.logger.Info("ASR检测到用户说话，中断TTS播放",
-			zap.String("user_text", text),
-		)
-		// 记录中断事件
-		p.recordInterruption()
-
-		// 优雅地取消 TTS：先设置状态，再取消context，最后发送结束消息
-		p.stateManager.SetTTSPlaying(false)
-		p.stateManager.CancelTTS()
-		// 发送 TTS 结束消息，通知前端停止播放
-		if err := p.writer.SendTTSEnd(); err != nil {
-			p.logger.Warn("发送TTS结束消息失败", zap.Error(err))
-		}
-	}
-
-	// 提前发送ASR结果给前端，不阻塞后续处理
-	if err := p.writer.SendASRResult(text); err != nil {
-		p.logger.Error("发送ASR结果失败", zap.Error(err))
-		// 发送失败不影响后续处理
-	}
-
-	// 记录用户输入结束（录音会话）
+	// 记录用户输入结束（ASR识别完成）
 	p.recordUserTurnEnd(text)
 
 	// 检查是否在过滤词黑名单中
@@ -451,6 +425,9 @@ func (p *Processor) synthesizeTTS(ctx context.Context, text string) {
 
 	p.logger.Info("开始TTS合成", zap.String("text", text))
 
+	// 记录TTS开始时间
+	p.recordTTSStart()
+
 	// 设置TTS播放状态
 	p.stateManager.SetTTSPlaying(true)
 	defer func() {
@@ -494,6 +471,9 @@ func (p *Processor) synthesizeTTS(ctx context.Context, text string) {
 	// 合成语音
 	p.logger.Debug("TTS合成文本", zap.String("text", text))
 
+	// 记录TTS开始时间（在实际调用TTS服务之前）
+	p.recordTTSStart()
+
 	audioChan, err := p.ttsService.Synthesize(ttsCtx, text)
 	if err != nil {
 		p.logger.Error("TTS合成失败", zap.Error(err))
@@ -534,6 +514,10 @@ func (p *Processor) synthesizeTTS(ctx context.Context, text string) {
 					zap.Int("frameCount", frameCount),
 					zap.Int("bufferSize", len(pcmBuffer)),
 				)
+
+				// 记录TTS结束时间（TTS合成完成，音频数据全部接收）
+				p.recordTTSEnd()
+
 				// 发送缓冲区剩余数据
 				if audioFormat == "opus" && opusEncoder != nil && len(pcmBuffer) > 0 {
 					// 检查context状态再发送剩余帧
@@ -1057,6 +1041,20 @@ func (p *Processor) recordUserTurnStart() {
 	}
 }
 
+// RecordUserTurnStartIfNeeded 如果需要的话记录用户发言开始（避免重复记录）
+func (p *Processor) RecordUserTurnStartIfNeeded() {
+	p.mu.RLock()
+	session := p.recordingSession
+	p.mu.RUnlock()
+
+	if session != nil {
+		// 使用类型断言调用方法，避免循环依赖
+		if rs, ok := session.(interface{ StartUserTurnIfNeeded() }); ok {
+			rs.StartUserTurnIfNeeded()
+		}
+	}
+}
+
 // recordUserTurnEnd 记录用户发言结束
 func (p *Processor) recordUserTurnEnd(content string) {
 	p.mu.RLock()
@@ -1105,6 +1103,32 @@ func (p *Processor) recordAITurnEnd(content string) {
 	if session != nil {
 		if rs, ok := session.(interface{ EndAITurn(string) }); ok {
 			rs.EndAITurn(content)
+		}
+	}
+}
+
+// recordTTSStart 记录TTS开始
+func (p *Processor) recordTTSStart() {
+	p.mu.RLock()
+	session := p.recordingSession
+	p.mu.RUnlock()
+
+	if session != nil {
+		if rs, ok := session.(interface{ StartTTSProcessing() }); ok {
+			rs.StartTTSProcessing()
+		}
+	}
+}
+
+// recordTTSEnd 记录TTS结束
+func (p *Processor) recordTTSEnd() {
+	p.mu.RLock()
+	session := p.recordingSession
+	p.mu.RUnlock()
+
+	if session != nil {
+		if rs, ok := session.(interface{ EndTTSProcessing() }); ok {
+			rs.EndTTSProcessing()
 		}
 	}
 }

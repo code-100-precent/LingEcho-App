@@ -285,6 +285,14 @@ func (rs *RecordingSession) StartUserTurn() {
 	}
 }
 
+// StartUserTurnIfNeeded 如果需要的话开始用户发言轮次（避免重复记录）
+func (rs *RecordingSession) StartUserTurnIfNeeded() {
+	// 如果当前没有用户轮次，或者当前轮次已经结束，则开始新的轮次
+	if rs.currentUserTurn == nil {
+		rs.StartUserTurn()
+	}
+}
+
 // EndUserTurn 结束用户发言轮次
 func (rs *RecordingSession) EndUserTurn(content string) {
 	if rs.currentUserTurn == nil {
@@ -316,6 +324,9 @@ func (rs *RecordingSession) EndUserTurn(content string) {
 	}
 	rs.userInput.WriteString(fmt.Sprintf("[%s] %s",
 		rs.currentUserTurn.Timestamp.Format("15:04:05"), content))
+
+	// 清空当前用户轮次，为下次做准备
+	rs.currentUserTurn = nil
 }
 
 // StartAITurn 开始AI回复轮次
@@ -356,8 +367,32 @@ func (rs *RecordingSession) EndLLMProcessing() {
 	// 更新LLM指标
 	rs.updateLLMMetrics(llmDuration)
 
-	// 开始TTS处理
+	// 注意：不在这里设置TTS开始时间，应该在实际开始TTS时设置
+}
+
+// StartTTSProcessing 开始TTS处理
+func (rs *RecordingSession) StartTTSProcessing() {
+	if rs.currentAITurn == nil {
+		return
+	}
+
+	now := time.Now()
 	rs.currentAITurn.TTSStartTime = &now
+}
+
+// EndTTSProcessing 结束TTS处理
+func (rs *RecordingSession) EndTTSProcessing() {
+	if rs.currentAITurn == nil || rs.currentAITurn.TTSStartTime == nil {
+		return
+	}
+
+	now := time.Now()
+	rs.currentAITurn.TTSEndTime = &now
+	ttsDuration := now.Sub(*rs.currentAITurn.TTSStartTime).Milliseconds()
+	rs.currentAITurn.TTSDuration = &ttsDuration
+
+	// 更新TTS指标
+	rs.updateTTSMetrics(ttsDuration)
 }
 
 // EndAITurn 结束AI回复轮次
@@ -371,15 +406,7 @@ func (rs *RecordingSession) EndAITurn(content string) {
 	rs.currentAITurn.EndTime = now
 	rs.currentAITurn.Duration = now.Sub(rs.currentAITurn.StartTime).Milliseconds()
 
-	// 结束TTS处理
-	if rs.currentAITurn.TTSStartTime != nil {
-		rs.currentAITurn.TTSEndTime = &now
-		ttsDuration := now.Sub(*rs.currentAITurn.TTSStartTime).Milliseconds()
-		rs.currentAITurn.TTSDuration = &ttsDuration
-
-		// 更新TTS指标
-		rs.updateTTSMetrics(ttsDuration)
-	}
+	// 注意：TTS计时应该在实际TTS开始和结束时进行，不在这里计算
 
 	// 计算总延迟（从用户发言结束到AI回复完成）
 	if len(rs.conversationDetails.Turns) > 0 {

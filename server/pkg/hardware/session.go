@@ -553,6 +553,11 @@ func (s *Session) HandleAudio(data []byte) error {
 	}
 
 	// 发送到ASR服务
+	// 记录用户输入开始（第一次发送音频数据给ASR时）
+	if s.processor != nil {
+		s.processor.RecordUserTurnStartIfNeeded()
+	}
+
 	return s.asrService.SendAudio(processedData)
 }
 
