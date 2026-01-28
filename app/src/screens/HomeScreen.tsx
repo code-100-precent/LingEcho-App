@@ -216,6 +216,16 @@ const HomeScreen: React.FC = () => {
               <TouchableOpacity
                 style={styles.quickActionItem}
                 activeOpacity={0.7}
+                onPress={() => navigation.navigate('CallCenter' as never)}
+              >
+                <View style={[styles.quickActionIcon, { backgroundColor: '#dbeafe' }]}>
+                  <Feather name="phone-call" size={24} color="#3b82f6" />
+                </View>
+                <Text style={styles.quickActionLabel}>外呼中心</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={styles.quickActionItem}
+                activeOpacity={0.7}
                 onPress={() => navigation.navigate('Profile' as never)}
               >
                 <View style={[styles.quickActionIcon, { backgroundColor: '#f3e8ff' }]}>

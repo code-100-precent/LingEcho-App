@@ -392,6 +392,14 @@ const ProfileScreen: React.FC = () => {
       },
     },
     {
+      id: 'callcenter',
+      label: '外呼中心',
+      icon: 'phone-call',
+      onPress: () => {
+        navigation.navigate('CallCenter' as never);
+      },
+    },
+    {
       id: 'help',
       label: '帮助与反馈',
       icon: 'help-circle',

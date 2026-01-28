@@ -16,7 +16,7 @@ import {
   Alert,
   Modal,
 } from 'react-native';
-import { useRoute, useNavigation, RouteProp } from '@react-navigation/native';
+import { useRoute, useNavigation, RouteProp, useFocusEffect } from '@react-navigation/native';
 import { Feather } from '@expo/vector-icons';
 import { MainLayout } from '../components';
 import { getAssistant, Assistant } from '../services/api/assistant';
@@ -177,9 +177,24 @@ const AssistantDetailScreen: React.FC = () => {
     return () => {
       if (currentAudioRef.current) {
         currentAudioRef.current.unloadAsync();
+        currentAudioRef.current = null;
       }
     };
   }, []);
+
+  // 当页面失去焦点时停止音频播放
+  useFocusEffect(
+    React.useCallback(() => {
+      return () => {
+        // 页面失去焦点时停止音频
+        if (currentAudioRef.current) {
+          currentAudioRef.current.stopAsync().catch(() => {});
+          currentAudioRef.current.unloadAsync().catch(() => {});
+          currentAudioRef.current = null;
+        }
+      };
+    }, [])
+  );
 
   // 发送消息
   const handleSendMessage = async () => {
