@@ -9,7 +9,7 @@ import PasswordStrength from './PasswordStrength'
 import CaptchaModal from './CaptchaModal'
 import DeviceVerificationModal from './DeviceVerificationModal'
 import { useAuthStore } from '@/stores/authStore.ts'
-import { showAlert } from '@/utils/notification.ts'
+import { useToast } from '@/components/UI/ToastContainer'
 import { sendEmailCode, registerUserByEmail, registerUser, loginWithPassword, loginWithEmailCode, forgotPassword } from '@/api/auth.ts'
 import { encryptPasswordToString } from '@/utils/passwordEncrypt.ts'
 import { getSystemInit } from '@/api/system.ts'
@@ -23,6 +23,7 @@ interface AuthModalProps {
 }
 
 const AuthModal = ({ isOpen, onClose, initialMode = 'login' }: AuthModalProps) => {
+  const toast = useToast()
   const { t } = useI18nStore()
   const [mode, setMode] = useState<'login' | 'register' | 'forgot-password'>(initialMode)
   const [loginType, setLoginType] = useState<'email' | 'password'>('email') // 登录方式
@@ -157,7 +158,7 @@ const AuthModal = ({ isOpen, onClose, initialMode = 'login' }: AuthModalProps) =
   // 处理两步验证码提交
   const handleTwoFactorSubmit = async () => {
     if (!twoFactorCode.trim()) {
-      showAlert('请输入两步验证码', 'error', '验证失败')
+      toast.error('验证失败', '请输入两步验证码')
       return
     }
 
@@ -193,7 +194,7 @@ const AuthModal = ({ isOpen, onClose, initialMode = 'login' }: AuthModalProps) =
           setLoginSuccessData(response.data)
           setIsLoginSuccess(true)
           const displayName = response.data.user?.displayName || response.data.user?.DisplayName || response.data.displayName || formData.email
-          showAlert(`欢迎回来，${displayName}！`, 'success', '登录成功')
+          toast.success('登录成功', `欢迎回来，${displayName}！`)
           
           // 检查是否有重定向路径
           const redirectPath = localStorage.getItem('redirectAfterLogin')
@@ -217,7 +218,7 @@ const AuthModal = ({ isOpen, onClose, initialMode = 'login' }: AuthModalProps) =
         throw new Error(errorMessage)
       }
     } catch (error: any) {
-      showAlert(error?.msg || error?.message || '登录失败', 'error', '登录失败')
+      toast.error('登录失败', error?.msg || error?.message || '登录失败')
     } finally {
       setIsLoading(false)
     }
@@ -226,13 +227,13 @@ const AuthModal = ({ isOpen, onClose, initialMode = 'login' }: AuthModalProps) =
   // 发送验证码
   const sendVerificationCode = async () => {
     if (!formData.email) {
-      showAlert('请先输入邮箱', 'error', '验证失败')
+      toast.error('验证失败', '请先输入邮箱')
       return
     }
 
     const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
     if (!emailRegex.test(formData.email)) {
-      showAlert('请输入有效的邮箱地址', 'error', '验证失败')
+      toast.error('验证失败', '请输入有效的邮箱地址')
       return
     }
 
@@ -246,7 +247,7 @@ const AuthModal = ({ isOpen, onClose, initialMode = 'login' }: AuthModalProps) =
       })
       
       if (response.code === 200) {
-        showAlert('验证码已发送到您的邮箱，请在5分钟内验证', 'success', '发送成功')
+        toast.success('发送成功', '验证码已发送到您的邮箱，请在5分钟内验证')
         setCountdown(60) // 60秒倒计时
       } else {
         throw new Error(response.msg || '验证码发送失败')
@@ -260,7 +261,7 @@ const AuthModal = ({ isOpen, onClose, initialMode = 'login' }: AuthModalProps) =
         errorMessage = '无法连接到服务器，请检查后端服务是否已启动'
       }
       
-      showAlert(errorMessage, 'error', '发送失败')
+      toast.error('发送失败', errorMessage)
     } finally {
       setIsSendingCode(false)
     }
@@ -283,13 +284,13 @@ const AuthModal = ({ isOpen, onClose, initialMode = 'login' }: AuthModalProps) =
   // 执行忘记密码
   const performForgotPassword = async () => {
     if (!formData.email) {
-      showAlert('请输入邮箱地址', 'error', '验证失败')
+      toast.error('验证失败', '请输入邮箱地址')
       return
     }
 
     const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
     if (!emailRegex.test(formData.email)) {
-      showAlert('请输入有效的邮箱地址', 'error', '验证失败')
+      toast.error('验证失败', '请输入有效的邮箱地址')
       return
     }
 
@@ -300,12 +301,12 @@ const AuthModal = ({ isOpen, onClose, initialMode = 'login' }: AuthModalProps) =
       if (response.code === 200) {
         setForgotPasswordEmail(formData.email)
         setIsForgotPasswordSuccess(true)
-        showAlert('重置密码邮件已发送，请查收邮箱', 'success', '发送成功')
+        toast.success('发送成功', '重置密码邮件已发送，请查收邮箱')
       } else {
         throw new Error(response.msg || '发送失败')
       }
     } catch (error: any) {
-      showAlert(error?.msg || error?.message || '发送重置密码邮件失败，请重试', 'error', '发送失败')
+      toast.error('发送失败', error?.msg || error?.message || '发送重置密码邮件失败，请重试')
     } finally {
       setIsLoading(false)
     }
@@ -318,7 +319,7 @@ const AuthModal = ({ isOpen, onClose, initialMode = 'login' }: AuthModalProps) =
         if (loginType === 'email') {
           // 邮箱验证码登录
           if (!formData.verificationCode) {
-            showAlert('请输入验证码', 'error', '验证失败')
+            toast.error('验证失败', '请输入验证码')
             return
           }
           
@@ -345,7 +346,7 @@ const AuthModal = ({ isOpen, onClose, initialMode = 'login' }: AuthModalProps) =
               setLoginSuccessData(response.data)
               setIsLoginSuccess(true)
               const displayName = response.data.user?.displayName || response.data.user?.DisplayName || response.data.displayName || formData.email
-              showAlert(`欢迎回来，${displayName}！`, 'success', '登录成功')
+              toast.success('登录成功', `欢迎回来，${displayName}！`)
               
               // 检查是否有重定向路径
               const redirectPath = localStorage.getItem('redirectAfterLogin')
@@ -371,7 +372,7 @@ const AuthModal = ({ isOpen, onClose, initialMode = 'login' }: AuthModalProps) =
         } else {
         // 密码登录 - 需要验证码
           if (!formData.password) {
-            showAlert('请输入密码', 'error', '验证失败')
+            toast.error('验证失败', '请输入密码')
             return
           }
           
@@ -391,7 +392,7 @@ const AuthModal = ({ isOpen, onClose, initialMode = 'login' }: AuthModalProps) =
           if (response.code === 200) {
             // 检查是否需要邮箱验证
             if (response.data.requiresEmailVerification) {
-              showAlert('密码登录次数过多，请使用邮箱验证码登录', 'warning', '需要邮箱验证')
+              toast.warning('需要邮箱验证', '密码登录次数过多，请使用邮箱验证码登录')
               // 自动切换到邮箱验证码登录模式
               setLoginType('email')
               return
@@ -405,14 +406,14 @@ const AuthModal = ({ isOpen, onClose, initialMode = 'login' }: AuthModalProps) =
                 deviceId: response.data.deviceId || '',
                 message: response.data.message || '此设备不受信任，需要验证'
               })
-              showAlert('检测到新设备登录，请验证设备', 'warning', '需要设备验证')
+              toast.warning('需要设备验证', '检测到新设备登录，请验证设备')
               return
             }
             
             // 检查是否需要两步验证
             if (response.data.requiresTwoFactor) {
               setShowTwoFactorInput(true)
-              showAlert('请输入两步验证码', 'info', '需要两步验证')
+              toast.info('需要两步验证', '请输入两步验证码')
               return
             }
             
@@ -428,7 +429,7 @@ const AuthModal = ({ isOpen, onClose, initialMode = 'login' }: AuthModalProps) =
               setLoginSuccessData(response.data)
               setIsLoginSuccess(true)
               const displayName = response.data.user?.displayName || response.data.user?.DisplayName || response.data.displayName || formData.email
-              showAlert(`欢迎回来，${displayName}！`, 'success', '登录成功')
+              toast.success('登录成功', `欢迎回来，${displayName}！`)
               
               // 检查是否有重定向路径
               const redirectPath = localStorage.getItem('redirectAfterLogin')
@@ -453,7 +454,7 @@ const AuthModal = ({ isOpen, onClose, initialMode = 'login' }: AuthModalProps) =
           }
         }
     } catch (error: any) {
-      showAlert(error.message || '登录失败', 'error', '登录错误')
+      toast.error('登录错误', error.message || '登录失败')
     } finally {
       setIsLoading(false)
     }
@@ -464,12 +465,12 @@ const AuthModal = ({ isOpen, onClose, initialMode = 'login' }: AuthModalProps) =
     setIsLoading(true)
     try {
         if (formData.password !== formData.confirmPassword) {
-          showAlert('密码不匹配', 'error', '验证失败')
+          toast.error('验证失败', '密码不匹配')
         setIsLoading(false)
           return
         }
         if (!formData.displayName) {
-          showAlert('请输入显示名', 'error', '验证失败')
+          toast.error('验证失败', '请输入显示名')
         setIsLoading(false)
           return
         }
@@ -495,11 +496,11 @@ const AuthModal = ({ isOpen, onClose, initialMode = 'login' }: AuthModalProps) =
         if (emailEnabled) {
           // 如果配置了邮箱，使用邮箱验证码注册
           if (!formData.verificationCode) {
-            showAlert('请输入验证码', 'error', '验证失败')
+            toast.error('验证失败', '请输入验证码')
             return
           }
           if (!formData.userName) {
-            showAlert('请输入用户名', 'error', '验证失败')
+            toast.error('验证失败', '请输入用户名')
             return
           }
           
@@ -557,10 +558,9 @@ const AuthModal = ({ isOpen, onClose, initialMode = 'login' }: AuthModalProps) =
             setRegisterSuccessData(response.data as any)
             setIsRegisterSuccess(true)
             
-            showAlert(
-              `注册成功！欢迎 ${(response.data as any).displayName || (response.data as any).email}，您的账号已创建完成。`,
-              'success', 
-              '注册完成'
+            toast.success(
+              '注册完成',
+              `注册成功！欢迎 ${(response.data as any).displayName || (response.data as any).email}，您的账号已创建完成。`
             )
           } else {
             // 处理直接格式 {email, activation}
@@ -576,10 +576,9 @@ const AuthModal = ({ isOpen, onClose, initialMode = 'login' }: AuthModalProps) =
               ? '您的账号已激活，可以立即使用。'
             : `激活邮件已发送至 ${registerData.email}，请查收并激活账号。`
             
-            showAlert(
-              `注册成功！${activationMsg}`,
-              'success', 
-              '注册完成'
+            toast.success(
+              '注册完成',
+              `注册成功！${activationMsg}`
             )
           }
         
@@ -591,7 +590,7 @@ const AuthModal = ({ isOpen, onClose, initialMode = 'login' }: AuthModalProps) =
         throw new Error(response.msg || '注册失败')
       }
     } catch (error: any) {
-      showAlert(error.message || '注册失败', 'error', '注册错误')
+      toast.error('注册错误', error.message || '注册失败')
     } finally {
       setIsLoading(false)
     }
@@ -728,7 +727,7 @@ const AuthModal = ({ isOpen, onClose, initialMode = 'login' }: AuthModalProps) =
                   onClose()
                   resetForm()
                   setMode('login')
-                  showAlert('请使用您的邮箱和密码登录', 'info', '提示')
+                  toast.info('提示', '请使用您的邮箱和密码登录')
                 }}
                 className="flex-1"
               >
@@ -1534,7 +1533,7 @@ const AuthModal = ({ isOpen, onClose, initialMode = 'login' }: AuthModalProps) =
       onSuccess={() => {
         setShowDeviceVerification(false)
         setDeviceVerificationData({ email: '', deviceId: '', message: '' })
-        showAlert('设备验证成功，请重新登录', 'success', '验证完成')
+        toast.success('验证完成', '设备验证成功，请重新登录')
       }}
       email={deviceVerificationData.email}
       deviceId={deviceVerificationData.deviceId}

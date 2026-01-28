@@ -248,7 +248,8 @@ const JSTemplateManager = () => {
                 const apiBaseURL = getApiBaseURL()
                 // 从API URL提取基础URL（去掉/api后缀）
                 const baseURL = apiBaseURL.replace(/\/api$/, '')
-                const sdkPath = `${baseURL}/static/js/lingecho-sdk.js`
+                // 使用固定的CDN地址而不是本地地址
+                const sdkPath = `https://store.lingecho.com/uploads/buckets/default/lingecho-sdk.js`
                 
                 // 模拟模板变量（用于预览环境）
                 const mockAssistantID = 1

@@ -12,6 +12,7 @@ import DevErrorHandler from "@/components/Dev/DevErrorHandler.tsx";
 import Documentation from "@/pages/Documentation.tsx";
 import GlobalSearch from "@/components/UI/GlobalSearch.tsx";
 import NotificationContainer from "@/components/UI/NotificationContainer.tsx";
+import { ToastProvider } from "@/components/UI/ToastContainer.tsx";
 import About from "@/pages/About.tsx";
 import NotificationCenter from "@/pages/NotificationCenter.tsx";
 import Profile from "@/pages/Profile.tsx";
@@ -41,13 +42,19 @@ import RedirectToDevices from '@/components/RedirectToDevices.tsx';
 import WorkflowManager from '@/pages/WorkflowManager.tsx';
 import Overview from '@/pages/Overview.tsx';
 import CallCenter from '@/pages/CallCenter.tsx';
+import NodePluginMarket from '@/pages/NodePluginMarket.tsx';
+import SchemeManager from '@/pages/SchemeManager.tsx';
+import PhoneNumberManager from '@/pages/PhoneNumberManager.tsx';
+import VoicemailBox from '@/pages/VoicemailBox.tsx';
+import VoicemailDetail from '@/pages/VoicemailDetail.tsx';
 
 function App() {
     const [showPerformanceMonitor, setShowPerformanceMonitor] = useState(false);
     
     return (
         <ErrorBoundary>
-            <Router>
+            <ToastProvider>
+                <Router>
                 <div className="min-h-screen bg-gray-50 dark:bg-gray-900 text-gray-900 dark:text-gray-100">
                     <Routes>
                         {/* 首页 - 独立布局，不需要 Layout */}
@@ -263,10 +270,45 @@ function App() {
                                 </Layout>
                             </ProtectedRoute>
                         } />
+                        <Route path="/node-plugins" element={
+                            <ProtectedRoute>
+                                <Layout>
+                                    <NodePluginMarket />
+                                </Layout>
+                            </ProtectedRoute>
+                        } />
                         <Route path="/call-center" element={
                             <ProtectedRoute>
                                 <Layout>
                                     <CallCenter />
+                                </Layout>
+                            </ProtectedRoute>
+                        } />
+                        <Route path="/schemes" element={
+                            <ProtectedRoute>
+                                <Layout>
+                                    <SchemeManager />
+                                </Layout>
+                            </ProtectedRoute>
+                        } />
+                        <Route path="/phone-numbers" element={
+                            <ProtectedRoute>
+                                <Layout>
+                                    <PhoneNumberManager />
+                                </Layout>
+                            </ProtectedRoute>
+                        } />
+                        <Route path="/voicemail" element={
+                            <ProtectedRoute>
+                                <Layout>
+                                    <VoicemailBox />
+                                </Layout>
+                            </ProtectedRoute>
+                        } />
+                        <Route path="/voicemail/:id" element={
+                            <ProtectedRoute>
+                                <Layout>
+                                    <VoicemailDetail />
                                 </Layout>
                             </ProtectedRoute>
                         } />
@@ -339,6 +381,7 @@ function App() {
                     </div>
                 </div>
             </Router>
+            </ToastProvider>
         </ErrorBoundary>
     );
 }

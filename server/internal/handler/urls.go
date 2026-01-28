@@ -182,6 +182,8 @@ func (h *Handlers) Register(engine *gin.Engine) {
 	if h.sipHandler != nil {
 		h.registerSipRoutes(r)
 	}
+	// Register Scheme routes (代接方案管理)
+	h.registerSchemeRoutes(r)
 	// Register Business Module Routes
 	h.registerAuthRoutes(r)
 	h.registerNotificationRoutes(r)
@@ -200,6 +202,10 @@ func (h *Handlers) Register(engine *gin.Engine) {
 	h.registerBillingRoutes(r)
 	h.registerMiddlewareRoutes(r)
 	h.registerWorkflowRoutes(r)
+	h.registerWorkflowPluginRoutes(r) // Add workflow plugin routes
+	h.registerNodePluginRoutes(r)     // Add node plugin routes
+	h.registerVoicemailRoutes(r)      // Add voicemail routes
+	h.registerPhoneNumberRoutes(r)    // Add phone number routes
 	// Register public workflow routes (no auth required)
 	h.RegisterPublicWorkflowRoutes(r)
 	objs := h.GetObjs()
@@ -740,5 +746,130 @@ func (h *Handlers) registerSipRoutes(r *gin.RouterGroup) {
 
 		// 通话历史
 		sip.GET("/calls", models.AuthRequired, h.sipHandler.GetCallHistory)
+		sip.GET("/calls/:callId/detail", models.AuthRequired, h.sipHandler.GetCallDetail)
+	}
+}
+
+// registerNodePluginRoutes Node Plugin Module
+func (h *Handlers) registerNodePluginRoutes(r *gin.RouterGroup) {
+	pluginHandler := NewNodePluginHandler(h.db)
+
+	plugins := r.Group("node-plugins")
+	{
+		// Public routes (no auth required for browsing)
+		plugins.GET("", pluginHandler.ListPlugins)
+		plugins.GET("/:id", pluginHandler.GetPlugin)
+	}
+
+	// Protected routes (require authentication)
+	pluginsAuth := r.Group("node-plugins")
+	pluginsAuth.Use(models.AuthRequired)
+	{
+		pluginsAuth.POST("", pluginHandler.CreatePlugin)
+		pluginsAuth.PUT("/:id", pluginHandler.UpdatePlugin)
+		pluginsAuth.DELETE("/:id", pluginHandler.DeletePlugin)
+		pluginsAuth.POST("/:id/publish", pluginHandler.PublishPlugin)
+		pluginsAuth.POST("/:id/install", pluginHandler.InstallPlugin)
+		pluginsAuth.GET("/installed", pluginHandler.ListInstalledPlugins)
+	}
+}
+
+// registerWorkflowPluginRoutes Workflow Plugin Module
+func (h *Handlers) registerWorkflowPluginRoutes(r *gin.RouterGroup) {
+	pluginHandler := NewWorkflowPluginHandler(h.db)
+
+	plugins := r.Group("workflow-plugins")
+	{
+		// Public routes (no auth required for browsing)
+		plugins.GET("", pluginHandler.ListWorkflowPlugins)
+		plugins.GET("/:id", pluginHandler.GetWorkflowPlugin)
+	}
+
+	// Protected routes (require authentication)
+	pluginsAuth := r.Group("workflow-plugins")
+	pluginsAuth.Use(models.AuthRequired)
+	{
+		// 发布工作流为插件
+		pluginsAuth.POST("/publish/:workflowId", pluginHandler.PublishWorkflowAsPlugin)
+
+		// 插件管理
+		pluginsAuth.PUT("/:id", pluginHandler.UpdateWorkflowPlugin)
+		pluginsAuth.DELETE("/:id", pluginHandler.DeleteWorkflowPlugin)
+		pluginsAuth.POST("/:id/publish", pluginHandler.PublishWorkflowPlugin)
+		pluginsAuth.POST("/:id/install", pluginHandler.InstallWorkflowPlugin)
+
+		// 用户插件
+		pluginsAuth.GET("/installed", pluginHandler.ListInstalledWorkflowPlugins)
+		pluginsAuth.GET("/my-plugins", pluginHandler.GetUserWorkflowPlugins)
+	}
+}
+
+// registerSchemeRoutes 代接方案管理模块
+func (h *Handlers) registerSchemeRoutes(r *gin.RouterGroup) {
+	schemeHandler := NewSchemeHandler(h.db)
+
+	schemes := r.Group("schemes")
+	schemes.Use(models.AuthRequired)
+	{
+		// 获取当前激活的方案（放在前面避免被 /:id 匹配）
+		schemes.GET("/active", schemeHandler.GetActiveScheme)
+
+		// 方案管理
+		schemes.GET("", schemeHandler.ListSchemes)
+		schemes.POST("", schemeHandler.CreateScheme)
+		schemes.GET("/:id", schemeHandler.GetScheme)
+		schemes.PUT("/:id", schemeHandler.UpdateScheme)
+		schemes.DELETE("/:id", schemeHandler.DeleteScheme)
+
+		// 激活方案
+		schemes.POST("/:id/activate", schemeHandler.ActivateScheme)
+		// 停用方案
+		schemes.POST("/:id/deactivate", schemeHandler.DeactivateScheme)
+	}
+}
+
+
+// registerVoicemailRoutes Voicemail Module
+func (h *Handlers) registerVoicemailRoutes(r *gin.RouterGroup) {
+	voicemailHandler := NewVoicemailHandler(h.db)
+
+	voicemail := r.Group("voicemails")
+	voicemail.Use(models.AuthRequired)
+	{
+		// 特殊路由必须在 /:id 之前，避免被参数路由匹配
+		voicemail.GET("/stats", voicemailHandler.GetVoicemailStats)                 // 获取统计信息
+		voicemail.GET("/unread/count", voicemailHandler.GetUnreadCount)             // 获取未读数量
+		voicemail.POST("/batch-process", voicemailHandler.BatchProcessVoicemails)   // 批量处理
+		
+		// 列表和详情
+		voicemail.GET("", voicemailHandler.ListVoicemails)                          // 获取留言列表
+		voicemail.GET("/:id", voicemailHandler.GetVoicemail)                        // 获取留言详情
+		
+		// 单个留言操作
+		voicemail.POST("/:id/read", voicemailHandler.MarkAsRead)                    // 标记为已读
+		voicemail.POST("/:id/transcribe", voicemailHandler.TranscribeVoicemail)     // 转录留言
+		voicemail.POST("/:id/summary", voicemailHandler.GenerateSummary)            // 生成摘要
+		voicemail.PUT("/:id", voicemailHandler.UpdateVoicemail)                     // 更新留言
+		voicemail.DELETE("/:id", voicemailHandler.DeleteVoicemail)                  // 删除留言
+	}
+}
+
+// registerPhoneNumberRoutes PhoneNumber Module
+func (h *Handlers) registerPhoneNumberRoutes(r *gin.RouterGroup) {
+	phoneNumberHandler := NewPhoneNumberHandler(h.db)
+
+	phoneNumbers := r.Group("phone-numbers")
+	phoneNumbers.Use(models.AuthRequired)
+	{
+		phoneNumbers.GET("", phoneNumberHandler.ListPhoneNumbers)                      // 获取号码列表
+		phoneNumbers.POST("", phoneNumberHandler.CreatePhoneNumber)                    // 创建号码
+		phoneNumbers.GET("/call-forward-guide", phoneNumberHandler.GetCallForwardGuide) // 获取呼叫转移指引
+		phoneNumbers.GET("/:id", phoneNumberHandler.GetPhoneNumber)                    // 获取号码详情
+		phoneNumbers.PUT("/:id", phoneNumberHandler.UpdatePhoneNumber)                 // 更新号码
+		phoneNumbers.DELETE("/:id", phoneNumberHandler.DeletePhoneNumber)              // 删除号码
+		phoneNumbers.POST("/:id/set-primary", phoneNumberHandler.SetPrimaryPhoneNumber) // 设置主号码
+		phoneNumbers.POST("/:id/bind-scheme", phoneNumberHandler.BindScheme)           // 绑定方案
+		phoneNumbers.POST("/:id/unbind-scheme", phoneNumberHandler.UnbindScheme)       // 解绑方案
+		phoneNumbers.POST("/:id/call-forward-status", phoneNumberHandler.UpdateCallForwardStatus) // 更新呼叫转移状态
 	}
 }

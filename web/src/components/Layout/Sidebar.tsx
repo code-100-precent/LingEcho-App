@@ -22,6 +22,7 @@ import {
   LayoutDashboard, // 概览图标
   Phone, // 外呼中心图标
   Info, // 关于我们图标
+  Package, // 插件市场图标
 } from 'lucide-react'
 import { useAuthStore } from '@/stores/authStore'
 import { useI18nStore } from '@/stores/i18nStore'
@@ -89,6 +90,7 @@ const Sidebar = () => {
     { name: t('nav.sidebar.voiceTraining'), href: '/voice-training', icon: Settings },
     { name: t('nav.sidebar.knowledgeBase'), href: '/knowledge', icon: Library },
     { name: t('nav.sidebar.workflow'), href: '/workflows', icon: GitBranch },
+    { name: t('nav.sidebar.pluginMarket'), href: '/node-plugins', icon: Package },
     { name: t('nav.sidebar.notification'), href: '/notification', icon: Bell},
     { name: t('nav.sidebar.alerts'), href: '/alerts', icon: AlertTriangle },
     { name: t('nav.sidebar.jsTemplate'), href: '/js-templates', icon: Component },
@@ -102,7 +104,7 @@ const Sidebar = () => {
 
   const publicNavs = [t('nav.docs'), t('nav.about')]
   // 受保护页面名称
-  const privateNavs = [t('nav.sidebar.overview'), t('nav.sidebar.smartAssistant'), t('nav.sidebar.voiceTraining'), t('nav.sidebar.knowledgeBase'), t('nav.sidebar.workflow'), t('nav.sidebar.notification'), t('nav.sidebar.alerts'), t('nav.sidebar.jsTemplate'), t('nav.sidebar.billing'), t('nav.sidebar.groups'), t('nav.sidebar.deviceManagement'), t('nav.sidebar.callCenter')]
+  const privateNavs = [t('nav.sidebar.overview'), t('nav.sidebar.smartAssistant'), t('nav.sidebar.voiceTraining'), t('nav.sidebar.knowledgeBase'), t('nav.sidebar.workflow'), t('nav.sidebar.pluginMarket'), t('nav.sidebar.notification'), t('nav.sidebar.alerts'), t('nav.sidebar.jsTemplate'), t('nav.sidebar.billing'), t('nav.sidebar.groups'), t('nav.sidebar.deviceManagement'), t('nav.sidebar.callCenter')]
 
   const isActive = (path: string) => location.pathname === path
 

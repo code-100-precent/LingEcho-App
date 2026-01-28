@@ -85,7 +85,7 @@ func main() {
 	// 7. Load Data Source
 	db, err := bootstrap.SetupDatabase(os.Stdout, &bootstrap.Options{
 		InitSQLPath: *initSQL,                             // Can be specified via --init-sql
-		AutoMigrate: true,                                 // Whether to migrate entities
+		AutoMigrate: false,                                // Whether to migrate entities
 		SeedNonProd: os.Getenv("APP_ENV") != "production", // Non-production default configuration
 	})
 	if err != nil {
@@ -172,7 +172,7 @@ func main() {
 		// Start SIP server in background (pass empty targetURI to avoid auto-call)
 		go func() {
 			logger.Info("Starting SIP server", zap.Int("sip_port", sipPort), zap.Int("rtp_port", rtpPort))
-			//sipServer.Start(sipPort, "") // Empty targetURI means no auto-call
+			sipServer.Start(sipPort, "") // Empty targetURI means no auto-call
 		}()
 
 		logger.Info("SIP server initialized", zap.Int("sip_port", sipPort), zap.Int("rtp_port", rtpPort))
