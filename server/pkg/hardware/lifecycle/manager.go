@@ -39,10 +39,7 @@ func NewLifecycleManager(db *gorm.DB) *LifecycleManager {
 		statusHandlers: make(map[string]StatusChangeHandler),
 		statusEffects:  make([]StatusChangeEffect, 0),
 	}
-
-	// 注册默认的状态变化处理器
 	lm.registerDefaultHandlers()
-
 	return lm
 }
 

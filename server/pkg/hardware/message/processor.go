@@ -244,6 +244,9 @@ func NewProcessor(
 		zap.String("currentSpeaker", speakerManager.GetCurrentSpeaker()),
 	)
 
+	// 配置TTS文本分割（默认启用）
+	processor.configureTTSTextSplit()
+
 	return processor
 }
 
@@ -993,6 +996,14 @@ func (p *Processor) switchSpeaker(speakerID string) error {
 	// 更新TTS服务
 	p.ttsService.UpdateSpeaker(speakerID, synthesizer)
 
+	// 重新配置TTS文本分割（重要：切换发音人后需要重新配置）
+	config := tts.TextSplitConfig{
+		Enable:         true, // 启用文本分割
+		SplitRatio:     0.5,  // 一半一半分割
+		MinSplitLength: 15,   // 最小15个字符才分割（适合中文）
+	}
+	p.ttsService.SetTextSplitConfig(config)
+
 	// 更新processor中的synthesizer引用
 	p.synthesizer = synthesizer
 
@@ -1001,6 +1012,13 @@ func (p *Processor) switchSpeaker(speakerID string) error {
 	if err != nil {
 		return fmt.Errorf("更新发音人状态失败: %w", err)
 	}
+
+	p.logger.Info("发音人切换完成，已重新配置TTS文本分割",
+		zap.String("speakerID", speakerID),
+		zap.Bool("textSplitEnabled", config.Enable),
+		zap.Float64("splitRatio", config.SplitRatio),
+		zap.Int("minSplitLength", config.MinSplitLength),
+	)
 
 	return nil
 }
@@ -1144,4 +1162,27 @@ func (p *Processor) recordInterruption() {
 			rs.RecordInterruption()
 		}
 	}
+}
+
+// configureTTSTextSplit 配置TTS文本分割
+func (p *Processor) configureTTSTextSplit() {
+	if p.ttsService == nil {
+		p.logger.Warn("TTS服务未初始化，无法配置文本分割")
+		return
+	}
+
+	// 默认启用文本分割配置
+	config := tts.TextSplitConfig{
+		Enable:         true, // 启用文本分割
+		SplitRatio:     0.5,  // 一半一半分割
+		MinSplitLength: 15,   // 最小15个字符才分割（适合中文）
+	}
+
+	p.ttsService.SetTextSplitConfig(config)
+
+	p.logger.Info("TTS文本分割配置已设置",
+		zap.Bool("enable", config.Enable),
+		zap.Float64("splitRatio", config.SplitRatio),
+		zap.Int("minSplitLength", config.MinSplitLength),
+	)
 }
