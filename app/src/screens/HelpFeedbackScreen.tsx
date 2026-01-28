@@ -48,10 +48,6 @@ const HelpFeedbackScreen: React.FC = () => {
       answer: '目前支持WebSocket和WebRTC两种通话方式，您可以在对话页面顶部切换。',
     },
     {
-      question: '如何训练专属音色？',
-      answer: '在"我的"页面找到"音色训练"功能，上传您的音频样本即可开始训练。',
-    },
-    {
       question: '如何查看使用统计？',
       answer: '在"账单"页面可以查看您的Token使用量、LLM调用次数等详细统计信息。',
     },

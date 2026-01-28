@@ -89,8 +89,11 @@ const OrganizationDrawer: React.FC<OrganizationDrawerProps> = ({
   const handleSelectGroup = (group: Group) => {
     onSelectGroup?.(group);
     onClose();
-    // 导航到组织管理页面
-    navigation.navigate('GroupManagement' as never, { groupId: group.id } as never);
+  };
+
+  const handleManageGroups = () => {
+    onClose();
+    navigation.navigate('GroupManagement' as never);
   };
 
   if (!visible) return null;
@@ -140,35 +143,55 @@ const OrganizationDrawer: React.FC<OrganizationDrawerProps> = ({
               <Feather name="users" size={48} color="#94a3b8" />
               <Text style={styles.emptyText}>暂无组织</Text>
               <Text style={styles.emptySubtext}>您还没有加入任何组织</Text>
-            </View>
-          ) : (
-            groups.map((group) => (
               <TouchableOpacity
-                key={group.id}
-                style={styles.groupItem}
-                onPress={() => handleSelectGroup(group)}
+                style={styles.createButton}
+                onPress={handleManageGroups}
                 activeOpacity={0.7}
               >
-                <Avatar
-                  src={group.avatar}
-                  fallback={group.name.charAt(0).toUpperCase()}
-                  size="md"
-                  style={styles.groupAvatar}
-                />
-                <View style={styles.groupInfo}>
-                  <Text style={styles.groupName} numberOfLines={1}>
-                    {group.name}
-                  </Text>
-                  {group.memberCount !== undefined && (
-                    <Text style={styles.groupMeta}>
-                      {group.memberCount} 位成员
-                      {group.myRole && ` • ${group.myRole}`}
-                    </Text>
-                  )}
-                </View>
-                <Feather name="chevron-right" size={20} color="#94a3b8" />
+                <Feather name="plus" size={18} color="#ffffff" />
+                <Text style={styles.createButtonText}>创建或加入组织</Text>
               </TouchableOpacity>
-            ))
+            </View>
+          ) : (
+            <>
+              {groups.map((group) => (
+                <TouchableOpacity
+                  key={group.id}
+                  style={styles.groupItem}
+                  onPress={() => handleSelectGroup(group)}
+                  activeOpacity={0.7}
+                >
+                  <Avatar
+                    src={group.avatar}
+                    fallback={group.name.charAt(0).toUpperCase()}
+                    size="md"
+                    style={styles.groupAvatar}
+                  />
+                  <View style={styles.groupInfo}>
+                    <Text style={styles.groupName} numberOfLines={1}>
+                      {group.name}
+                    </Text>
+                    {group.memberCount !== undefined && (
+                      <Text style={styles.groupMeta}>
+                        {group.memberCount} 位成员
+                        {group.myRole && ` • ${group.myRole}`}
+                      </Text>
+                    )}
+                  </View>
+                  <Feather name="chevron-right" size={20} color="#94a3b8" />
+                </TouchableOpacity>
+              ))}
+              
+              {/* 管理组织按钮 */}
+              <TouchableOpacity
+                style={styles.manageButton}
+                onPress={handleManageGroups}
+                activeOpacity={0.7}
+              >
+                <Feather name="settings" size={18} color="#a78bfa" />
+                <Text style={styles.manageButtonText}>管理组织</Text>
+              </TouchableOpacity>
+            </>
           )}
         </ScrollView>
       </Animated.View>
@@ -275,6 +298,41 @@ const styles = StyleSheet.create({
   groupMeta: {
     fontSize: 13,
     color: '#64748b',
+  },
+  createButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#a78bfa',
+    paddingVertical: 12,
+    paddingHorizontal: 20,
+    borderRadius: 8,
+    marginTop: 16,
+    gap: 8,
+  },
+  createButtonText: {
+    fontSize: 15,
+    fontWeight: '600',
+    color: '#ffffff',
+  },
+  manageButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#f3e8ff',
+    paddingVertical: 14,
+    paddingHorizontal: 20,
+    borderRadius: 12,
+    marginTop: 16,
+    marginBottom: 20,
+    gap: 8,
+    borderWidth: 1,
+    borderColor: '#e9d5ff',
+  },
+  manageButtonText: {
+    fontSize: 15,
+    fontWeight: '600',
+    color: '#a78bfa',
   },
 });
 

@@ -376,6 +376,22 @@ const ProfileScreen: React.FC = () => {
 
   const menuItems: MenuItem[] = [
     {
+      id: 'credential',
+      label: '密钥管理',
+      icon: 'key',
+      onPress: () => {
+        navigation.navigate('Credential' as never);
+      },
+    },
+    {
+      id: 'alert',
+      label: '告警管理',
+      icon: 'bell',
+      onPress: () => {
+        navigation.navigate('Alert' as never);
+      },
+    },
+    {
       id: 'help',
       label: '帮助与反馈',
       icon: 'help-circle',

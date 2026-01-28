@@ -14,12 +14,13 @@ import {
   TextInput,
   ActivityIndicator,
   Alert,
+  Modal,
 } from 'react-native';
 import { useRoute, useNavigation, RouteProp } from '@react-navigation/native';
 import { Feather } from '@expo/vector-icons';
 import { MainLayout } from '../components';
 import { getAssistant, Assistant } from '../services/api/assistant';
-import { plainTextStream, plainText, oneShotText, getAudioStatus, OneShotTextV2Request, OneShotTextRequest } from '../services/api/chat';
+import { plainTextStream, plainText, oneShotText, getAudioStatus, OneShotTextV2Request, OneShotTextRequest, getChatSessionLogsByAssistant, ChatSessionLogSummary, getChatSessionLogsBySession, ChatSessionLogDetail } from '../services/api/chat';
 import { Audio } from 'expo-av';
 import { getUploadsBaseURL } from '../config/apiConfig';
 
@@ -51,6 +52,8 @@ const AssistantDetailScreen: React.FC = () => {
   const [isLoading, setIsLoading] = useState(false);
   const [currentSessionId, setCurrentSessionId] = useState<string | null>(null);
   const [outputMode, setOutputMode] = useState<OutputMode>('text+audio'); // 默认文本+语音输出
+  const [sessions, setSessions] = useState<ChatSessionLogSummary[]>([]);
+  const [showSessionList, setShowSessionList] = useState(false);
   const scrollViewRef = useRef<ScrollView>(null);
   const currentAudioRef = useRef<Audio.Sound | null>(null);
 
@@ -62,6 +65,8 @@ const AssistantDetailScreen: React.FC = () => {
         const response = await getAssistant(assistantId);
         if (response.code === 200 && response.data) {
           setAssistant(response.data);
+          // 加载该助手的最近会话
+          loadRecentSession();
         } else {
           Alert.alert('错误', response.msg || '加载助手信息失败');
           navigation.goBack();
@@ -78,6 +83,86 @@ const AssistantDetailScreen: React.FC = () => {
     loadAssistant();
   }, [assistantId]);
 
+  // 加载最近的会话
+  const loadRecentSession = async () => {
+    try {
+      const response = await getChatSessionLogsByAssistant(assistantId, { pageSize: 1 });
+      if (response.code === 200 && response.data && response.data.logs.length > 0) {
+        const recentSession = response.data.logs[0];
+        // 加载该会话的历史消息
+        loadSessionHistory(recentSession.sessionId, false);
+      }
+    } catch (error: any) {
+      console.error('Load recent session error:', error);
+    }
+  };
+
+  // 加载会话列表
+  const loadSessions = async () => {
+    try {
+      const response = await getChatSessionLogsByAssistant(assistantId, { pageSize: 20 });
+      if (response.code === 200 && response.data) {
+        setSessions(response.data.logs || []);
+      }
+    } catch (error: any) {
+      console.error('Load sessions error:', error);
+    }
+  };
+
+  // 加载指定会话的历史消息
+  const loadSessionHistory = async (sessionId: string, closeModal: boolean = true) => {
+    try {
+      console.log('=== Loading session history ===');
+      console.log('Session ID:', sessionId);
+      const response = await getChatSessionLogsBySession(sessionId);
+      console.log('Response code:', response.code);
+      console.log('Response data:', JSON.stringify(response.data, null, 2));
+      
+      if (response.code === 200 && response.data) {
+        console.log('Number of records:', response.data.length);
+        
+        const historyMessages: ChatMessage[] = response.data.map((log: ChatSessionLogDetail) => {
+          console.log('Processing log:', {
+            id: log.id,
+            userMessage: log.userMessage,
+            agentMessage: log.agentMessage,
+            createdAt: log.createdAt
+          });
+          
+          return [
+            {
+              type: 'user' as const,
+              content: log.userMessage,
+              timestamp: new Date(log.createdAt).toLocaleTimeString(),
+              id: `user-${log.id}`,
+            },
+            {
+              type: 'agent' as const,
+              content: log.agentMessage,
+              timestamp: new Date(log.createdAt).toLocaleTimeString(),
+              id: `agent-${log.id}`,
+              audioUrl: log.audioUrl,
+            },
+          ];
+        }).flat();
+        
+        console.log('Total messages created:', historyMessages.length);
+        console.log('Messages:', historyMessages);
+        
+        setMessages(historyMessages);
+        setCurrentSessionId(sessionId);
+        if (closeModal) {
+          setShowSessionList(false);
+        }
+      }
+    } catch (error: any) {
+      console.error('Load session history error:', error);
+      if (closeModal) {
+        Alert.alert('错误', '加载历史记录失败');
+      }
+    }
+  };
+
   // 滚动到底部
   useEffect(() => {
     if (messages.length > 0) {
@@ -85,7 +170,7 @@ const AssistantDetailScreen: React.FC = () => {
         scrollViewRef.current?.scrollToEnd({ animated: true });
       }, 100);
     }
-  }, [messages]);
+  }, [messages.length]); // 只在消息数量变化时滚动
 
   // 清理音频资源
   useEffect(() => {
@@ -240,19 +325,22 @@ const AssistantDetailScreen: React.FC = () => {
       }
     } catch (error: any) {
       console.error('Send message error:', error);
+      
+      const userFriendlyMessage = '资源耗尽或配置错误';
+      
       setMessages((prev) =>
         prev.map((msg) =>
           msg.id === loadingMessageId
             ? {
                 ...msg,
-                content: `错误: ${error.message || '发送消息失败'}`,
+                content: userFriendlyMessage,
                 isLoading: false,
               }
             : msg
         )
       );
       setIsLoading(false);
-      Alert.alert('错误', error.message || '发送消息失败');
+      Alert.alert('提示', userFriendlyMessage);
     }
   };
 
@@ -400,24 +488,34 @@ const AssistantDetailScreen: React.FC = () => {
   const iconColor = getIconColor(assistant.icon);
 
   return (
+    <>
     <MainLayout
       navBarProps={{
         title: assistant.name,
         leftIcon: 'arrow-left',
         onLeftPress: () => navigation.goBack(),
-        rightIcon: 'settings',
-        onRightPress: () => {
-          navigation.navigate('AssistantControlPanel' as never, {
-            assistantId: assistant.id,
-          } as never);
-        },
+        rightButtons: [
+          {
+            icon: 'settings',
+            onPress: () => {
+              navigation.navigate('AssistantControlPanel' as never, { assistantId } as never);
+            },
+          },
+          {
+            icon: 'list',
+            onPress: () => {
+              loadSessions();
+              setShowSessionList(true);
+            },
+          },
+        ],
       }}
       backgroundColor="#ffffff"
     >
       <KeyboardAvoidingView
         behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
         style={styles.container}
-        keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : 20}
+        keyboardVerticalOffset={90}
       >
         {/* 输出模式选择器 */}
         <View style={styles.modeSelectorContainer}>
@@ -589,6 +687,72 @@ const AssistantDetailScreen: React.FC = () => {
         </View>
       </KeyboardAvoidingView>
     </MainLayout>
+
+    {/* 会话历史列表 Modal */}
+    <Modal
+      visible={showSessionList}
+      animationType="slide"
+      transparent={true}
+      onRequestClose={() => setShowSessionList(false)}
+    >
+      <View style={styles.modalOverlay}>
+        <View style={styles.sessionModal}>
+          <View style={styles.sessionModalHeader}>
+            <Text style={styles.sessionModalTitle}>聊天记录</Text>
+            <TouchableOpacity
+              onPress={() => setShowSessionList(false)}
+              style={styles.closeButton}
+              activeOpacity={0.7}
+            >
+              <Feather name="x" size={24} color="#64748b" />
+            </TouchableOpacity>
+          </View>
+          <ScrollView style={styles.sessionList}>
+            <TouchableOpacity
+              style={styles.sessionItem}
+              onPress={() => {
+                setMessages([]);
+                setCurrentSessionId(null);
+                setShowSessionList(false);
+              }}
+              activeOpacity={0.7}
+            >
+              <View style={styles.sessionIcon}>
+                <Feather name="plus" size={20} color="#a78bfa" />
+              </View>
+              <View style={styles.sessionInfo}>
+                <Text style={styles.sessionTitle}>新对话</Text>
+                <Text style={styles.sessionSubtitle}>开始新的对话</Text>
+              </View>
+            </TouchableOpacity>
+            {sessions.map((session) => (
+              <TouchableOpacity
+                key={session.id}
+                style={[
+                  styles.sessionItem,
+                  currentSessionId === session.sessionId && styles.sessionItemActive,
+                ]}
+                onPress={() => loadSessionHistory(session.sessionId)}
+                activeOpacity={0.7}
+              >
+                <View style={styles.sessionIcon}>
+                  <Feather name="message-circle" size={20} color="#64748b" />
+                </View>
+                <View style={styles.sessionInfo}>
+                  <Text style={styles.sessionTitle} numberOfLines={1}>
+                    {session.firstMessage || '对话'}
+                  </Text>
+                  <Text style={styles.sessionSubtitle}>
+                    {new Date(session.startTime).toLocaleString()} · {session.messageCount} 条消息
+                  </Text>
+                </View>
+              </TouchableOpacity>
+            ))}
+          </ScrollView>
+        </View>
+      </View>
+    </Modal>
+  </>
   );
 };
 
@@ -784,6 +948,76 @@ const styles = StyleSheet.create({
   sendButtonDisabled: {
     backgroundColor: '#e2e8f0',
     opacity: 0.5,
+  },
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    justifyContent: 'flex-end',
+  },
+  sessionModal: {
+    backgroundColor: '#ffffff',
+    borderTopLeftRadius: 20,
+    borderTopRightRadius: 20,
+    maxHeight: '80%',
+  },
+  sessionModalHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    padding: 20,
+    borderBottomWidth: 1,
+    borderBottomColor: '#e2e8f0',
+  },
+  sessionModalTitle: {
+    fontSize: 18,
+    fontWeight: '600',
+    color: '#1e293b',
+  },
+  closeButton: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: '#f1f5f9',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  sessionList: {
+    padding: 16,
+  },
+  sessionItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: 16,
+    backgroundColor: '#f8fafc',
+    borderRadius: 12,
+    marginBottom: 12,
+  },
+  sessionItemActive: {
+    backgroundColor: '#f3e8ff',
+    borderWidth: 1,
+    borderColor: '#a78bfa',
+  },
+  sessionIcon: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: '#ffffff',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: 12,
+  },
+  sessionInfo: {
+    flex: 1,
+  },
+  sessionTitle: {
+    fontSize: 15,
+    fontWeight: '600',
+    color: '#1e293b',
+    marginBottom: 4,
+  },
+  sessionSubtitle: {
+    fontSize: 13,
+    color: '#64748b',
   },
 });
 

@@ -1,5 +1,5 @@
 /**
- * 组织管理页面
+ * 组织管理页面 - 完整版
  */
 import React, { useState, useEffect } from 'react';
 import {
@@ -9,98 +9,129 @@ import {
   ScrollView,
   TouchableOpacity,
   ActivityIndicator,
-  Alert,
   RefreshControl,
+  Alert,
+  Modal,
+  TextInput,
+  Image,
 } from 'react-native';
+import { useNavigation } from '@react-navigation/native';
 import { Feather } from '@expo/vector-icons';
-import { useNavigation, useRoute, RouteProp } from '@react-navigation/native';
-import { MainLayout, Card, Avatar, Button } from '../components';
+import { MainLayout, Card, EmptyState } from '../components';
 import {
-  getGroup,
-  updateGroup,
+  getGroupList,
+  createGroup,
   deleteGroup,
   leaveGroup,
+  inviteUser,
+  getInvitations,
+  acceptInvitation,
+  rejectInvitation,
+  searchUsers,
   Group,
-  GroupMember,
+  GroupInvitation,
+  UserSearchResult,
 } from '../services/api/group';
-import { getUploadsBaseURL } from '../config/apiConfig';
-
-type GroupManagementRouteParams = {
-  GroupManagement: {
-    groupId: number;
-  };
-};
+import { useAuth } from '../context/AuthContext';
 
 const GroupManagementScreen: React.FC = () => {
   const navigation = useNavigation();
-  const route = useRoute<RouteProp<GroupManagementRouteParams, 'GroupManagement'>>();
-  const { groupId } = route.params;
-
-  const [group, setGroup] = useState<Group | null>(null);
+  const { user } = useAuth();
+  const [groups, setGroups] = useState<Group[]>([]);
+  const [invitations, setInvitations] = useState<GroupInvitation[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [isRefreshing, setIsRefreshing] = useState(false);
-  const [isDeleting, setIsDeleting] = useState(false);
-  const [isLeaving, setIsLeaving] = useState(false);
+
+  // 创建组织
+  const [showCreateModal, setShowCreateModal] = useState(false);
+  const [newGroupName, setNewGroupName] = useState('');
+
+  // 邀请用户
+  const [showInviteModal, setShowInviteModal] = useState<number | null>(null);
+  const [searchKeyword, setSearchKeyword] = useState('');
+  const [searchResults, setSearchResults] = useState<UserSearchResult[]>([]);
+  const [searching, setSearching] = useState(false);
 
   useEffect(() => {
-    loadGroup();
-  }, [groupId]);
+    loadData();
+  }, []);
 
-  const loadGroup = async () => {
+  const loadData = async () => {
     setIsLoading(true);
     try {
-      const response = await getGroup(groupId);
-      if (response.code === 200 && response.data) {
-        setGroup(response.data);
-      } else {
-        Alert.alert('错误', response.msg || '加载组织信息失败');
-        navigation.goBack();
-      }
-    } catch (error: any) {
-      console.error('Load group error:', error);
-      Alert.alert('错误', error.msg || error.message || '加载组织信息失败');
-      navigation.goBack();
+      await Promise.all([loadGroups(), loadInvitations()]);
     } finally {
       setIsLoading(false);
-      setIsRefreshing(false);
     }
   };
 
-  const handleRefresh = () => {
-    setIsRefreshing(true);
-    loadGroup();
+  const loadGroups = async () => {
+    try {
+      const response = await getGroupList();
+      if (response.code === 200 && response.data) {
+        setGroups(response.data);
+      }
+    } catch (error: any) {
+      console.error('Load groups error:', error);
+    }
   };
 
-  const handleDeleteGroup = () => {
-    if (!group) return;
+  const loadInvitations = async () => {
+    try {
+      const response = await getInvitations();
+      if (response.code === 200 && response.data) {
+        setInvitations(response.data);
+      }
+    } catch (error: any) {
+      console.error('Load invitations error:', error);
+    }
+  };
 
+  const handleRefresh = async () => {
+    setIsRefreshing(true);
+    await loadData();
+    setIsRefreshing(false);
+  };
+
+  const handleCreateGroup = async () => {
+    if (!newGroupName.trim()) {
+      Alert.alert('提示', '请输入组织名称');
+      return;
+    }
+
+    try {
+      const response = await createGroup({ name: newGroupName.trim() });
+      if (response.code === 200) {
+        Alert.alert('成功', '组织创建成功');
+        setShowCreateModal(false);
+        setNewGroupName('');
+        loadGroups();
+      }
+    } catch (error: any) {
+      console.error('Create group error:', error);
+      Alert.alert('错误', error.msg || '创建失败');
+    }
+  };
+
+  const handleDeleteGroup = async (groupId: number) => {
     Alert.alert(
       '确认删除',
-      `确定要删除组织 "${group.name}" 吗？此操作不可恢复。`,
+      '确定要删除这个组织吗？此操作不可恢复。',
       [
         { text: '取消', style: 'cancel' },
         {
           text: '删除',
           style: 'destructive',
           onPress: async () => {
-            setIsDeleting(true);
             try {
-              const response = await deleteGroup(group.id);
+              const response = await deleteGroup(groupId);
               if (response.code === 200) {
-                Alert.alert('成功', '组织已删除', [
-                  {
-                    text: '确定',
-                    onPress: () => navigation.goBack(),
-                  },
-                ]);
-              } else {
-                Alert.alert('错误', response.msg || '删除失败');
+                Alert.alert('成功', '组织已删除');
+                loadGroups();
               }
             } catch (error: any) {
               console.error('Delete group error:', error);
-              Alert.alert('错误', error.msg || error.message || '删除失败');
-            } finally {
-              setIsDeleting(false);
+              Alert.alert('错误', '删除失败');
             }
           },
         },
@@ -108,36 +139,25 @@ const GroupManagementScreen: React.FC = () => {
     );
   };
 
-  const handleLeaveGroup = () => {
-    if (!group) return;
-
+  const handleLeaveGroup = async (groupId: number) => {
     Alert.alert(
-      '确认离开',
-      `确定要离开组织 "${group.name}" 吗？`,
+      '确认退出',
+      '确定要退出这个组织吗？',
       [
         { text: '取消', style: 'cancel' },
         {
-          text: '离开',
+          text: '退出',
           style: 'destructive',
           onPress: async () => {
-            setIsLeaving(true);
             try {
-              const response = await leaveGroup(group.id);
+              const response = await leaveGroup(groupId);
               if (response.code === 200) {
-                Alert.alert('成功', '已离开组织', [
-                  {
-                    text: '确定',
-                    onPress: () => navigation.goBack(),
-                  },
-                ]);
-              } else {
-                Alert.alert('错误', response.msg || '离开失败');
+                Alert.alert('成功', '已退出组织');
+                loadGroups();
               }
             } catch (error: any) {
               console.error('Leave group error:', error);
-              Alert.alert('错误', error.msg || error.message || '离开失败');
-            } finally {
-              setIsLeaving(false);
+              Alert.alert('错误', '退出失败');
             }
           },
         },
@@ -145,44 +165,82 @@ const GroupManagementScreen: React.FC = () => {
     );
   };
 
-  const formatDate = (dateString: string) => {
-    const date = new Date(dateString);
-    return date.toLocaleDateString('zh-CN', {
-      year: 'numeric',
-      month: 'long',
-      day: 'numeric',
-    });
+  const handleSearchUsers = async (keyword: string) => {
+    if (!keyword.trim()) {
+      setSearchResults([]);
+      return;
+    }
+
+    setSearching(true);
+    try {
+      const response = await searchUsers(keyword, 10);
+      if (response.code === 200 && response.data) {
+        setSearchResults(response.data);
+      }
+    } catch (error: any) {
+      console.error('Search users error:', error);
+    } finally {
+      setSearching(false);
+    }
   };
 
-  if (isLoading && !group) {
-    return (
-      <MainLayout
-        navBarProps={{
-          title: '加载中...',
-          leftIcon: 'arrow-left',
-          onLeftPress: () => navigation.goBack(),
-        }}
-        backgroundColor="#ffffff"
-      >
-        <View style={styles.loadingContainer}>
-          <ActivityIndicator size="large" color="#a78bfa" />
-          <Text style={styles.loadingText}>加载组织信息...</Text>
-        </View>
-      </MainLayout>
-    );
-  }
+  const handleInviteUser = async (groupId: number, userId: number) => {
+    try {
+      const response = await inviteUser(groupId, { userId });
+      if (response.code === 200) {
+        Alert.alert('成功', '邀请已发送');
+        setShowInviteModal(null);
+        setSearchKeyword('');
+        setSearchResults([]);
+      }
+    } catch (error: any) {
+      console.error('Invite user error:', error);
+      Alert.alert('错误', error.msg || '邀请失败');
+    }
+  };
 
-  if (!group) {
-    return null;
-  }
+  const handleAcceptInvitation = async (invitationId: number) => {
+    try {
+      const response = await acceptInvitation(invitationId);
+      if (response.code === 200) {
+        Alert.alert('成功', '已加入组织');
+        loadData();
+      }
+    } catch (error: any) {
+      console.error('Accept invitation error:', error);
+      Alert.alert('错误', '操作失败');
+    }
+  };
 
-  const isCreator = group.myRole === 'creator' || group.myRole === 'admin';
-  const uploadsBaseURL = getUploadsBaseURL();
-  const avatarUrl = group.avatar
-    ? group.avatar.startsWith('http')
-      ? group.avatar
-      : `${uploadsBaseURL}${group.avatar}`
-    : undefined;
+  const handleRejectInvitation = async (invitationId: number) => {
+    try {
+      const response = await rejectInvitation(invitationId);
+      if (response.code === 200) {
+        Alert.alert('成功', '已拒绝邀请');
+        loadInvitations();
+      }
+    } catch (error: any) {
+      console.error('Reject invitation error:', error);
+      Alert.alert('错误', '操作失败');
+    }
+  };
+
+  const isAdmin = (group: Group) => {
+    const userId = user?.id ? Number(user.id) : null;
+    return group.myRole === 'admin' || group.creatorId === userId;
+  };
+
+  const isCreator = (group: Group) => {
+    const userId = user?.id ? Number(user.id) : null;
+    return group.creatorId === userId;
+  };
+
+  const getAvatarUrl = (group: Group) => {
+    if (group.avatar) {
+      return { uri: group.avatar };
+    }
+    return { uri: `https://ui-avatars.com/api/?name=${encodeURIComponent(group.name)}&background=6366f1&color=fff&size=80&bold=true` };
+  };
 
   return (
     <MainLayout
@@ -190,6 +248,8 @@ const GroupManagementScreen: React.FC = () => {
         title: '组织管理',
         leftIcon: 'arrow-left',
         onLeftPress: () => navigation.goBack(),
+        rightIcon: 'plus',
+        onRightPress: () => setShowCreateModal(true),
       }}
       backgroundColor="#f8fafc"
     >
@@ -199,105 +259,262 @@ const GroupManagementScreen: React.FC = () => {
         refreshControl={
           <RefreshControl refreshing={isRefreshing} onRefresh={handleRefresh} />
         }
-        showsVerticalScrollIndicator={false}
       >
-        {/* 组织信息卡片 */}
-        <Card variant="default" padding="lg" style={styles.infoCard}>
-          <View style={styles.avatarContainer}>
-            <Avatar
-              src={avatarUrl}
-              fallback={group.name.charAt(0).toUpperCase()}
-              size="xl"
-              style={styles.avatar}
-            />
-          </View>
-          <Text style={styles.groupName}>{group.name}</Text>
-          {group.type && (
-            <View style={styles.typeBadge}>
-              <Text style={styles.typeText}>{group.type}</Text>
-            </View>
-          )}
-
-          <View style={styles.infoRow}>
-            <Feather name="users" size={16} color="#64748b" />
-            <Text style={styles.infoText}>
-              {group.memberCount || 0} 位成员
-            </Text>
-          </View>
-          <View style={styles.infoRow}>
-            <Feather name="user" size={16} color="#64748b" />
-            <Text style={styles.infoText}>
-              我的角色: {group.myRole === 'creator' ? '创建者' : group.myRole === 'admin' ? '管理员' : '成员'}
-            </Text>
-          </View>
-          <View style={styles.infoRow}>
-            <Feather name="calendar" size={16} color="#64748b" />
-            <Text style={styles.infoText}>
-              创建于 {formatDate(group.createdAt)}
-            </Text>
-          </View>
-        </Card>
-
-        {/* 组织描述 */}
-        {group.extra && (
-          <Card variant="default" padding="lg" style={styles.sectionCard}>
-            <Text style={styles.sectionTitle}>组织描述</Text>
-            <Text style={styles.sectionText}>{group.extra}</Text>
-          </Card>
-        )}
-
-        {/* 成员列表 */}
-        {group.members && group.members.length > 0 && (
-          <Card variant="default" padding="lg" style={styles.sectionCard}>
-            <Text style={styles.sectionTitle}>成员列表</Text>
-            <View style={styles.membersList}>
-              {group.members.map((member) => (
-                <View key={member.id} style={styles.memberItem}>
-                  <Avatar
-                    src={member.user.avatar}
-                    fallback={member.user.displayName || member.user.email.charAt(0).toUpperCase()}
-                    size="md"
-                    style={styles.memberAvatar}
-                  />
-                  <View style={styles.memberInfo}>
-                    <Text style={styles.memberName}>
-                      {member.user.displayName || member.user.email}
+        {/* 待处理的邀请 */}
+        {invitations.length > 0 && (
+          <View style={styles.invitationsSection}>
+            <Text style={styles.sectionTitle}>待处理的邀请</Text>
+            {invitations.map((invitation) => (
+              <Card key={invitation.id} variant="elevated" padding="md" style={styles.invitationCard}>
+                <View style={styles.invitationContent}>
+                  <View style={styles.invitationInfo}>
+                    <Text style={styles.invitationText}>
+                      {invitation.inviter?.displayName || invitation.inviter?.email} 邀请您加入
                     </Text>
-                    <Text style={styles.memberRole}>
-                      {member.role === 'creator' ? '创建者' : member.role === 'admin' ? '管理员' : '成员'}
-                    </Text>
+                    <Text style={styles.invitationGroupName}>{invitation.group.name}</Text>
+                  </View>
+                  <View style={styles.invitationActions}>
+                    <TouchableOpacity
+                      style={[styles.invitationButton, { backgroundColor: '#d1fae5' }]}
+                      onPress={() => handleAcceptInvitation(invitation.id)}
+                      activeOpacity={0.7}
+                    >
+                      <Feather name="check" size={14} color="#065f46" />
+                      <Text style={[styles.invitationButtonText, { color: '#065f46' }]}>接受</Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity
+                      style={[styles.invitationButton, { backgroundColor: '#f1f5f9' }]}
+                      onPress={() => handleRejectInvitation(invitation.id)}
+                      activeOpacity={0.7}
+                    >
+                      <Feather name="x" size={14} color="#64748b" />
+                      <Text style={[styles.invitationButtonText, { color: '#64748b' }]}>拒绝</Text>
+                    </TouchableOpacity>
                   </View>
                 </View>
-              ))}
-            </View>
-          </Card>
+              </Card>
+            ))}
+          </View>
         )}
 
-        {/* 操作按钮 */}
-        <View style={styles.actionsContainer}>
-          {isCreator ? (
-            <Button
-              variant="danger"
-              fullWidth
-              onPress={handleDeleteGroup}
-              loading={isDeleting}
-              disabled={isDeleting}
-            >
-              删除组织
-            </Button>
-          ) : (
-            <Button
-              variant="danger"
-              fullWidth
-              onPress={handleLeaveGroup}
-              loading={isLeaving}
-              disabled={isLeaving}
-            >
-              离开组织
-            </Button>
-          )}
-        </View>
+        {/* 组织列表 */}
+        {isLoading ? (
+          <View style={styles.loadingContainer}>
+            <ActivityIndicator size="large" color="#a78bfa" />
+            <Text style={styles.loadingText}>加载中...</Text>
+          </View>
+        ) : groups.length === 0 ? (
+          <EmptyState
+            title="暂无组织"
+            description="创建或加入一个组织，开始团队协作"
+            icon={<Feather name="users" size={64} color="#a78bfa" />}
+            action={{
+              label: '创建组织',
+              onPress: () => setShowCreateModal(true),
+            }}
+          />
+        ) : (
+          groups.map((group) => (
+            <Card key={group.id} variant="elevated" padding="lg" style={styles.groupCard}>
+              <View style={styles.groupHeader}>
+                <Image source={getAvatarUrl(group)} style={styles.groupAvatar} />
+                <View style={styles.groupInfo}>
+                  <View style={styles.groupTitleRow}>
+                    <Text style={styles.groupName} numberOfLines={1}>
+                      {group.name}
+                    </Text>
+                    {isCreator(group) && (
+                      <View style={[styles.roleBadge, { backgroundColor: '#fef3c7' }]}>
+                        <Feather name="crown" size={10} color="#854d0e" />
+                        <Text style={[styles.roleBadgeText, { color: '#854d0e' }]}>创建者</Text>
+                      </View>
+                    )}
+                    {isAdmin(group) && !isCreator(group) && (
+                      <View style={[styles.roleBadge, { backgroundColor: '#dbeafe' }]}>
+                        <Feather name="shield" size={10} color="#1e40af" />
+                        <Text style={[styles.roleBadgeText, { color: '#1e40af' }]}>管理员</Text>
+                      </View>
+                    )}
+                  </View>
+                  <View style={styles.groupMeta}>
+                    <View style={styles.metaItem}>
+                      <Feather name="users" size={12} color="#64748b" />
+                      <Text style={styles.metaText}>{group.memberCount || 0} 成员</Text>
+                    </View>
+                    <View style={styles.metaItem}>
+                      <Feather name="calendar" size={12} color="#64748b" />
+                      <Text style={styles.metaText}>
+                        {new Date(group.createdAt).toLocaleDateString()}
+                      </Text>
+                    </View>
+                  </View>
+                  {group.extra && (
+                    <Text style={styles.groupDescription} numberOfLines={1}>
+                      {group.extra}
+                    </Text>
+                  )}
+                </View>
+              </View>
+
+              <View style={styles.groupActions}>
+                {isAdmin(group) && (
+                  <TouchableOpacity
+                    style={[styles.actionButton, { backgroundColor: '#a78bfa' }]}
+                    onPress={() => setShowInviteModal(group.id)}
+                    activeOpacity={0.7}
+                  >
+                    <Feather name="user-plus" size={14} color="#ffffff" />
+                    <Text style={[styles.actionButtonText, { color: '#ffffff' }]}>邀请</Text>
+                  </TouchableOpacity>
+                )}
+                {!isCreator(group) && (
+                  <TouchableOpacity
+                    style={[styles.actionButton, { backgroundColor: '#fee2e2' }]}
+                    onPress={() => handleLeaveGroup(group.id)}
+                    activeOpacity={0.7}
+                  >
+                    <Feather name="log-out" size={14} color="#991b1b" />
+                    <Text style={[styles.actionButtonText, { color: '#991b1b' }]}>退出</Text>
+                  </TouchableOpacity>
+                )}
+                {isCreator(group) && (
+                  <TouchableOpacity
+                    style={[styles.actionButton, { backgroundColor: '#fee2e2' }]}
+                    onPress={() => handleDeleteGroup(group.id)}
+                    activeOpacity={0.7}
+                  >
+                    <Feather name="trash-2" size={14} color="#991b1b" />
+                    <Text style={[styles.actionButtonText, { color: '#991b1b' }]}>删除</Text>
+                  </TouchableOpacity>
+                )}
+              </View>
+            </Card>
+          ))
+        )}
       </ScrollView>
+
+      {/* 创建组织 Modal */}
+      <Modal
+        visible={showCreateModal}
+        animationType="slide"
+        transparent={true}
+        onRequestClose={() => setShowCreateModal(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.modal}>
+            <Text style={styles.modalTitle}>创建组织</Text>
+            <TextInput
+              style={styles.input}
+              value={newGroupName}
+              onChangeText={setNewGroupName}
+              placeholder="请输入组织名称"
+              placeholderTextColor="#94a3b8"
+            />
+            <View style={styles.modalActions}>
+              <TouchableOpacity
+                style={[styles.modalButton, { backgroundColor: '#f1f5f9' }]}
+                onPress={() => {
+                  setShowCreateModal(false);
+                  setNewGroupName('');
+                }}
+                activeOpacity={0.7}
+              >
+                <Text style={[styles.modalButtonText, { color: '#64748b' }]}>取消</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.modalButton, { backgroundColor: '#a78bfa' }]}
+                onPress={handleCreateGroup}
+                activeOpacity={0.7}
+              >
+                <Text style={[styles.modalButtonText, { color: '#ffffff' }]}>创建</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
+
+      {/* 邀请用户 Modal */}
+      <Modal
+        visible={showInviteModal !== null}
+        animationType="slide"
+        transparent={true}
+        onRequestClose={() => {
+          setShowInviteModal(null);
+          setSearchKeyword('');
+          setSearchResults([]);
+        }}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={[styles.modal, { maxHeight: '80%' }]}>
+            <View style={styles.modalHeader}>
+              <Text style={styles.modalTitle}>邀请用户</Text>
+              <TouchableOpacity
+                onPress={() => {
+                  setShowInviteModal(null);
+                  setSearchKeyword('');
+                  setSearchResults([]);
+                }}
+                activeOpacity={0.7}
+              >
+                <Feather name="x" size={24} color="#64748b" />
+              </TouchableOpacity>
+            </View>
+            <View style={styles.searchContainer}>
+              <Feather name="search" size={18} color="#94a3b8" style={styles.searchIcon} />
+              <TextInput
+                style={styles.searchInput}
+                value={searchKeyword}
+                onChangeText={(text) => {
+                  setSearchKeyword(text);
+                  handleSearchUsers(text);
+                }}
+                placeholder="搜索用户邮箱或名称"
+                placeholderTextColor="#94a3b8"
+              />
+            </View>
+            <ScrollView style={styles.searchResults}>
+              {searching ? (
+                <View style={styles.searchingContainer}>
+                  <ActivityIndicator size="small" color="#a78bfa" />
+                  <Text style={styles.searchingText}>搜索中...</Text>
+                </View>
+              ) : searchKeyword && searchResults.length === 0 ? (
+                <Text style={styles.noResultsText}>未找到用户</Text>
+              ) : searchResults.length > 0 ? (
+                searchResults.map((result) => (
+                  <View key={result.id} style={styles.userItem}>
+                    <Image
+                      source={{
+                        uri: result.avatar || `https://ui-avatars.com/api/?name=${result.displayName || result.email}&background=0ea5e9&color=fff`,
+                      }}
+                      style={styles.userAvatar}
+                    />
+                    <View style={styles.userInfo}>
+                      <Text style={styles.userName}>{result.displayName || result.email}</Text>
+                      {result.displayName && (
+                        <Text style={styles.userEmail}>{result.email}</Text>
+                      )}
+                    </View>
+                    <TouchableOpacity
+                      style={styles.inviteButton}
+                      onPress={() => handleInviteUser(showInviteModal!, result.id)}
+                      activeOpacity={0.7}
+                    >
+                      <Feather name="user-plus" size={14} color="#ffffff" />
+                      <Text style={styles.inviteButtonText}>邀请</Text>
+                    </TouchableOpacity>
+                  </View>
+                ))
+              ) : (
+                <View style={styles.searchHintContainer}>
+                  <Feather name="search" size={48} color="#cbd5e1" />
+                  <Text style={styles.searchHintText}>输入邮箱或名称搜索用户</Text>
+                </View>
+              )}
+            </ScrollView>
+          </View>
+        </View>
+      </Modal>
     </MainLayout>
   );
 };
@@ -307,11 +524,60 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   content: {
-    padding: 16,
+    padding: 12,
+  },
+  invitationsSection: {
+    marginBottom: 16,
+  },
+  sectionTitle: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#1e293b',
+    marginBottom: 12,
+  },
+  invitationCard: {
+    marginBottom: 8,
+    backgroundColor: '#eff6ff',
+    borderWidth: 1,
+    borderColor: '#bfdbfe',
+  },
+  invitationContent: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  invitationInfo: {
+    flex: 1,
+    marginRight: 12,
+  },
+  invitationText: {
+    fontSize: 13,
+    color: '#64748b',
+    marginBottom: 4,
+  },
+  invitationGroupName: {
+    fontSize: 15,
+    fontWeight: '600',
+    color: '#1e293b',
+  },
+  invitationActions: {
+    flexDirection: 'row',
+    gap: 6,
+  },
+  invitationButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 6,
+    paddingHorizontal: 10,
+    borderRadius: 6,
+    gap: 4,
+  },
+  invitationButtonText: {
+    fontSize: 12,
+    fontWeight: '500',
   },
   loadingContainer: {
-    flex: 1,
-    justifyContent: 'center',
+    paddingVertical: 60,
     alignItems: 'center',
   },
   loadingText: {
@@ -319,88 +585,224 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: '#64748b',
   },
-  infoCard: {
-    alignItems: 'center',
-    marginBottom: 16,
-  },
-  avatarContainer: {
-    marginBottom: 16,
-  },
-  avatar: {
-    marginBottom: 0,
-  },
-  groupName: {
-    fontSize: 24,
-    fontWeight: '700',
-    color: '#1e293b',
-    marginBottom: 12,
-    textAlign: 'center',
-  },
-  typeBadge: {
-    backgroundColor: '#f3e8ff',
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 16,
-    marginBottom: 16,
-  },
-  typeText: {
-    fontSize: 13,
-    fontWeight: '600',
-    color: '#a78bfa',
-  },
-  infoRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-    marginBottom: 8,
-  },
-  infoText: {
-    fontSize: 14,
-    color: '#64748b',
-  },
-  sectionCard: {
-    marginBottom: 16,
-  },
-  sectionTitle: {
-    fontSize: 18,
-    fontWeight: '600',
-    color: '#1e293b',
+  groupCard: {
     marginBottom: 12,
   },
-  sectionText: {
-    fontSize: 15,
-    color: '#64748b',
-    lineHeight: 22,
-  },
-  membersList: {
-    gap: 12,
-  },
-  memberItem: {
+  groupHeader: {
     flexDirection: 'row',
-    alignItems: 'center',
-    paddingVertical: 8,
+    marginBottom: 12,
   },
-  memberAvatar: {
+  groupAvatar: {
+    width: 60,
+    height: 60,
+    borderRadius: 12,
     marginRight: 12,
+    backgroundColor: '#f1f5f9',
   },
-  memberInfo: {
+  groupInfo: {
     flex: 1,
   },
-  memberName: {
+  groupTitleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 6,
+    gap: 6,
+  },
+  groupName: {
+    flex: 1,
     fontSize: 16,
     fontWeight: '600',
     color: '#1e293b',
+  },
+  roleBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 6,
+    paddingVertical: 3,
+    borderRadius: 4,
+    gap: 3,
+  },
+  roleBadgeText: {
+    fontSize: 10,
+    fontWeight: '500',
+  },
+  groupMeta: {
+    flexDirection: 'row',
+    gap: 12,
     marginBottom: 4,
   },
-  memberRole: {
-    fontSize: 13,
+  metaItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+  },
+  metaText: {
+    fontSize: 12,
     color: '#64748b',
   },
-  actionsContainer: {
-    marginTop: 8,
-    marginBottom: 24,
+  groupDescription: {
+    fontSize: 12,
+    color: '#94a3b8',
+  },
+  groupActions: {
+    flexDirection: 'row',
+    gap: 8,
+    paddingTop: 12,
+    borderTopWidth: 1,
+    borderTopColor: '#e2e8f0',
+  },
+  actionButton: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 8,
+    borderRadius: 6,
+    gap: 4,
+  },
+  actionButtonText: {
+    fontSize: 13,
+    fontWeight: '500',
+  },
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 20,
+  },
+  modal: {
+    backgroundColor: '#ffffff',
+    borderRadius: 16,
+    padding: 20,
+    width: '100%',
+    maxWidth: 400,
+  },
+  modalHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 16,
+  },
+  modalTitle: {
+    fontSize: 18,
+    fontWeight: '600',
+    color: '#1e293b',
+    marginBottom: 16,
+  },
+  input: {
+    borderWidth: 1,
+    borderColor: '#e2e8f0',
+    borderRadius: 8,
+    padding: 12,
+    fontSize: 15,
+    color: '#1e293b',
+    marginBottom: 16,
+  },
+  modalActions: {
+    flexDirection: 'row',
+    gap: 8,
+  },
+  modalButton: {
+    flex: 1,
+    paddingVertical: 12,
+    borderRadius: 8,
+    alignItems: 'center',
+  },
+  modalButtonText: {
+    fontSize: 15,
+    fontWeight: '500',
+  },
+  searchContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: '#e2e8f0',
+    borderRadius: 8,
+    paddingHorizontal: 12,
+    marginBottom: 16,
+  },
+  searchIcon: {
+    marginRight: 8,
+  },
+  searchInput: {
+    flex: 1,
+    paddingVertical: 12,
+    fontSize: 15,
+    color: '#1e293b',
+  },
+  searchResults: {
+    maxHeight: 400,
+  },
+  searchingContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 20,
+    gap: 8,
+  },
+  searchingText: {
+    fontSize: 14,
+    color: '#64748b',
+  },
+  noResultsText: {
+    textAlign: 'center',
+    paddingVertical: 20,
+    fontSize: 14,
+    color: '#94a3b8',
+  },
+  searchHintContainer: {
+    alignItems: 'center',
+    paddingVertical: 40,
+  },
+  searchHintText: {
+    marginTop: 12,
+    fontSize: 14,
+    color: '#94a3b8',
+  },
+  userItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: 12,
+    borderWidth: 1,
+    borderColor: '#e2e8f0',
+    borderRadius: 8,
+    marginBottom: 8,
+  },
+  userAvatar: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    marginRight: 12,
+    backgroundColor: '#f1f5f9',
+  },
+  userInfo: {
+    flex: 1,
+  },
+  userName: {
+    fontSize: 14,
+    fontWeight: '500',
+    color: '#1e293b',
+  },
+  userEmail: {
+    fontSize: 12,
+    color: '#64748b',
+    marginTop: 2,
+  },
+  inviteButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#a78bfa',
+    paddingVertical: 6,
+    paddingHorizontal: 12,
+    borderRadius: 6,
+    gap: 4,
+  },
+  inviteButtonText: {
+    fontSize: 12,
+    fontWeight: '500',
+    color: '#ffffff',
   },
 });
 
 export default GroupManagementScreen;
-

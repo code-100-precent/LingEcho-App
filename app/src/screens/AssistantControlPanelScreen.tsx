@@ -17,14 +17,11 @@ import {
   updateAssistant,
   getVoiceOptions,
   getLanguageOptions,
-  getVoiceClones,
   VoiceOption,
   LanguageOption,
   Assistant,
-  VoiceClone,
 } from '../services/api/assistant';
 import { getKnowledgeBaseByUser, KnowledgeInfo } from '../services/api/knowledge';
-import { jsTemplateService, JSTemplate } from '../services/api/jsTemplate';
 
 type AssistantControlPanelRouteParams = {
   AssistantControlPanel: {
@@ -71,21 +68,15 @@ const AssistantControlPanelScreen: React.FC = () => {
     apiKey: '',
     apiSecret: '',
     knowledgeBaseId: null as string | null,
-    voiceCloneId: null as number | null,
-    jsSourceId: '',
   });
 
   // 选项数据
   const [voiceOptions, setVoiceOptions] = useState<VoiceOption[]>([]);
   const [languageOptions, setLanguageOptions] = useState<LanguageOption[]>([]);
-  const [voiceClones, setVoiceClones] = useState<VoiceClone[]>([]);
   const [knowledgeBases, setKnowledgeBases] = useState<Array<{ id: string; name: string }>>([]);
-  const [jsTemplates, setJsTemplates] = useState<JSTemplate[]>([]);
   const [loadingVoices, setLoadingVoices] = useState(false);
   const [loadingLanguages, setLoadingLanguages] = useState(false);
-  const [loadingVoiceClones, setLoadingVoiceClones] = useState(false);
   const [loadingKnowledgeBases, setLoadingKnowledgeBases] = useState(false);
-  const [loadingJsTemplates, setLoadingJsTemplates] = useState(false);
 
   // 展开/折叠状态
   const [expandedSections, setExpandedSections] = useState({
@@ -93,7 +84,6 @@ const AssistantControlPanelScreen: React.FC = () => {
     call: true,
     assistant: true,
     knowledge: false,
-    voiceClone: false,
   });
 
   // 加载助手信息
@@ -118,8 +108,6 @@ const AssistantControlPanelScreen: React.FC = () => {
             apiKey: data.apiKey || '',
             apiSecret: data.apiSecret || '',
             knowledgeBaseId: data.knowledgeBaseId || null,
-            voiceCloneId: data.voiceCloneId || null,
-            jsSourceId: data.jsSourceId || '',
           });
 
           // 加载音色和语言选项
@@ -128,9 +116,7 @@ const AssistantControlPanelScreen: React.FC = () => {
           loadLanguageOptions(ttsProvider, data.language);
           
           // 加载其他选项
-          loadVoiceClones();
           loadKnowledgeBases();
-          loadJsTemplates();
         } else {
           Alert.alert('错误', response.msg || '加载助手信息失败');
           navigation.goBack();
@@ -192,21 +178,6 @@ const AssistantControlPanelScreen: React.FC = () => {
     }
   };
 
-  // 加载训练音色
-  const loadVoiceClones = async () => {
-    setLoadingVoiceClones(true);
-    try {
-      const response = await getVoiceClones();
-      if (response.code === 200 && response.data) {
-        setVoiceClones(response.data);
-      }
-    } catch (error) {
-      console.error('Load voice clones error:', error);
-    } finally {
-      setLoadingVoiceClones(false);
-    }
-  };
-
   // 加载知识库
   const loadKnowledgeBases = async () => {
     setLoadingKnowledgeBases(true);
@@ -231,21 +202,6 @@ const AssistantControlPanelScreen: React.FC = () => {
       setKnowledgeBases([]);
     } finally {
       setLoadingKnowledgeBases(false);
-    }
-  };
-
-  // 加载JS模板
-  const loadJsTemplates = async () => {
-    setLoadingJsTemplates(true);
-    try {
-      const response = await jsTemplateService.getTemplates({ page: 1, limit: 100 });
-      if (response.code === 200 && response.data) {
-        setJsTemplates(response.data.data);
-      }
-    } catch (error) {
-      console.error('Load JS templates error:', error);
-    } finally {
-      setLoadingJsTemplates(false);
     }
   };
 
@@ -276,18 +232,7 @@ const AssistantControlPanelScreen: React.FC = () => {
         apiKey: formData.apiKey,
         apiSecret: formData.apiSecret,
         knowledgeBaseId: formData.knowledgeBaseId,
-        voiceCloneId: formData.voiceCloneId,
       });
-
-      // 如果JS模板有变化，单独更新
-      if (formData.jsSourceId !== assistant.jsSourceId) {
-        try {
-          await updateAssistantJS(assistantId, formData.jsSourceId || '');
-        } catch (error: any) {
-          console.error('Update JS template error:', error);
-          // JS模板更新失败不影响其他设置
-        }
-      }
 
       if (response.code === 200) {
         Alert.alert('成功', '设置已保存');
@@ -642,111 +587,6 @@ const AssistantControlPanelScreen: React.FC = () => {
                     style={styles.select}
                   />
                 )}
-              </View>
-            </View>
-          )}
-        </Card>
-
-        {/* 训练音色配置 */}
-        <Card variant="default" padding="lg" style={styles.sectionCard}>
-          <TouchableOpacity
-            style={styles.sectionHeader}
-            onPress={() => toggleSection('voiceClone')}
-            activeOpacity={0.7}
-          >
-            <View style={styles.sectionHeaderLeft}>
-              <Feather name="mic" size={20} color="#64748b" />
-              <Text style={styles.sectionTitle}>训练音色</Text>
-            </View>
-            <Feather
-              name={expandedSections.voiceClone ? 'chevron-up' : 'chevron-down'}
-              size={20}
-              color="#64748b"
-            />
-          </TouchableOpacity>
-
-          {expandedSections.voiceClone && (
-            <View style={styles.sectionContent}>
-              <View style={styles.inputGroup}>
-                <Text style={styles.label}>选择训练音色</Text>
-                {loadingVoiceClones ? (
-                  <View style={styles.loadingBox}>
-                    <ActivityIndicator size="small" color="#64748b" />
-                    <Text style={styles.loadingText}>加载中...</Text>
-                  </View>
-                ) : (
-                  <Select
-                    value={formData.voiceCloneId?.toString() || ''}
-                    onValueChange={(value) =>
-                      setFormData({
-                        ...formData,
-                        voiceCloneId: value ? parseInt(value) : null,
-                      })
-                    }
-                    options={[
-                      { label: '无', value: '' },
-                      ...voiceClones.map((vc) => ({
-                        label: vc.voice_name,
-                        value: vc.id.toString(),
-                      })),
-                    ]}
-                    style={styles.select}
-                  />
-                )}
-                <Text style={styles.hintText}>
-                  训练音色优先级高于普通音色设置
-                </Text>
-              </View>
-            </View>
-          )}
-        </Card>
-
-        {/* JS模板配置 */}
-        <Card variant="default" padding="lg" style={styles.sectionCard}>
-          <TouchableOpacity
-            style={styles.sectionHeader}
-            onPress={() => toggleSection('assistant')}
-            activeOpacity={0.7}
-          >
-            <View style={styles.sectionHeaderLeft}>
-              <Feather name="code" size={20} color="#64748b" />
-              <Text style={styles.sectionTitle}>JS模板</Text>
-            </View>
-            <Feather
-              name={expandedSections.assistant ? 'chevron-up' : 'chevron-down'}
-              size={20}
-              color="#64748b"
-            />
-          </TouchableOpacity>
-
-          {expandedSections.assistant && (
-            <View style={styles.sectionContent}>
-              <View style={styles.inputGroup}>
-                <Text style={styles.label}>选择JS模板</Text>
-                {loadingJsTemplates ? (
-                  <View style={styles.loadingBox}>
-                    <ActivityIndicator size="small" color="#64748b" />
-                    <Text style={styles.loadingText}>加载中...</Text>
-                  </View>
-                ) : (
-                  <Select
-                    value={formData.jsSourceId || ''}
-                    onValueChange={(value) =>
-                      setFormData({ ...formData, jsSourceId: value })
-                    }
-                    options={[
-                      { label: '默认模板', value: '' },
-                      ...jsTemplates.map((template) => ({
-                        label: `${template.name} (${template.type === 'default' ? '默认' : '自定义'})`,
-                        value: template.jsSourceId,
-                      })),
-                    ]}
-                    style={styles.select}
-                  />
-                )}
-                <Text style={styles.hintText}>
-                  JS模板用于自定义助手行为逻辑
-                </Text>
               </View>
             </View>
           )}
