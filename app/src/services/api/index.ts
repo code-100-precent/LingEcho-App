@@ -9,4 +9,5 @@ export * from './assistant';
 export * from './group';
 export * from './notification';
 export * from './system';
+export * from './credential';
 

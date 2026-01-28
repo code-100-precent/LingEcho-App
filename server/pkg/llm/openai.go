@@ -21,6 +21,7 @@ type LLMHandler struct {
 	client          *openai.Client
 	ctx             context.Context
 	systemMsg       string
+	defaultModel    string // 默认模型
 	baseURL         string // Store base URL for logging
 	mutex           sync.Mutex
 	messages        []openai.ChatCompletionMessage
@@ -141,6 +142,10 @@ func NewLLMHandler(ctx context.Context, apiKey, baseURL, systemPrompt string) *L
 }
 
 func (h *LLMHandler) Query(text, model string) (string, error) {
+	// 如果没有指定模型，使用默认模型
+	if model == "" {
+		model = h.defaultModel
+	}
 	return h.QueryWithOptions(text, QueryOptions{Model: model, Temperature: Float32Ptr(0.7)})
 }
 
@@ -1130,6 +1135,13 @@ func (h *LLMHandler) SetSystemPrompt(systemPrompt string) {
 		}
 		h.messages = append([]openai.ChatCompletionMessage{systemMessage}, h.messages...)
 	}
+}
+
+// SetModel 设置默认模型
+func (h *LLMHandler) SetModel(model string) {
+	h.mutex.Lock()
+	defer h.mutex.Unlock()
+	h.defaultModel = model
 }
 
 // GetMessages returns the current conversation history

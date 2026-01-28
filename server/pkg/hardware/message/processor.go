@@ -250,13 +250,6 @@ func NewProcessor(
 	return processor
 }
 
-// SetRecordingSession 设置录音会话
-func (p *Processor) SetRecordingSession(session interface{}) {
-	p.mu.Lock()
-	defer p.mu.Unlock()
-	p.recordingSession = session
-}
-
 // SetAudioConfig 设置音频配置（用于OPUS编码）
 func (p *Processor) SetAudioConfig(audioFormat string, sampleRate, channels int, opusEncoder media.EncoderFunc) {
 	p.mu.Lock()
@@ -290,8 +283,25 @@ func (p *Processor) ProcessASRResult(ctx context.Context, text string) {
 		return
 	}
 
-	// 记录用户输入结束（ASR识别完成）
-	p.recordUserTurnEnd(text)
+	// 如果 TTS 正在播放，取消 TTS 播放（用户打断）
+	if p.stateManager.IsTTSPlaying() {
+		p.logger.Info("ASR检测到用户说话，中断TTS播放",
+			zap.String("user_text", text),
+		)
+		// 优雅地取消 TTS：先设置状态，再取消context，最后发送结束消息
+		p.stateManager.SetTTSPlaying(false)
+		p.stateManager.CancelTTS()
+		// 发送 TTS 结束消息，通知前端停止播放
+		if err := p.writer.SendTTSEnd(); err != nil {
+			p.logger.Warn("发送TTS结束消息失败", zap.Error(err))
+		}
+	}
+
+	// 提前发送ASR结果给前端，不阻塞后续处理
+	if err := p.writer.SendASRResult(text); err != nil {
+		p.logger.Error("发送ASR结果失败", zap.Error(err))
+		// 发送失败不影响后续处理
+	}
 
 	// 检查是否在过滤词黑名单中
 	if p.filterManager != nil && p.filterManager.IsFiltered(text) {
@@ -347,9 +357,6 @@ func (p *Processor) processText(ctx context.Context, text string) {
 		return
 	}
 
-	// 记录AI回复开始（录音会话）
-	p.recordAITurnStart()
-
 	// 添加用户消息（最小化锁持有时间）
 	userMsg := llm.Message{
 		Role:    "user",
@@ -379,9 +386,6 @@ func (p *Processor) processText(ctx context.Context, text string) {
 		p.logger.Warn("LLM返回空响应")
 		return
 	}
-
-	// 记录LLM处理结束（录音会话）
-	p.recordLLMProcessingEnd()
 
 	// 添加助手回复（最小化锁持有时间）
 	assistantMsg := llm.Message{
@@ -428,9 +432,6 @@ func (p *Processor) synthesizeTTS(ctx context.Context, text string) {
 
 	p.logger.Info("开始TTS合成", zap.String("text", text))
 
-	// 记录TTS开始时间
-	p.recordTTSStart()
-
 	// 设置TTS播放状态
 	p.stateManager.SetTTSPlaying(true)
 	defer func() {
@@ -440,8 +441,6 @@ func (p *Processor) synthesizeTTS(ctx context.Context, text string) {
 		if err := p.writer.SendTTSEnd(); err != nil {
 			p.logger.Error("发送TTS结束消息失败", zap.Error(err))
 		}
-		// 记录AI回复结束（录音会话）
-		p.recordAITurnEnd(text)
 	}()
 
 	// 获取音频格式并发送TTS开始消息
@@ -473,9 +472,6 @@ func (p *Processor) synthesizeTTS(ctx context.Context, text string) {
 
 	// 合成语音
 	p.logger.Debug("TTS合成文本", zap.String("text", text))
-
-	// 记录TTS开始时间（在实际调用TTS服务之前）
-	p.recordTTSStart()
 
 	audioChan, err := p.ttsService.Synthesize(ttsCtx, text)
 	if err != nil {
@@ -517,10 +513,6 @@ func (p *Processor) synthesizeTTS(ctx context.Context, text string) {
 					zap.Int("frameCount", frameCount),
 					zap.Int("bufferSize", len(pcmBuffer)),
 				)
-
-				// 记录TTS结束时间（TTS合成完成，音频数据全部接收）
-				p.recordTTSEnd()
-
 				// 发送缓冲区剩余数据
 				if audioFormat == "opus" && opusEncoder != nil && len(pcmBuffer) > 0 {
 					// 检查context状态再发送剩余帧
@@ -883,35 +875,6 @@ func (p *Processor) HandleTextMessage(ctx context.Context, data []byte) {
 	case "hello":
 		// xiaozhi协议hello消息，由session处理
 		p.logger.Debug("收到hello消息，由session处理")
-
-	case "abort":
-		// 处理硬件按钮中断消息
-		p.logger.Info("收到abort消息，中断对话")
-
-		// 1. 取消TTS播放
-		if p.stateManager.IsTTSPlaying() {
-			p.logger.Info("中断TTS播放")
-			p.stateManager.SetTTSPlaying(false)
-			p.stateManager.CancelTTS()
-
-			// 发送TTS结束消息，通知前端停止播放
-			if err := p.writer.SendTTSEnd(); err != nil {
-				p.logger.Warn("发送TTS结束消息失败", zap.Error(err))
-			}
-		}
-
-		// 2. 停止LLM处理
-		if p.stateManager.IsProcessing() {
-			p.logger.Info("中断LLM处理")
-			p.stateManager.SetProcessing(false)
-		}
-
-		// 3. 清空消息历史（可选，根据需求决定）
-		p.mu.Lock()
-		p.messages = make([]llm.Message, 0)
-		p.mu.Unlock()
-
-		p.logger.Info("对话已中断")
 	}
 }
 

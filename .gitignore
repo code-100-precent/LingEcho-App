@@ -96,6 +96,8 @@ voiceserver.db
 *.db
 
 lingecho
+main
+server/main
 
 example
 ling.db

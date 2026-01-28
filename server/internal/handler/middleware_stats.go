@@ -1,4 +1,4 @@
-package handler
+package handlers
 
 import (
 	"github.com/code-100-precent/LingEcho/pkg/config"

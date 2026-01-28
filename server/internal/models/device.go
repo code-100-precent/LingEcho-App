@@ -416,15 +416,11 @@ type CallRecording struct {
 	StartTime  time.Time `json:"startTime" gorm:"index"`          // 开始时间
 	EndTime    time.Time `json:"endTime" gorm:"index"`            // 结束时间
 
-	// 内容摘要 - 支持详细的对话记录
-	UserInput  string `json:"userInput" gorm:"type:text"`  // 用户输入文本（带时间戳的多行记录）
-	AIResponse string `json:"aiResponse" gorm:"type:text"` // AI回复文本（带时间戳的多行记录）
+	// 内容摘要
+	UserInput  string `json:"userInput" gorm:"type:text"`  // 用户输入文本
+	AIResponse string `json:"aiResponse" gorm:"type:text"` // AI回复文本
 	Summary    string `json:"summary" gorm:"type:text"`    // 对话摘要
 	Keywords   string `json:"keywords" gorm:"type:text"`   // 关键词JSON数组（存储为文本）
-
-	// 详细时间记录 - 新增字段
-	ConversationDetails string `json:"conversationDetails" gorm:"type:longtext"` // 详细对话记录JSON（包含时间戳、延迟等）
-	TimingMetrics       string `json:"timingMetrics" gorm:"type:text"`           // 时间指标JSON（ASR、LLM、TTS延迟等）
 
 	// 质量评估
 	AudioQuality float64 `json:"audioQuality"` // 音频质量评分 (0-1)
@@ -447,26 +443,6 @@ type CallRecording struct {
 
 func (CallRecording) TableName() string {
 	return "call_recordings"
-}
-
-// GetCallRecordingsByUser 获取用户的通话记录
-func GetCallRecordingsByUser(db *gorm.DB, userID uint, limit, offset int) ([]CallRecording, int64, error) {
-	var recordings []CallRecording
-	var total int64
-
-	// 获取总数
-	if err := db.Model(&CallRecording{}).Where("user_id = ?", userID).Count(&total).Error; err != nil {
-		return nil, 0, err
-	}
-
-	// 获取记录
-	err := db.Where("user_id = ?", userID).
-		Order("created_at DESC").
-		Limit(limit).
-		Offset(offset).
-		Find(&recordings).Error
-
-	return recordings, total, err
 }
 
 // DevicePerformanceLog 设备性能日志表（用于历史趋势分析）

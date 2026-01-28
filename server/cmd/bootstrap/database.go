@@ -199,9 +199,5 @@ func RunMigrations(db *gorm.DB) error {
 		&models.DeviceErrorLog{},
 		&models.CallRecording{},
 		&models.DevicePerformanceLog{},
-		&models.DeviceLifecycleMetrics{},
-		&models.DeviceLifecycle{},
-		&models.DeviceMaintenanceRecord{},
-		&models.DeviceLifecycleHistory{},
 	})
 }

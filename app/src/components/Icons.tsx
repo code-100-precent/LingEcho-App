@@ -234,3 +234,15 @@ export const Shield = (props: Omit<IconProps, 'name'>) => (
   <Feather name="shield" {...props} />
 );
 
+export const Key = (props: Omit<IconProps, 'name'>) => (
+  <Feather name="key" {...props} />
+);
+
+export const Trash2 = (props: Omit<IconProps, 'name'>) => (
+  <Feather name="trash-2" {...props} />
+);
+
+export const Copy = (props: Omit<IconProps, 'name'>) => (
+  <Feather name="copy" {...props} />
+);
+

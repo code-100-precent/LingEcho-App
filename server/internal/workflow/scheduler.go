@@ -62,6 +62,7 @@ func (s *WorkflowScheduler) Start() error {
 	// Start Cron
 	s.cron.Start()
 	logger.Info("Workflow scheduler started")
+
 	return nil
 }
 

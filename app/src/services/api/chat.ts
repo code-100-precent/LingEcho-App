@@ -76,6 +76,80 @@ export const stopChatSession = async (sessionId: string): Promise<ApiResponse<{ 
   return post('/chat/stop', { sessionId });
 };
 
+// 聊天会话日志摘要
+export interface ChatSessionLogSummary {
+  id: number;
+  sessionId: string;
+  assistantId: number;
+  assistantName?: string;
+  userId: number;
+  startTime: string;
+  endTime?: string;
+  messageCount: number;
+  firstMessage?: string;
+  lastMessage?: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+// 聊天会话日志详情
+export interface ChatSessionLogDetail {
+  id: number;
+  sessionId: string;
+  assistantId: number;
+  userId: number;
+  userMessage: string;
+  agentMessage: string;
+  audioUrl?: string;
+  messageTime: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+// 聊天会话日志列表响应
+export interface ChatSessionLogListResponse {
+  logs: ChatSessionLogSummary[];
+  total: number;
+  nextCursor: number;
+  hasMoreData: boolean;
+}
+
+// 获取聊天会话日志列表
+export const getChatSessionLogs = async (params: {
+  pageSize?: number;
+  cursor?: string;
+}): Promise<ApiResponse<ChatSessionLogListResponse>> => {
+  const queryParams = new URLSearchParams();
+  if (params.pageSize) queryParams.append('pageSize', params.pageSize.toString());
+  if (params.cursor) queryParams.append('cursor', params.cursor);
+  
+  const queryString = queryParams.toString();
+  return get(`/chat/chat-session-log${queryString ? `?${queryString}` : ''}`);
+};
+
+// 获取聊天会话日志详情
+export const getChatSessionLogDetail = async (id: number): Promise<ApiResponse<ChatSessionLogDetail>> => {
+  return get(`/chat/chat-session-log/${id}`);
+};
+
+// 获取指定会话的所有聊天记录
+export const getChatSessionLogsBySession = async (sessionId: string): Promise<ApiResponse<ChatSessionLogDetail[]>> => {
+  return get(`/chat/chat-session-log/by-session/${sessionId}`);
+};
+
+// 获取指定助手的聊天会话日志
+export const getChatSessionLogsByAssistant = async (assistantId: number, params: {
+  pageSize?: number;
+  cursor?: string;
+}): Promise<ApiResponse<ChatSessionLogListResponse>> => {
+  const queryParams = new URLSearchParams();
+  if (params.pageSize) queryParams.append('pageSize', params.pageSize.toString());
+  if (params.cursor) queryParams.append('cursor', params.cursor);
+  
+  const queryString = queryParams.toString();
+  return get(`/chat/chat-session-log/by-assistant/${assistantId}${queryString ? `?${queryString}` : ''}`);
+};
+
 // 一次性文本对话（非流式）
 export const oneShotText = async (data: OneShotTextRequest): Promise<ApiResponse<OneShotTextResponse>> => {
   return post('/voice/oneshot_text', data);
