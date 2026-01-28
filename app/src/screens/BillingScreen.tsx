@@ -8,6 +8,7 @@ import {
   StyleSheet,
   ScrollView,
   TouchableOpacity,
+  Modal,
 } from 'react-native';
 import { Feather } from '@expo/vector-icons';
 import { ActivityIndicator } from 'react-native';
@@ -21,6 +22,8 @@ import {
   UsageRecord,
   Bill,
 } from '../services/api/billing';
+import { fetchUserCredentials, Credential } from '../services/api/credential';
+import { getGroupList, Group } from '../services/api/group';
 
 const BillingScreen: React.FC = () => {
   const [activeTab, setActiveTab] = useState<'statistics' | 'records' | 'bills'>('statistics');
@@ -33,10 +36,25 @@ const BillingScreen: React.FC = () => {
   const [billsTotal, setBillsTotal] = useState(0);
   const [billsPage, setBillsPage] = useState(1);
   
-  // 日期范围
+  // 凭证和组织列表
+  const [credentials, setCredentials] = useState<Credential[]>([]);
+  const [groups, setGroups] = useState<Group[]>([]);
+  
+  // 筛选条件
   const [dateRange, setDateRange] = useState<'7d' | '30d' | '90d' | 'custom'>('30d');
   const [startDate, setStartDate] = useState('');
   const [endDate, setEndDate] = useState('');
+  const [billingScope, setBillingScope] = useState<'personal' | 'organization'>('personal');
+  const [selectedGroupId, setSelectedGroupId] = useState<number | null>(null);
+  const [credentialFilter, setCredentialFilter] = useState<string>('all');
+  const [usageTypeFilter, setUsageTypeFilter] = useState<string>('all');
+  const [billStatusFilter, setBillStatusFilter] = useState<string>('all');
+  
+  // 选择器显示状态
+  const [showScopeSelector, setShowScopeSelector] = useState(false);
+  const [showGroupSelector, setShowGroupSelector] = useState(false);
+  const [showDateRangeSelector, setShowDateRangeSelector] = useState(false);
+  const [showCredentialSelector, setShowCredentialSelector] = useState(false);
 
   // 初始化日期范围
   React.useEffect(() => {
@@ -45,6 +63,36 @@ const BillingScreen: React.FC = () => {
     start.setDate(start.getDate() - 30);
     setStartDate(start.toISOString().split('T')[0]);
     setEndDate(end.toISOString().split('T')[0]);
+  }, []);
+
+  // 加载凭证列表
+  React.useEffect(() => {
+    const loadCredentials = async () => {
+      try {
+        const response = await fetchUserCredentials();
+        if (response.code === 200) {
+          setCredentials(response.data || []);
+        }
+      } catch (error) {
+        console.error('Failed to load credentials', error);
+      }
+    };
+    loadCredentials();
+  }, []);
+
+  // 加载组织列表
+  React.useEffect(() => {
+    const loadGroups = async () => {
+      try {
+        const response = await getGroupList();
+        if (response.code === 200) {
+          setGroups(response.data || []);
+        }
+      } catch (error) {
+        console.error('Failed to load groups', error);
+      }
+    };
+    loadGroups();
   }, []);
 
   // 更新日期范围
@@ -74,10 +122,18 @@ const BillingScreen: React.FC = () => {
   const loadStatistics = async () => {
     setIsLoading(true);
     try {
-      const response = await getUsageStatistics({
+      const params: any = {
         startTime: startDate,
         endTime: endDate,
-      });
+      };
+      if (credentialFilter !== 'all') {
+        params.credentialId = parseInt(credentialFilter);
+      }
+      if (billingScope === 'organization' && selectedGroupId) {
+        params.groupId = selectedGroupId;
+      }
+      
+      const response = await getUsageStatistics(params);
       if (response.code === 200 && response.data) {
         setStatistics(response.data);
       } else {
@@ -94,13 +150,24 @@ const BillingScreen: React.FC = () => {
   const loadUsageRecords = async () => {
     setIsLoading(true);
     try {
-      const response = await getUsageRecords({
+      const params: any = {
         page: recordsPage,
         size: 20,
         startTime: startDate,
         endTime: endDate,
         orderBy: 'usageTime DESC',
-      });
+      };
+      if (credentialFilter !== 'all') {
+        params.credentialId = parseInt(credentialFilter);
+      }
+      if (usageTypeFilter !== 'all') {
+        params.usageType = usageTypeFilter;
+      }
+      if (billingScope === 'organization' && selectedGroupId) {
+        params.groupId = selectedGroupId;
+      }
+      
+      const response = await getUsageRecords(params);
       if (response.code === 200 && response.data) {
         setUsageRecords(response.data.list || []);
         setRecordsTotal(response.data.total || 0);
@@ -118,11 +185,22 @@ const BillingScreen: React.FC = () => {
   const loadBills = async () => {
     setIsLoading(true);
     try {
-      const response = await getBills({
+      const params: any = {
         page: billsPage,
         size: 20,
         orderBy: 'createdAt DESC',
-      });
+      };
+      if (credentialFilter !== 'all') {
+        params.credentialId = parseInt(credentialFilter);
+      }
+      if (billStatusFilter !== 'all') {
+        params.status = billStatusFilter;
+      }
+      if (billingScope === 'organization' && selectedGroupId) {
+        params.groupId = selectedGroupId;
+      }
+      
+      const response = await getBills(params);
       if (response.code === 200 && response.data) {
         setBills(response.data.list || []);
         setBillsTotal(response.data.total || 0);
@@ -145,7 +223,7 @@ const BillingScreen: React.FC = () => {
     } else if (activeTab === 'bills') {
       loadBills();
     }
-  }, [activeTab, dateRange, startDate, endDate, recordsPage, billsPage]);
+  }, [activeTab, dateRange, startDate, endDate, credentialFilter, usageTypeFilter, billStatusFilter, recordsPage, billsPage, billingScope, selectedGroupId]);
 
   const formatNumber = (num: number) => {
     if (num >= 1000000) return (num / 1000000).toFixed(2) + 'M';
@@ -210,6 +288,82 @@ const BillingScreen: React.FC = () => {
         contentContainerStyle={styles.content}
         showsVerticalScrollIndicator={false}
       >
+        {/* 筛选器 */}
+        <Card variant="default" padding="md" style={styles.filterCard}>
+          <View style={styles.filterRow}>
+            {/* 账单范围 */}
+            <View style={styles.filterItem}>
+              <Text style={styles.filterLabel}>账单范围</Text>
+              <TouchableOpacity
+                style={styles.filterButton}
+                onPress={() => setShowScopeSelector(true)}
+              >
+                <Feather name="user" size={14} color="#64748b" />
+                <Text style={styles.filterButtonText}>
+                  {billingScope === 'personal' ? '个人账单' : '组织账单'}
+                </Text>
+                <Feather name="chevron-down" size={14} color="#64748b" />
+              </TouchableOpacity>
+            </View>
+
+            {/* 组织选择（仅组织账单时显示） */}
+            {billingScope === 'organization' && (
+              <View style={styles.filterItem}>
+                <Text style={styles.filterLabel}>选择组织</Text>
+                <TouchableOpacity
+                  style={styles.filterButton}
+                  onPress={() => setShowGroupSelector(true)}
+                >
+                  <Feather name="users" size={14} color="#64748b" />
+                  <Text style={styles.filterButtonText}>
+                    {selectedGroupId
+                      ? groups.find(g => g.id === selectedGroupId)?.name || '请选择'
+                      : '请选择'}
+                  </Text>
+                  <Feather name="chevron-down" size={14} color="#64748b" />
+                </TouchableOpacity>
+              </View>
+            )}
+
+            {/* 时间范围 */}
+            <View style={styles.filterItem}>
+              <Text style={styles.filterLabel}>时间范围</Text>
+              <TouchableOpacity
+                style={styles.filterButton}
+                onPress={() => setShowDateRangeSelector(true)}
+              >
+                <Feather name="calendar" size={14} color="#64748b" />
+                <Text style={styles.filterButtonText}>
+                  {dateRange === '7d' && '最近7天'}
+                  {dateRange === '30d' && '最近30天'}
+                  {dateRange === '90d' && '最近90天'}
+                  {dateRange === 'custom' && '自定义'}
+                </Text>
+                <Feather name="chevron-down" size={14} color="#64748b" />
+              </TouchableOpacity>
+            </View>
+
+            {/* 凭证筛选（仅个人账单时显示） */}
+            {billingScope === 'personal' && (
+              <View style={styles.filterItem}>
+                <Text style={styles.filterLabel}>凭证</Text>
+                <TouchableOpacity
+                  style={styles.filterButton}
+                  onPress={() => setShowCredentialSelector(true)}
+                >
+                  <Feather name="key" size={14} color="#64748b" />
+                  <Text style={styles.filterButtonText}>
+                    {credentialFilter === 'all'
+                      ? '全部'
+                      : credentials.find(c => c.id.toString() === credentialFilter)?.name || '全部'}
+                  </Text>
+                  <Feather name="chevron-down" size={14} color="#64748b" />
+                </TouchableOpacity>
+              </View>
+            )}
+          </View>
+        </Card>
+
         <Tabs value={activeTab} onValueChange={(value) => setActiveTab(value as any)}>
           <TabsList style={styles.tabsList}>
             <TabsTrigger value="statistics">
@@ -241,79 +395,87 @@ const BillingScreen: React.FC = () => {
               </View>
             ) : statistics ? (
               <View style={styles.statsContainer}>
-                {/* 主要统计 - 大卡片 */}
-                <View style={styles.mainStatsRow}>
-                  <Card variant="elevated" padding="lg" style={styles.mainStatCard}>
-                    <View style={styles.mainStatContent}>
-                      <View style={[styles.mainStatIcon, { backgroundColor: '#ede9fe' }]}>
-                        <Feather name="cpu" size={20} color="#a78bfa" />
-                      </View>
-                      <View style={styles.mainStatInfo}>
-                        <Text style={styles.mainStatValue}>{formatNumber(statistics.llmCalls)}</Text>
-                        <Text style={styles.mainStatLabel}>LLM调用</Text>
-                      </View>
+                {/* 三个主要统计卡片 */}
+                <Card variant="elevated" padding="lg" style={styles.statCard}>
+                  <View style={styles.statHeader}>
+                    <View style={[styles.statIconContainer, { backgroundColor: '#dbeafe' }]}>
+                      <Feather name="cpu" size={20} color="#3b82f6" />
                     </View>
-                  </Card>
-                  <Card variant="elevated" padding="lg" style={styles.mainStatCard}>
-                    <View style={styles.mainStatContent}>
-                      <View style={[styles.mainStatIcon, { backgroundColor: '#dbeafe' }]}>
-                        <Feather name="hash" size={20} color="#3b82f6" />
-                      </View>
-                      <View style={styles.mainStatInfo}>
-                        <Text style={styles.mainStatValue}>{formatNumber(statistics.llmTokens)}</Text>
-                        <Text style={styles.mainStatLabel}>总Token数</Text>
-                      </View>
+                    <Text style={styles.statTitle}>LLM统计</Text>
+                  </View>
+                  <View style={styles.statContent}>
+                    <View style={styles.statRow}>
+                      <Text style={styles.statLabel}>调用次数</Text>
+                      <Text style={styles.statValue}>{formatNumber(statistics.llmCalls)}</Text>
                     </View>
-                  </Card>
-                </View>
+                    <View style={styles.statRow}>
+                      <Text style={styles.statLabel}>总Token数</Text>
+                      <Text style={styles.statValue}>{formatNumber(statistics.llmTokens)}</Text>
+                    </View>
+                    <View style={styles.statRow}>
+                      <Text style={styles.statLabel}>Prompt Tokens</Text>
+                      <Text style={styles.statValue}>{formatNumber(statistics.promptTokens)}</Text>
+                    </View>
+                    <View style={styles.statRow}>
+                      <Text style={styles.statLabel}>Completion Tokens</Text>
+                      <Text style={styles.statValue}>{formatNumber(statistics.completionTokens)}</Text>
+                    </View>
+                  </View>
+                </Card>
 
-                {/* 次要统计 - 小卡片 */}
-                <View style={styles.secondaryStatsGrid}>
-                  <Card variant="elevated" padding="md" style={styles.secondaryStatCard}>
-                    <View style={styles.secondaryStatContent}>
-                      <View style={[styles.secondaryStatIcon, { backgroundColor: '#d1fae5' }]}>
-                        <Feather name="phone" size={18} color="#10b981" />
-                      </View>
-                      <View style={styles.secondaryStatInfo}>
-                        <Text style={styles.secondaryStatValue}>{formatNumber(statistics.callCount)}</Text>
-                        <Text style={styles.secondaryStatLabel}>通话次数</Text>
-                      </View>
+                <Card variant="elevated" padding="lg" style={styles.statCard}>
+                  <View style={styles.statHeader}>
+                    <View style={[styles.statIconContainer, { backgroundColor: '#e9d5ff' }]}>
+                      <Feather name="mic" size={20} color="#a855f7" />
                     </View>
-                  </Card>
-                  <Card variant="elevated" padding="md" style={styles.secondaryStatCard}>
-                    <View style={styles.secondaryStatContent}>
-                      <View style={[styles.secondaryStatIcon, { backgroundColor: '#d1fae5' }]}>
-                        <Feather name="clock" size={18} color="#10b981" />
-                      </View>
-                      <View style={styles.secondaryStatInfo}>
-                        <Text style={styles.secondaryStatValue}>{formatDuration(statistics.callDuration)}</Text>
-                        <Text style={styles.secondaryStatLabel}>通话时长</Text>
-                      </View>
+                    <Text style={styles.statTitle}>语音识别</Text>
+                  </View>
+                  <View style={styles.statContent}>
+                    <View style={styles.statRow}>
+                      <Text style={styles.statLabel}>调用次数</Text>
+                      <Text style={styles.statValue}>{formatNumber(statistics.asrCount)}</Text>
                     </View>
-                  </Card>
-                  <Card variant="elevated" padding="md" style={styles.secondaryStatCard}>
-                    <View style={styles.secondaryStatContent}>
-                      <View style={[styles.secondaryStatIcon, { backgroundColor: '#fee2e2' }]}>
-                        <Feather name="hard-drive" size={18} color="#ef4444" />
-                      </View>
-                      <View style={styles.secondaryStatInfo}>
-                        <Text style={styles.secondaryStatValue}>{formatNumber(statistics.apiCalls)}</Text>
-                        <Text style={styles.secondaryStatLabel}>API调用</Text>
-                      </View>
+                    <View style={styles.statRow}>
+                      <Text style={styles.statLabel}>总时长</Text>
+                      <Text style={styles.statValue}>{formatDuration(statistics.asrDuration)}</Text>
                     </View>
-                  </Card>
-                  <Card variant="elevated" padding="md" style={styles.secondaryStatCard}>
-                    <View style={styles.secondaryStatContent}>
-                      <View style={[styles.secondaryStatIcon, { backgroundColor: '#cffafe' }]}>
-                        <Feather name="globe" size={18} color="#06b6d4" />
-                      </View>
-                      <View style={styles.secondaryStatInfo}>
-                        <Text style={styles.secondaryStatValue}>{formatNumber(statistics.apiCalls)}</Text>
-                        <Text style={styles.secondaryStatLabel}>API调用</Text>
-                      </View>
+                  </View>
+                </Card>
+
+                <Card variant="elevated" padding="lg" style={styles.statCard}>
+                  <View style={styles.statHeader}>
+                    <View style={[styles.statIconContainer, { backgroundColor: '#fed7aa' }]}>
+                      <Feather name="volume-2" size={20} color="#f97316" />
                     </View>
-                  </Card>
-                </View>
+                    <Text style={styles.statTitle}>语音合成</Text>
+                  </View>
+                  <View style={styles.statContent}>
+                    <View style={styles.statRow}>
+                      <Text style={styles.statLabel}>调用次数</Text>
+                      <Text style={styles.statValue}>{formatNumber(statistics.ttsCount)}</Text>
+                    </View>
+                    <View style={styles.statRow}>
+                      <Text style={styles.statLabel}>总时长</Text>
+                      <Text style={styles.statValue}>{formatDuration(statistics.ttsDuration)}</Text>
+                    </View>
+                  </View>
+                </Card>
+
+                {/* API调用统计 */}
+                <Card variant="elevated" padding="lg" style={styles.statCard}>
+                  <View style={styles.statHeader}>
+                    <View style={[styles.statIconContainer, { backgroundColor: '#cffafe' }]}>
+                      <Feather name="globe" size={20} color="#06b6d4" />
+                    </View>
+                    <Text style={styles.statTitle}>API调用</Text>
+                  </View>
+                  <View style={styles.statContent}>
+                    <View style={styles.statRow}>
+                      <Text style={styles.statLabel}>API调用次数</Text>
+                      <Text style={styles.statValue}>{formatNumber(statistics.apiCalls)}</Text>
+                    </View>
+                  </View>
+                </Card>
               </View>
             ) : (
               <Card variant="default" padding="lg" style={styles.emptyCard}>
@@ -506,6 +668,182 @@ const BillingScreen: React.FC = () => {
 
         <View style={styles.footer} />
       </ScrollView>
+
+      {/* 账单范围选择器 */}
+      <Modal
+        visible={showScopeSelector}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setShowScopeSelector(false)}
+      >
+        <TouchableOpacity
+          style={styles.modalOverlay}
+          activeOpacity={1}
+          onPress={() => setShowScopeSelector(false)}
+        >
+          <View style={styles.modalContent}>
+            <Text style={styles.modalTitle}>选择账单范围</Text>
+            <TouchableOpacity
+              style={[styles.modalOption, billingScope === 'personal' && styles.modalOptionActive]}
+              onPress={() => {
+                setBillingScope('personal');
+                setSelectedGroupId(null);
+                setShowScopeSelector(false);
+              }}
+            >
+              <Feather name="user" size={18} color={billingScope === 'personal' ? '#3b82f6' : '#64748b'} />
+              <Text style={[styles.modalOptionText, billingScope === 'personal' && styles.modalOptionTextActive]}>
+                个人账单
+              </Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[styles.modalOption, billingScope === 'organization' && styles.modalOptionActive]}
+              onPress={() => {
+                setBillingScope('organization');
+                if (groups.length > 0 && !selectedGroupId) {
+                  setSelectedGroupId(groups[0].id);
+                }
+                setShowScopeSelector(false);
+              }}
+            >
+              <Feather name="users" size={18} color={billingScope === 'organization' ? '#3b82f6' : '#64748b'} />
+              <Text style={[styles.modalOptionText, billingScope === 'organization' && styles.modalOptionTextActive]}>
+                组织账单
+              </Text>
+            </TouchableOpacity>
+          </View>
+        </TouchableOpacity>
+      </Modal>
+
+      {/* 组织选择器 */}
+      <Modal
+        visible={showGroupSelector}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setShowGroupSelector(false)}
+      >
+        <TouchableOpacity
+          style={styles.modalOverlay}
+          activeOpacity={1}
+          onPress={() => setShowGroupSelector(false)}
+        >
+          <View style={styles.modalContent}>
+            <Text style={styles.modalTitle}>选择组织</Text>
+            <ScrollView style={styles.modalScroll}>
+              {groups.map((group) => (
+                <TouchableOpacity
+                  key={group.id}
+                  style={[styles.modalOption, selectedGroupId === group.id && styles.modalOptionActive]}
+                  onPress={() => {
+                    setSelectedGroupId(group.id);
+                    setShowGroupSelector(false);
+                  }}
+                >
+                  <Text style={[styles.modalOptionText, selectedGroupId === group.id && styles.modalOptionTextActive]}>
+                    {group.name}
+                  </Text>
+                </TouchableOpacity>
+              ))}
+            </ScrollView>
+          </View>
+        </TouchableOpacity>
+      </Modal>
+
+      {/* 时间范围选择器 */}
+      <Modal
+        visible={showDateRangeSelector}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setShowDateRangeSelector(false)}
+      >
+        <TouchableOpacity
+          style={styles.modalOverlay}
+          activeOpacity={1}
+          onPress={() => setShowDateRangeSelector(false)}
+        >
+          <View style={styles.modalContent}>
+            <Text style={styles.modalTitle}>选择时间范围</Text>
+            <TouchableOpacity
+              style={[styles.modalOption, dateRange === '7d' && styles.modalOptionActive]}
+              onPress={() => {
+                setDateRange('7d');
+                setShowDateRangeSelector(false);
+              }}
+            >
+              <Text style={[styles.modalOptionText, dateRange === '7d' && styles.modalOptionTextActive]}>
+                最近7天
+              </Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[styles.modalOption, dateRange === '30d' && styles.modalOptionActive]}
+              onPress={() => {
+                setDateRange('30d');
+                setShowDateRangeSelector(false);
+              }}
+            >
+              <Text style={[styles.modalOptionText, dateRange === '30d' && styles.modalOptionTextActive]}>
+                最近30天
+              </Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[styles.modalOption, dateRange === '90d' && styles.modalOptionActive]}
+              onPress={() => {
+                setDateRange('90d');
+                setShowDateRangeSelector(false);
+              }}
+            >
+              <Text style={[styles.modalOptionText, dateRange === '90d' && styles.modalOptionTextActive]}>
+                最近90天
+              </Text>
+            </TouchableOpacity>
+          </View>
+        </TouchableOpacity>
+      </Modal>
+
+      {/* 凭证选择器 */}
+      <Modal
+        visible={showCredentialSelector}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setShowCredentialSelector(false)}
+      >
+        <TouchableOpacity
+          style={styles.modalOverlay}
+          activeOpacity={1}
+          onPress={() => setShowCredentialSelector(false)}
+        >
+          <View style={styles.modalContent}>
+            <Text style={styles.modalTitle}>选择凭证</Text>
+            <ScrollView style={styles.modalScroll}>
+              <TouchableOpacity
+                style={[styles.modalOption, credentialFilter === 'all' && styles.modalOptionActive]}
+                onPress={() => {
+                  setCredentialFilter('all');
+                  setShowCredentialSelector(false);
+                }}
+              >
+                <Text style={[styles.modalOptionText, credentialFilter === 'all' && styles.modalOptionTextActive]}>
+                  全部
+                </Text>
+              </TouchableOpacity>
+              {credentials.map((cred) => (
+                <TouchableOpacity
+                  key={cred.id}
+                  style={[styles.modalOption, credentialFilter === cred.id.toString() && styles.modalOptionActive]}
+                  onPress={() => {
+                    setCredentialFilter(cred.id.toString());
+                    setShowCredentialSelector(false);
+                  }}
+                >
+                  <Text style={[styles.modalOptionText, credentialFilter === cred.id.toString() && styles.modalOptionTextActive]}>
+                    {cred.name}
+                  </Text>
+                </TouchableOpacity>
+              ))}
+            </ScrollView>
+          </View>
+        </TouchableOpacity>
+      </Modal>
     </MainLayout>
   );
 };
@@ -532,72 +870,43 @@ const styles = StyleSheet.create({
   statsContainer: {
     gap: 16,
   },
-  mainStatsRow: {
-    flexDirection: 'row',
-    gap: 12,
+  statCard: {
+    marginBottom: 0,
   },
-  mainStatCard: {
-    flex: 1,
-  },
-  mainStatContent: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 16,
-  },
-  mainStatIcon: {
-    width: 56,
-    height: 56,
-    borderRadius: 12,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  mainStatInfo: {
-    flex: 1,
-  },
-  mainStatValue: {
-    fontSize: 11,
-    fontWeight: '600',
-    color: '#1e293b',
-    marginBottom: 4,
-  },
-  mainStatLabel: {
-    fontSize: 11,
-    color: '#64748b',
-    fontWeight: '500',
-  },
-  secondaryStatsGrid: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 12,
-  },
-  secondaryStatCard: {
-    flex: 1,
-    minWidth: '47%',
-  },
-  secondaryStatContent: {
+  statHeader: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 12,
+    marginBottom: 16,
   },
-  secondaryStatIcon: {
+  statIconContainer: {
     width: 40,
     height: 40,
     borderRadius: 10,
     alignItems: 'center',
     justifyContent: 'center',
   },
-  secondaryStatInfo: {
-    flex: 1,
-  },
-  secondaryStatValue: {
+  statTitle: {
     fontSize: 16,
     fontWeight: '600',
     color: '#1e293b',
-    marginBottom: 2,
   },
-  secondaryStatLabel: {
-    fontSize: 12,
+  statContent: {
+    gap: 12,
+  },
+  statRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  statLabel: {
+    fontSize: 14,
     color: '#64748b',
+  },
+  statValue: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#1e293b',
   },
   recordsCard: {
     marginTop: 0,
@@ -746,6 +1055,82 @@ const styles = StyleSheet.create({
   },
   footer: {
     height: 20,
+  },
+  filterCard: {
+    marginBottom: 16,
+  },
+  filterRow: {
+    gap: 12,
+  },
+  filterItem: {
+    marginBottom: 12,
+  },
+  filterLabel: {
+    fontSize: 13,
+    fontWeight: '500',
+    color: '#1e293b',
+    marginBottom: 6,
+  },
+  filterButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    backgroundColor: '#f8fafc',
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#e2e8f0',
+  },
+  filterButtonText: {
+    flex: 1,
+    fontSize: 14,
+    color: '#1e293b',
+  },
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  modalContent: {
+    backgroundColor: '#ffffff',
+    borderRadius: 12,
+    padding: 20,
+    width: '80%',
+    maxHeight: '70%',
+  },
+  modalTitle: {
+    fontSize: 18,
+    fontWeight: '600',
+    color: '#1e293b',
+    marginBottom: 16,
+  },
+  modalScroll: {
+    maxHeight: 300,
+  },
+  modalOption: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    borderRadius: 8,
+    marginBottom: 8,
+    backgroundColor: '#f8fafc',
+  },
+  modalOptionActive: {
+    backgroundColor: '#eff6ff',
+    borderWidth: 1,
+    borderColor: '#3b82f6',
+  },
+  modalOptionText: {
+    fontSize: 15,
+    color: '#64748b',
+  },
+  modalOptionTextActive: {
+    color: '#3b82f6',
+    fontWeight: '500',
   },
 });
 

@@ -387,9 +387,9 @@ func (h *SipHandler) GetCallHistory(c *gin.Context) {
 	var total int64
 	query := h.db.Model(&models.SipCall{})
 
-	// 如果有用户登录，只返回该用户的记录
+	// 如果有用户登录，返回该用户的记录或没有关联用户的记录
 	if user != nil {
-		query = query.Where("user_id = ?", user.ID)
+		query = query.Where("user_id = ? OR user_id IS NULL", user.ID)
 	} else if userIDStr != "" {
 		if userID, err := strconv.ParseUint(userIDStr, 10, 32); err == nil {
 			query = query.Where("user_id = ?", uint(userID))

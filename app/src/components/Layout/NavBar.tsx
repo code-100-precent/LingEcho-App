@@ -23,6 +23,13 @@ export interface NavBarProps {
   rightIcon?: string;
   rightIconColor?: string;
   onRightPress?: () => void;
+  rightButtons?: Array<{
+    icon: string;
+    color?: string;
+    onPress: () => void;
+    badge?: number;
+  }>;
+  rightBadge?: number;
   rightComponent?: React.ReactNode;
   showBack?: boolean;
   backgroundColor?: string;
@@ -38,6 +45,8 @@ const NavBar: React.FC<NavBarProps> = ({
   rightIcon,
   rightIconColor = '#1f2937',
   onRightPress,
+  rightButtons,
+  rightBadge,
   rightComponent,
   showBack = false,
   backgroundColor = '#ffffff',
@@ -99,6 +108,30 @@ const NavBar: React.FC<NavBarProps> = ({
         <View style={styles.right}>
           {rightComponent ? (
             rightComponent
+          ) : rightButtons && rightButtons.length > 0 ? (
+            <View style={styles.rightButtons}>
+              {rightButtons.map((button, index) => (
+                <TouchableOpacity
+                  key={index}
+                  onPress={button.onPress}
+                  style={styles.iconButton}
+                  activeOpacity={0.7}
+                >
+                  <Feather
+                    name={button.icon as any}
+                    size={24}
+                    color={button.color || rightIconColor}
+                  />
+                  {button.badge && button.badge > 0 && (
+                    <View style={styles.badge}>
+                      <Text style={styles.badgeText}>
+                        {button.badge > 99 ? '99+' : button.badge}
+                      </Text>
+                    </View>
+                  )}
+                </TouchableOpacity>
+              ))}
+            </View>
           ) : rightIcon ? (
             <TouchableOpacity
               onPress={onRightPress}
@@ -106,6 +139,13 @@ const NavBar: React.FC<NavBarProps> = ({
               activeOpacity={0.7}
             >
               <Feather name={rightIcon as any} size={24} color={rightIconColor} />
+              {rightBadge && rightBadge > 0 && (
+                <View style={styles.badge}>
+                  <Text style={styles.badgeText}>
+                    {rightBadge > 99 ? '99+' : rightBadge}
+                  </Text>
+                </View>
+              )}
             </TouchableOpacity>
           ) : (
             <View style={styles.iconButton} />
@@ -149,9 +189,15 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
   },
   right: {
-    width: 40,
+    width: 'auto',
+    minWidth: 40,
     alignItems: 'flex-end',
     justifyContent: 'center',
+  },
+  rightButtons: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
   },
   iconButton: {
     width: 40,
@@ -163,6 +209,23 @@ const styles = StyleSheet.create({
     fontSize: 18,
     fontWeight: '600',
     textAlign: 'center',
+  },
+  badge: {
+    position: 'absolute',
+    top: 8,
+    right: 8,
+    backgroundColor: '#ef4444',
+    borderRadius: 10,
+    minWidth: 20,
+    height: 20,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 4,
+  },
+  badgeText: {
+    color: '#ffffff',
+    fontSize: 11,
+    fontWeight: '600',
   },
 });
 

@@ -17,6 +17,7 @@ import OrganizationDrawer from '../components/OrganizationDrawer';
 import { useAuth } from '../context/AuthContext';
 import { getUsageStatistics } from '../services/api/billing';
 import { getGroupList, Group } from '../services/api/group';
+import { getUnreadNotificationCount } from '../services/api/notification';
 
 const HomeScreen: React.FC = () => {
   const { user } = useAuth();
@@ -30,27 +31,43 @@ const HomeScreen: React.FC = () => {
     ttsCalls: 0,
   });
   const [isLoadingStats, setIsLoadingStats] = useState(false);
+  const [unreadCount, setUnreadCount] = useState(0);
 
   useEffect(() => {
     loadStatistics();
+    loadUnreadCount();
   }, []);
 
   const loadStatistics = async () => {
     setIsLoadingStats(true);
     try {
       const response = await getUsageStatistics();
+      console.log('=== Usage Statistics Response ===');
+      console.log('Response code:', response.code);
+      console.log('Response data:', JSON.stringify(response.data, null, 2));
       if (response.code === 200 && response.data) {
         setStats({
-          totalTokens: response.data.totalTokens || 0,
+          totalTokens: response.data.llmTokens || 0,
           llmCalls: response.data.llmCalls || 0,
-          asrCalls: response.data.asrCalls || 0,
-          ttsCalls: response.data.ttsCalls || 0,
+          asrCalls: response.data.asrCount || 0,
+          ttsCalls: response.data.ttsCount || 0,
         });
       }
     } catch (error: any) {
       console.error('Load statistics error:', error);
     } finally {
       setIsLoadingStats(false);
+    }
+  };
+
+  const loadUnreadCount = async () => {
+    try {
+      const response = await getUnreadNotificationCount();
+      if (response.code === 200 && typeof response.data === 'number') {
+        setUnreadCount(response.data);
+      }
+    } catch (error: any) {
+      console.error('Load unread count error:', error);
     }
   };
 
@@ -70,7 +87,9 @@ const HomeScreen: React.FC = () => {
           rightIcon: 'bell',
           onRightPress: () => {
             navigation.navigate('Notification' as never);
+            loadUnreadCount(); // 刷新未读数
           },
+          rightBadge: unreadCount > 0 ? unreadCount : undefined,
         }}
         backgroundColor="#f8fafc"
       >
@@ -102,7 +121,16 @@ const HomeScreen: React.FC = () => {
 
           {/* 统计卡片 */}
           <View style={styles.statsSection}>
-            <Text style={styles.sectionTitle}>使用统计</Text>
+            <View style={styles.sectionHeader}>
+              <Text style={styles.sectionTitle}>使用统计</Text>
+              <TouchableOpacity
+                onPress={loadStatistics}
+                style={styles.refreshButton}
+                activeOpacity={0.7}
+              >
+                <Feather name="refresh-cw" size={18} color="#64748b" />
+              </TouchableOpacity>
+            </View>
             {isLoadingStats ? (
               <View style={styles.loadingContainer}>
                 <ActivityIndicator size="large" color="#a78bfa" />
@@ -174,6 +202,26 @@ const HomeScreen: React.FC = () => {
                   <Feather name="smartphone" size={24} color="#10b981" />
                 </View>
                 <Text style={styles.quickActionLabel}>设备管理</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={styles.quickActionItem}
+                activeOpacity={0.7}
+                onPress={() => navigation.navigate('KnowledgeBase' as never)}
+              >
+                <View style={[styles.quickActionIcon, { backgroundColor: '#fce7f3' }]}>
+                  <Feather name="book-open" size={24} color="#ec4899" />
+                </View>
+                <Text style={styles.quickActionLabel}>知识库</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={styles.quickActionItem}
+                activeOpacity={0.7}
+                onPress={() => navigation.navigate('CallCenter' as never)}
+              >
+                <View style={[styles.quickActionIcon, { backgroundColor: '#dbeafe' }]}>
+                  <Feather name="phone-call" size={24} color="#3b82f6" />
+                </View>
+                <Text style={styles.quickActionLabel}>外呼中心</Text>
               </TouchableOpacity>
               <TouchableOpacity
                 style={styles.quickActionItem}
@@ -266,11 +314,24 @@ const styles = StyleSheet.create({
   statsSection: {
     marginBottom: 24,
   },
+  sectionHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 12,
+  },
   sectionTitle: {
     fontSize: 18,
     fontWeight: '600',
     color: '#1e293b',
-    marginBottom: 12,
+  },
+  refreshButton: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: '#f1f5f9',
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   loadingContainer: {
     paddingVertical: 40,

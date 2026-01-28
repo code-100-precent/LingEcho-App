@@ -59,7 +59,11 @@ const AssistantScreen: React.FC = () => {
     setIsLoading(true);
     try {
       const response = await getAssistantList();
+      console.log('Assistant list response:', JSON.stringify(response, null, 2));
+      console.log('Response code:', response.code);
+      console.log('Response data length:', response.data?.length);
       if (response.code === 200 && response.data) {
+        console.log('Setting assistants, count:', response.data.length);
         setAssistants(response.data);
       } else {
         Alert.alert('错误', response.msg || '加载助手列表失败');
@@ -149,7 +153,8 @@ const AssistantScreen: React.FC = () => {
       <ScrollView
         style={styles.container}
         contentContainerStyle={styles.content}
-        showsVerticalScrollIndicator={false}
+        showsVerticalScrollIndicator={true}
+        bounces={true}
       >
         {isLoading ? (
           <View style={styles.loadingContainer}>
@@ -173,77 +178,65 @@ const AssistantScreen: React.FC = () => {
               const iconColor = getIconColor(assistant.icon);
 
               return (
-                <Card
+                <TouchableOpacity
                   key={assistant.id}
-                  variant="elevated"
-                  padding="lg"
+                  activeOpacity={0.7}
+                  onPress={() => {
+                    navigation.navigate('AssistantDetail' as never, {
+                      assistantId: assistant.id,
+                    } as never);
+                  }}
                   style={styles.assistantCard}
                 >
-                  <TouchableOpacity
-                    activeOpacity={0.7}
-                    onPress={() => {
-                      navigation.navigate('AssistantDetail' as never, {
-                        assistantId: assistant.id,
-                      } as never);
-                    }}
-                    style={styles.assistantTouchable}
+                  <View
+                    style={[
+                      styles.iconContainer,
+                      { backgroundColor: `${iconColor}15` },
+                    ]}
                   >
-                    <View style={styles.assistantBody}>
-                      <View style={styles.assistantMain}>
-                        <View
-                          style={[
-                            styles.iconContainer,
-                            { backgroundColor: `${iconColor}15` },
-                          ]}
-                        >
-                          <Feather name={iconName} size={28} color={iconColor} />
+                    <Feather name={iconName} size={20} color={iconColor} />
+                  </View>
+                  <View style={styles.assistantInfo}>
+                    <View style={styles.assistantTitleRow}>
+                      <Text style={styles.assistantName} numberOfLines={1}>
+                        {assistant.name}
+                      </Text>
+                      {assistant.groupId && (
+                        <View style={styles.groupBadge}>
+                          <Feather name="users" size={10} color="#3b82f6" />
                         </View>
-                        <View style={styles.assistantInfo}>
-                          <View style={styles.assistantTitleRow}>
-                            <Text style={styles.assistantName} numberOfLines={1}>
-                              {assistant.name}
-                            </Text>
-                            {assistant.groupId && (
-                              <View style={styles.groupBadge}>
-                                <Feather name="users" size={12} color="#3b82f6" />
-                                <Text style={styles.groupBadgeText}>组织</Text>
-                              </View>
-                            )}
-                          </View>
-                          {assistant.description && (
-                            <Text style={styles.assistantDescription} numberOfLines={2}>
-                              {assistant.description}
-                            </Text>
-                          )}
-                        </View>
-                      </View>
-                      <View style={styles.assistantActions}>
-                        <TouchableOpacity
-                          style={styles.actionButton}
-                          onPress={(e) => {
-                            e.stopPropagation();
-                            // TODO: 导航到助手配置页
-                            Alert.alert('提示', `配置助手: ${assistant.name}`);
-                          }}
-                          activeOpacity={0.7}
-                        >
-                          <Feather name="settings" size={18} color="#64748b" />
-                        </TouchableOpacity>
-                        <TouchableOpacity
-                          style={[styles.actionButton, styles.deleteButton]}
-                          onPress={(e) => {
-                            e.stopPropagation();
-                            setSelectedAssistant(assistant);
-                            setShowDeleteConfirm(true);
-                          }}
-                          activeOpacity={0.7}
-                        >
-                          <Feather name="trash-2" size={18} color="#ef4444" />
-                        </TouchableOpacity>
-                      </View>
+                      )}
                     </View>
-                  </TouchableOpacity>
-                </Card>
+                    {assistant.description && (
+                      <Text style={styles.assistantDescription} numberOfLines={1}>
+                        {assistant.description}
+                      </Text>
+                    )}
+                  </View>
+                  <View style={styles.assistantActions}>
+                    <TouchableOpacity
+                      style={styles.actionButton}
+                      onPress={(e) => {
+                        e.stopPropagation();
+                        Alert.alert('提示', `配置助手: ${assistant.name}`);
+                      }}
+                      activeOpacity={0.7}
+                    >
+                      <Feather name="settings" size={14} color="#64748b" />
+                    </TouchableOpacity>
+                    <TouchableOpacity
+                      style={[styles.actionButton, styles.deleteButton]}
+                      onPress={(e) => {
+                        e.stopPropagation();
+                        setSelectedAssistant(assistant);
+                        setShowDeleteConfirm(true);
+                      }}
+                      activeOpacity={0.7}
+                    >
+                      <Feather name="trash-2" size={14} color="#ef4444" />
+                    </TouchableOpacity>
+                  </View>
+                </TouchableOpacity>
               );
             })}
           </View>
@@ -378,7 +371,8 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   content: {
-    padding: 16,
+    padding: 12,
+    paddingBottom: 80,
   },
   loadingContainer: {
     alignItems: 'center',
@@ -391,84 +385,70 @@ const styles = StyleSheet.create({
     color: '#64748b',
   },
   grid: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 16,
+    gap: 8,
   },
   assistantCard: {
-    flex: 1,
-    minWidth: '100%',
-    maxWidth: '100%',
-    marginBottom: 0,
-  },
-  assistantTouchable: {
-    width: '100%',
-  },
-  assistantBody: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'space-between',
-  },
-  assistantMain: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    flex: 1,
-    marginRight: 12,
+    backgroundColor: '#ffffff',
+    borderRadius: 12,
+    padding: 12,
+    marginBottom: 8,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.05,
+    shadowRadius: 2,
+    elevation: 2,
   },
   iconContainer: {
-    width: 56,
-    height: 56,
-    borderRadius: 14,
+    width: 36,
+    height: 36,
+    borderRadius: 8,
     alignItems: 'center',
     justifyContent: 'center',
-    marginRight: 16,
+    marginRight: 10,
     flexShrink: 0,
   },
   assistantInfo: {
     flex: 1,
     minWidth: 0,
+    marginRight: 8,
   },
   assistantTitleRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginBottom: 6,
-    gap: 8,
+    marginBottom: 2,
+    gap: 4,
   },
   assistantName: {
-    fontSize: 17,
+    fontSize: 14,
     fontWeight: '600',
     color: '#1e293b',
     flex: 1,
   },
   groupBadge: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 6,
+    width: 18,
+    height: 18,
+    borderRadius: 9,
     backgroundColor: '#dbeafe',
-    gap: 4,
+    alignItems: 'center',
+    justifyContent: 'center',
     flexShrink: 0,
   },
-  groupBadgeText: {
-    fontSize: 11,
-    color: '#3b82f6',
-    fontWeight: '500',
-  },
   assistantDescription: {
-    fontSize: 14,
+    fontSize: 12,
     color: '#64748b',
-    lineHeight: 20,
+    lineHeight: 16,
   },
   assistantActions: {
     flexDirection: 'row',
-    gap: 8,
+    gap: 6,
     flexShrink: 0,
   },
   actionButton: {
-    width: 40,
-    height: 40,
-    borderRadius: 10,
+    width: 32,
+    height: 32,
+    borderRadius: 8,
     backgroundColor: '#f8fafc',
     alignItems: 'center',
     justifyContent: 'center',
