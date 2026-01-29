@@ -38,9 +38,10 @@ const Assistants: React.FC = () => {
   const fetchAssistants = async () => {
     try {
       const res = await getAssistantList();
-      setAssistants(res.data);
+      setAssistants(res.data || []); // 确保始终是数组
     } catch (err) {
       showAlert(t('assistants.messages.fetchFailed'), 'error');
+      setAssistants([]); // 错误时设置为空数组
     }
   };
 
@@ -83,7 +84,7 @@ const Assistants: React.FC = () => {
           </Button>
         </div>
         <div className="w-full grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
-          {assistants.length === 0 && (
+          {(assistants?.length === 0) && (
             <motion.div 
               className="col-span-full"
               initial={{ opacity: 0, y: 20 }}
@@ -199,7 +200,7 @@ const Assistants: React.FC = () => {
               </div>
             </motion.div>
           )}
-          {assistants.map((assistant, index) => {
+          {(assistants || []).map((assistant, index) => {
             const iconKey = assistant.icon as keyof typeof ICON_MAP;
             const gradient = ICON_GRADIENTS[iconKey] || ICON_GRADIENTS.Circle;
             

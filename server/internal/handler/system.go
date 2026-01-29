@@ -70,6 +70,9 @@ func (h *Handlers) SystemInit(c *gin.Context) {
 	xunfeiConfig := h.getVoiceCloneConfig("xunfei")
 	volcengineConfig := h.getVoiceCloneConfig("volcengine")
 
+	// Get voiceprint recognition configuration
+	voiceprintConfig := h.getVoiceprintConfig()
+
 	// Return initialization information
 	response.Success(c, "System initialization info", gin.H{
 		"database": gin.H{
@@ -88,6 +91,14 @@ func (h *Handlers) SystemInit(c *gin.Context) {
 				"configured": volcengineConfig != nil,
 				"config":     volcengineConfig,
 			},
+		},
+		"voiceprint": gin.H{
+			"enabled":    voiceprintConfig["enabled"],
+			"configured": voiceprintConfig["configured"],
+			"config":     voiceprintConfig["config"],
+		},
+		"features": gin.H{
+			"voiceprintEnabled": voiceprintConfig["enabled"], // 专门用于前端sidebar显示控制
 		},
 	})
 }
@@ -165,6 +176,48 @@ func (h *Handlers) getVoiceCloneConfig(provider string) map[string]interface{} {
 	return nil
 }
 
+// getVoiceprintConfig gets voiceprint recognition configuration
+func (h *Handlers) getVoiceprintConfig() map[string]interface{} {
+	// Check if voiceprint service is configured
+	voiceprintServiceURL := utils.GetEnv("VOICEPRINT_SERVICE_URL")
+	voiceprintAPIKey := utils.GetEnv("VOICEPRINT_API_KEY")
+
+	// Check if basic configuration exists
+	if voiceprintServiceURL == "" {
+		voiceprintServiceURL = "http://localhost:7074" // Default service URL
+	}
+
+	configured := voiceprintServiceURL != "" && voiceprintAPIKey != ""
+
+	// Read enabled status from database or environment
+	enabledStr := utils.GetValue(h.db, constants.KEY_VOICEPRINT_ENABLED)
+	enabled := false
+	if enabledStr != "" {
+		enabled = enabledStr == "true"
+	} else {
+		// Fallback to environment variable
+		enabled = utils.GetEnv("VOICEPRINT_ENABLED") == "true"
+	}
+
+	// Only enable if both configured and explicitly enabled
+	enabled = enabled && configured
+
+	config := map[string]interface{}{
+		"service_url":          voiceprintServiceURL,
+		"api_key":              voiceprintAPIKey,
+		"similarity_threshold": utils.GetFloatEnvWithDefault("VOICEPRINT_SIMILARITY_THRESHOLD", 0.6),
+		"max_candidates":       utils.GetIntEnvWithDefault("VOICEPRINT_MAX_CANDIDATES", 10),
+		"cache_enabled":        utils.GetEnv("VOICEPRINT_CACHE_ENABLED") == "true",
+		"log_enabled":          utils.GetEnv("VOICEPRINT_LOG_ENABLED") == "true",
+	}
+
+	return map[string]interface{}{
+		"enabled":    enabled,
+		"configured": configured,
+		"config":     config,
+	}
+}
+
 // isConfigValid 检查配置是否有效
 func (h *Handlers) isConfigValid(provider string, config map[string]interface{}) bool {
 	if config == nil {
@@ -226,6 +279,52 @@ func (h *Handlers) SaveVoiceCloneConfig(c *gin.Context) {
 	utils.SetValue(h.db, configKey, string(configJSON), "json", true, true)
 
 	response.Success(c, "配置保存成功", nil)
+}
+
+// SaveVoiceprintConfig 保存声纹识别配置
+func (h *Handlers) SaveVoiceprintConfig(c *gin.Context) {
+	var req struct {
+		Enabled bool                   `json:"enabled"`
+		Config  map[string]interface{} `json:"config" binding:"required"`
+	}
+
+	if err := c.ShouldBindJSON(&req); err != nil {
+		response.Fail(c, "参数错误", err.Error())
+		return
+	}
+
+	// 验证配置
+	if req.Config == nil {
+		response.Fail(c, "配置无效", "配置不能为空")
+		return
+	}
+
+	serviceURL, _ := req.Config["service_url"].(string)
+	apiKey, _ := req.Config["api_key"].(string)
+
+	if serviceURL == "" || apiKey == "" {
+		response.Fail(c, "配置无效", "服务地址和API密钥不能为空")
+		return
+	}
+
+	// 序列化配置为 JSON
+	configJSON, err := json.Marshal(req.Config)
+	if err != nil {
+		response.Fail(c, "序列化配置失败", err.Error())
+		return
+	}
+
+	// 保存配置到数据库
+	utils.SetValue(h.db, constants.KEY_VOICEPRINT_CONFIG, string(configJSON), "json", true, true)
+
+	// 保存启用状态
+	enabledStr := "false"
+	if req.Enabled {
+		enabledStr = "true"
+	}
+	utils.SetValue(h.db, constants.KEY_VOICEPRINT_ENABLED, enabledStr, "string", true, true)
+
+	response.Success(c, "声纹识别配置保存成功", nil)
 }
 
 // SystemStatus 系统状态检查接口，检查数据库、缓存、API、存储服务

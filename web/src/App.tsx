@@ -47,6 +47,7 @@ import SchemeManager from '@/pages/SchemeManager.tsx';
 import PhoneNumberManager from '@/pages/PhoneNumberManager.tsx';
 import VoicemailBox from '@/pages/VoicemailBox.tsx';
 import VoicemailDetail from '@/pages/VoicemailDetail.tsx';
+import VoiceprintManagement from '@/pages/VoiceprintManagement.tsx';
 
 function App() {
     const [showPerformanceMonitor, setShowPerformanceMonitor] = useState(false);
@@ -309,6 +310,13 @@ function App() {
                             <ProtectedRoute>
                                 <Layout>
                                     <VoicemailDetail />
+                                </Layout>
+                            </ProtectedRoute>
+                        } />
+                        <Route path="/voiceprint-management" element={
+                            <ProtectedRoute>
+                                <Layout>
+                                    <VoiceprintManagement />
                                 </Layout>
                             </ProtectedRoute>
                         } />

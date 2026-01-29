@@ -23,12 +23,14 @@ import {
   Phone, // 外呼中心图标
   Info, // 关于我们图标
   Package, // 插件市场图标
+  Mic, // 声纹识别图标
 } from 'lucide-react'
 import { useAuthStore } from '@/stores/authStore'
 import { useI18nStore } from '@/stores/i18nStore'
 import AuthModal from '../Auth/AuthModal'
 import Button from '../UI/Button'
 import { getGroupList, type Group } from '@/api/group'
+import { getSystemInit, type SystemInitInfo } from '@/api/system'
 import { prefetch } from '@/utils/prefetch'
 
 const Sidebar = () => {
@@ -39,6 +41,7 @@ const Sidebar = () => {
   const [showAuthModal, setShowAuthModal] = useState(false)
   const [showDropdown, setShowDropdown] = useState(false)
   const [groups, setGroups] = useState<Group[]>([])
+  const [systemInfo, setSystemInfo] = useState<SystemInitInfo | null>(null)
   const navigate = useNavigate()
   const dropdownRef = useRef<HTMLDivElement>(null)
   const buttonRef = useRef<HTMLButtonElement>(null)
@@ -75,6 +78,11 @@ const Sidebar = () => {
     }
   }, [isAuthenticated])
 
+  // 获取系统初始化信息
+  useEffect(() => {
+    fetchSystemInfo()
+  }, [])
+
   const fetchGroups = async () => {
     try {
       const res = await getGroupList()
@@ -84,10 +92,22 @@ const Sidebar = () => {
     }
   }
 
+  const fetchSystemInfo = async () => {
+    try {
+      const res = await getSystemInit()
+      if (res.code === 200) {
+        setSystemInfo(res.data)
+      }
+    } catch (err) {
+      console.error('获取系统信息失败', err)
+    }
+  }
+
   const navigation = [
     ...(isAuthenticated && groups.length > 0 ? [{ name: t('nav.sidebar.overview'), href: '/overview', icon: LayoutDashboard }] : []),
     { name: t('nav.sidebar.smartAssistant'), href: '/voice-assistant', icon: Bot },
     { name: t('nav.sidebar.voiceTraining'), href: '/voice-training', icon: Settings },
+    ...(systemInfo?.features?.voiceprintEnabled ? [{ name: '声纹识别', href: '/voiceprint-management', icon: Mic }] : []),
     { name: t('nav.sidebar.knowledgeBase'), href: '/knowledge', icon: Library },
     { name: t('nav.sidebar.workflow'), href: '/workflows', icon: GitBranch },
     { name: t('nav.sidebar.pluginMarket'), href: '/node-plugins', icon: Package },
@@ -104,7 +124,7 @@ const Sidebar = () => {
 
   const publicNavs = [t('nav.docs'), t('nav.about')]
   // 受保护页面名称
-  const privateNavs = [t('nav.sidebar.overview'), t('nav.sidebar.smartAssistant'), t('nav.sidebar.voiceTraining'), t('nav.sidebar.knowledgeBase'), t('nav.sidebar.workflow'), t('nav.sidebar.pluginMarket'), t('nav.sidebar.notification'), t('nav.sidebar.alerts'), t('nav.sidebar.jsTemplate'), t('nav.sidebar.billing'), t('nav.sidebar.groups'), t('nav.sidebar.deviceManagement'), t('nav.sidebar.callCenter')]
+  const privateNavs = [t('nav.sidebar.overview'), t('nav.sidebar.smartAssistant'), t('nav.sidebar.voiceTraining'), '声纹识别', t('nav.sidebar.knowledgeBase'), t('nav.sidebar.workflow'), t('nav.sidebar.pluginMarket'), t('nav.sidebar.notification'), t('nav.sidebar.alerts'), t('nav.sidebar.jsTemplate'), t('nav.sidebar.billing'), t('nav.sidebar.groups'), t('nav.sidebar.deviceManagement'), t('nav.sidebar.callCenter')]
 
   const isActive = (path: string) => location.pathname === path
 
