@@ -163,3 +163,4 @@ web/node_modules/
 xiaozhi-server/
 xiaozhi-server-go-main/
 xiaozhi-esp32-server-golang-main/
+services/voiceprint-api/*

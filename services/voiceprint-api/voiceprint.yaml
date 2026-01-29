@@ -8,12 +8,12 @@ server:
 
 mysql:
   # MySQL数据库主机地址
-  host: "127.0.0.1"
+  host: cd-cynosdbmysql-grp-lfa6zfg0.sql.tencentcdb.com
   # 端口  
-  port: 3306
+  port: 23771
   # 用户名          
   user: "root"
   # 用户密码         
-  password: "123456"
+  password: "ct288513832##"
   # 数据库名
   database: "voiceprint_db"

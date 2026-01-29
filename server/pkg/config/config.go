@@ -4,6 +4,7 @@ import (
 	"errors"
 	"log"
 	"os"
+	"strconv"
 	"time"
 
 	"github.com/LingByte/lingstorage-sdk-go"
@@ -145,8 +146,9 @@ type Neo4jConfig struct {
 
 // VoiceConfig voice service configuration
 type VoiceConfig struct {
-	Qiniu  QiniuVoiceConfig  `mapstructure:"qiniu"`
-	Xunfei XunfeiVoiceConfig `mapstructure:"xunfei"`
+	Qiniu      QiniuVoiceConfig  `mapstructure:"qiniu"`
+	Xunfei     XunfeiVoiceConfig `mapstructure:"xunfei"`
+	Voiceprint VoiceprintConfig  `mapstructure:"voiceprint"`
 }
 
 // QiniuVoiceConfig Qiniu voice configuration
@@ -162,6 +164,23 @@ type XunfeiVoiceConfig struct {
 	WSAppId     string `env:"XUNFEI_WS_APP_ID"`
 	WSAPIKey    string `env:"XUNFEI_WS_API_KEY"`
 	WSAPISecret string `env:"XUNFEI_WS_API_SECRET"`
+}
+
+// VoiceprintConfig Voiceprint service configuration
+type VoiceprintConfig struct {
+	Enabled             bool          `env:"VOICEPRINT_ENABLED"`
+	BaseURL             string        `env:"VOICEPRINT_BASE_URL"`
+	APIKey              string        `env:"VOICEPRINT_API_KEY"`
+	Timeout             time.Duration `env:"VOICEPRINT_TIMEOUT"`
+	ConnectTimeout      time.Duration `env:"VOICEPRINT_CONNECT_TIMEOUT"`
+	MaxRetries          int           `env:"VOICEPRINT_MAX_RETRIES"`
+	RetryInterval       time.Duration `env:"VOICEPRINT_RETRY_INTERVAL"`
+	SimilarityThreshold float64       `env:"VOICEPRINT_SIMILARITY_THRESHOLD"`
+	MaxCandidates       int           `env:"VOICEPRINT_MAX_CANDIDATES"`
+	CacheEnabled        bool          `env:"VOICEPRINT_CACHE_ENABLED"`
+	CacheTTL            time.Duration `env:"VOICEPRINT_CACHE_TTL"`
+	LogEnabled          bool          `env:"VOICEPRINT_LOG_ENABLED"`
+	LogLevel            string        `env:"VOICEPRINT_LOG_LEVEL"`
 }
 
 // StorageConfig storage configuration
@@ -355,6 +374,21 @@ func Load() error {
 					WSAPIKey:    getStringOrDefault("XUNFEI_WS_API_KEY", ""),
 					WSAPISecret: getStringOrDefault("XUNFEI_WS_API_SECRET", ""),
 				},
+				Voiceprint: VoiceprintConfig{
+					Enabled:             getBoolOrDefault("VOICEPRINT_ENABLED", false),
+					BaseURL:             getStringOrDefault("VOICEPRINT_BASE_URL", "http://localhost:8005"),
+					APIKey:              getStringOrDefault("VOICEPRINT_API_KEY", ""),
+					Timeout:             parseDuration(getStringOrDefault("VOICEPRINT_TIMEOUT", "30s"), 30*time.Second),
+					ConnectTimeout:      parseDuration(getStringOrDefault("VOICEPRINT_CONNECT_TIMEOUT", "10s"), 10*time.Second),
+					MaxRetries:          getIntOrDefault("VOICEPRINT_MAX_RETRIES", 3),
+					RetryInterval:       parseDuration(getStringOrDefault("VOICEPRINT_RETRY_INTERVAL", "1s"), 1*time.Second),
+					SimilarityThreshold: getFloatOrDefault("VOICEPRINT_SIMILARITY_THRESHOLD", 0.6),
+					MaxCandidates:       getIntOrDefault("VOICEPRINT_MAX_CANDIDATES", 10),
+					CacheEnabled:        getBoolOrDefault("VOICEPRINT_CACHE_ENABLED", true),
+					CacheTTL:            parseDuration(getStringOrDefault("VOICEPRINT_CACHE_TTL", "5m"), 5*time.Minute),
+					LogEnabled:          getBoolOrDefault("VOICEPRINT_LOG_ENABLED", true),
+					LogLevel:            getStringOrDefault("VOICEPRINT_LOG_LEVEL", "info"),
+				},
 			},
 			Storage: StorageConfig{
 				BaseURL:   getStringOrDefault("LINGSTORAGE_BASE_URL", "https://api.lingstorage.com"),
@@ -462,6 +496,31 @@ func getIntOrDefault(key string, defaultValue int) int {
 	return int(value)
 }
 
+// getFloatOrDefault gets float environment variable value, returns default if empty
+func getFloatOrDefault(key string, defaultValue float64) float64 {
+	value := utils.GetEnv(key)
+	if value == "" {
+		return defaultValue
+	}
+	// 简单的字符串到float64转换
+	if f, err := strconv.ParseFloat(value, 64); err == nil {
+		return f
+	}
+	return defaultValue
+}
+
+// parseDuration parses duration string with default fallback
+func parseDuration(s string, defaultVal time.Duration) time.Duration {
+	if s == "" {
+		return defaultVal
+	}
+	d, err := time.ParseDuration(s)
+	if err != nil {
+		return defaultVal
+	}
+	return d
+}
+
 // generateDefaultSessionSecret generates default session secret (for development only)
 func generateDefaultSessionSecret() string {
 	if secret := utils.GetEnv("SESSION_SECRET"); secret != "" {
@@ -475,16 +534,6 @@ func loadCacheConfig() cache.Config {
 	cacheType := utils.GetEnv("CACHE_TYPE")
 	if cacheType == "" {
 		cacheType = "local"
-	}
-	parseDuration := func(s string, defaultVal time.Duration) time.Duration {
-		if s == "" {
-			return defaultVal
-		}
-		d, err := time.ParseDuration(s)
-		if err != nil {
-			return defaultVal
-		}
-		return d
 	}
 	redisAddr := utils.GetEnv("REDIS_ADDR")
 	if redisAddr == "" {
@@ -531,16 +580,6 @@ func loadCacheConfig() cache.Config {
 
 // loadMiddlewareConfig loads middleware configuration
 func loadMiddlewareConfig() MiddlewareConfig {
-	parseDuration := func(s string, defaultVal time.Duration) time.Duration {
-		if s == "" {
-			return defaultVal
-		}
-		d, err := time.ParseDuration(s)
-		if err != nil {
-			return defaultVal
-		}
-		return d
-	}
 	mode := getStringOrDefault("MODE", "development")
 	var defaultConfig MiddlewareConfig
 

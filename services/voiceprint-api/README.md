@@ -2,6 +2,8 @@
 
 基于3D-Speaker模型的声纹识别服务，提供声纹注册、识别、删除等功能。
 
+目前用于xiaozhi说话人识别，[xiaozhi-esp32-server](https://github.com/xinnan-tech/xiaozhi-esp32-server)
+
 ## 🛠️ 安装和配置
 
 ### 1. 安装依赖
@@ -57,18 +59,4 @@ python start_server.py
 ## 📚 API文档
 
 启动服务后，访问以下地址查看API文档：
-- Swagger UI: http://localhost:7074/voiceprint/docs
-
-```bash
-# 创建新的虚拟环境                        
-python3.10 -m venv venv                                                      
-source venv/bin/activate       
-
-# 安装依赖
-pip install --upgrade pip setuptools wheel
-pip install torch torchaudio --index-url https://download.pytorch.org/whl/cpu
-pip install -r requirements.txt
-
-# 启动服务
-python -m app.main
-```
+- Swagger UI: http://localhost:8005/voiceprint/docs

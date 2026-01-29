@@ -57,11 +57,11 @@ class VoiceprintService:
         logger.start("开始模型预热")
 
         try:
-            # 预热音频重采样组件
-            logger.debug("预热音频重采样组件...")
+            # 预热librosa重采样组件
+            logger.debug("预热librosa重采样组件...")
+            import librosa
             import soundfile as sf
             import tempfile
-            from scipy import signal
 
             # 生成一个更真实的测试音频（1秒的随机音频，模拟真实语音）
             sample_rate = 16000
@@ -81,8 +81,9 @@ class VoiceprintService:
                 with tempfile.NamedTemporaryFile(suffix=".wav", delete=False) as tmpf:
                     # 生成测试采样率的音频
                     test_samples = int(test_rate * duration)
-                    # 使用 scipy 重采样（不依赖 librosa/numba）
-                    test_audio_resampled = signal.resample(test_audio, test_samples)
+                    test_audio_resampled = librosa.resample(
+                        test_audio, orig_sr=sample_rate, target_sr=test_rate
+                    )
                     sf.write(tmpf.name, test_audio_resampled, test_rate)
                     temp_audio_path = tmpf.name
 

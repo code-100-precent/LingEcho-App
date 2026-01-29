@@ -1,19 +1,12 @@
 import os
 import tempfile
 import soundfile as sf
+import librosa
 import numpy as np
 import time
 from typing import Tuple
-from scipy import signal
 from ..core.config import settings
 from ..core.logger import get_logger
-
-# 尝试导入 librosa，如果失败则使用 scipy
-try:
-    import librosa
-    HAS_LIBROSA = True
-except ImportError:
-    HAS_LIBROSA = False
 
 logger = get_logger(__name__)
 
@@ -56,39 +49,25 @@ class AudioProcessor:
             )
 
             if sr != self.target_sample_rate:
-                # 音频重采样，支持多通道
+                # librosa重采样，支持多通道
                 resample_start = time.time()
                 logger.debug(f"开始音频重采样: {sr}Hz -> {self.target_sample_rate}Hz")
 
-                if HAS_LIBROSA:
-                    # 使用 librosa（如果可用）
-                    if data.ndim == 1:
-                        data_rs = librosa.resample(
-                            data, orig_sr=sr, target_sr=self.target_sample_rate
-                        )
-                    else:
-                        data_rs = np.vstack(
-                            [
-                                librosa.resample(
-                                    data[:, ch],
-                                    orig_sr=sr,
-                                    target_sr=self.target_sample_rate,
-                                )
-                                for ch in range(data.shape[1])
-                            ]
-                        ).T
+                if data.ndim == 1:
+                    data_rs = librosa.resample(
+                        data, orig_sr=sr, target_sr=self.target_sample_rate
+                    )
                 else:
-                    # 使用 scipy.signal.resample（不依赖 numba）
-                    num_samples = int(len(data) * self.target_sample_rate / sr)
-                    if data.ndim == 1:
-                        data_rs = signal.resample(data, num_samples)
-                    else:
-                        data_rs = np.vstack(
-                            [
-                                signal.resample(data[:, ch], num_samples)
-                                for ch in range(data.shape[1])
-                            ]
-                        ).T
+                    data_rs = np.vstack(
+                        [
+                            librosa.resample(
+                                data[:, ch],
+                                orig_sr=sr,
+                                target_sr=self.target_sample_rate,
+                            )
+                            for ch in range(data.shape[1])
+                        ]
+                    ).T
 
                 resample_time = time.time() - resample_start
                 logger.debug(f"音频重采样完成，耗时: {resample_time:.3f}秒")
