@@ -1,10 +1,11 @@
 import { useState, useEffect } from 'react'
 import { motion } from 'framer-motion'
-import { Mic, Users, Shield, Save, Plus, Trash2, User, Volume2, Bot, AlertCircle } from 'lucide-react'
+import { Mic, Users, Shield, Save, Plus, Trash2, User, Volume2, Bot, AlertCircle, Play, TestTube } from 'lucide-react'
 import Card, { CardContent, CardHeader, CardTitle } from '@/components/UI/Card'
 import Button from '@/components/UI/Button'
 import Input from '@/components/UI/Input'
 import Modal, { ModalContent, ModalHeader, ModalTitle } from '@/components/UI/Modal'
+import VoiceprintDeleteConfirm from '@/components/Voice/VoiceprintDeleteConfirm'
 import { showAlert } from '@/utils/notification'
 import { getSystemInit, SystemInitInfo } from '@/api/system'
 import { getAssistantList, AssistantListItem } from '@/api/assistant'
@@ -15,7 +16,11 @@ import {
   getVoiceprints,
   registerVoiceprint,
   deleteVoiceprint,
-  VoiceprintRecord
+  identifyVoiceprint,
+  verifyVoiceprint,
+  VoiceprintRecord,
+  VoiceprintIdentifyResponse,
+  VoiceprintVerifyResponse
 } from '@/api/voiceprint'
 
 const VoiceprintManagement = () => {
@@ -26,7 +31,19 @@ const VoiceprintManagement = () => {
   const [systemInfo, setSystemInfo] = useState<SystemInitInfo | null>(null)
   const [voiceprints, setVoiceprints] = useState<VoiceprintRecord[]>([])
   const [showAddModal, setShowAddModal] = useState(false)
+  const [showTestModal, setShowTestModal] = useState(false)
+  const [showVerifyModal, setShowVerifyModal] = useState(false)
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false)
+  const [selectedVoiceprint, setSelectedVoiceprint] = useState<VoiceprintRecord | null>(null)
+  const [voiceprintToDelete, setVoiceprintToDelete] = useState<VoiceprintRecord | null>(null)
   const [newSpeaker, setNewSpeaker] = useState({ name: '', audioFile: null as File | null })
+  const [testAudioFile, setTestAudioFile] = useState<File | null>(null)
+  const [verifyAudioFile, setVerifyAudioFile] = useState<File | null>(null)
+  const [testResult, setTestResult] = useState<VoiceprintIdentifyResponse | null>(null)
+  const [verifyResult, setVerifyResult] = useState<VoiceprintVerifyResponse | null>(null)
+  const [isTestingVoiceprint, setIsTestingVoiceprint] = useState(false)
+  const [isVerifyingVoiceprint, setIsVerifyingVoiceprint] = useState(false)
+  const [isDeletingVoiceprint, setIsDeletingVoiceprint] = useState(false)
 
   // 获取助手列表
   useEffect(() => {
@@ -125,19 +142,111 @@ const VoiceprintManagement = () => {
     }
   }
 
-  const handleDeleteVoiceprint = async (voiceprintId: number, speakerName: string) => {
-    if (!confirm(t('voiceprint.delete.confirm'))) return
+  const handleDeleteVoiceprint = async (voiceprint: VoiceprintRecord) => {
+    setVoiceprintToDelete(voiceprint)
+    setShowDeleteConfirm(true)
+  }
 
+  const confirmDeleteVoiceprint = async () => {
+    if (!voiceprintToDelete) return
+
+    setIsDeletingVoiceprint(true)
     try {
-      const response = await deleteVoiceprint(voiceprintId)
+      const response = await deleteVoiceprint(voiceprintToDelete.id)
       if (response.code === 200) {
-        showAlert(`${t('voiceprint.delete.success')} ${speakerName}`, 'success', t('voiceprint.delete.success'))
+        showAlert(`${t('voiceprint.delete.success')} ${voiceprintToDelete.speaker_name}`, 'success', t('voiceprint.delete.success'))
         await loadVoiceprints()
+        setShowDeleteConfirm(false)
+        setVoiceprintToDelete(null)
       } else {
         throw new Error(response.msg || t('voiceprint.delete.failed'))
       }
     } catch (error: any) {
       showAlert(error?.msg || error?.message || t('voiceprint.delete.failed'), 'error', t('voiceprint.delete.failed'))
+    } finally {
+      setIsDeletingVoiceprint(false)
+    }
+  }
+
+  // 测试声纹识别（识别所有声纹）
+  const handleTestVoiceprint = async () => {
+    if (!testAudioFile || !selectedAssistantId) {
+      showAlert('请选择音频文件', 'warning', '参数错误')
+      return
+    }
+
+    setIsTestingVoiceprint(true)
+    try {
+      const response = await identifyVoiceprint(selectedAssistantId, testAudioFile)
+      if (response.code === 200) {
+        setTestResult(response.data)
+        if (response.data.is_match) {
+          const matchedVoiceprint = voiceprints.find(v => v.speaker_id === response.data.speaker_id)
+          showAlert(`识别成功！匹配到：${matchedVoiceprint?.speaker_name || response.data.speaker_id}`, 'success', '识别结果')
+        } else {
+          showAlert('未找到匹配的声纹', 'info', '识别结果')
+        }
+      } else {
+        throw new Error(response.msg || '识别失败')
+      }
+    } catch (error: any) {
+      showAlert(error?.msg || error?.message || '声纹识别失败', 'error', '识别失败')
+      setTestResult(null)
+    } finally {
+      setIsTestingVoiceprint(false)
+    }
+  }
+
+  // 验证特定声纹
+  const handleVerifyVoiceprint = async () => {
+    if (!verifyAudioFile || !selectedVoiceprint || !selectedAssistantId) {
+      showAlert('请选择音频文件和要验证的声纹', 'warning', '参数错误')
+      return
+    }
+
+    setIsVerifyingVoiceprint(true)
+    try {
+      const response = await verifyVoiceprint(selectedAssistantId, selectedVoiceprint.speaker_id, verifyAudioFile)
+      if (response.code === 200) {
+        setVerifyResult(response.data)
+        if (response.data.verification_passed) {
+          showAlert(`验证成功！确认是 ${selectedVoiceprint.speaker_name}`, 'success', '验证结果')
+        } else if (response.data.is_match && !response.data.is_target_speaker) {
+          const matchedVoiceprint = voiceprints.find(v => v.speaker_id === response.data.identified_speaker_id)
+          showAlert(`验证失败！识别为其他人：${matchedVoiceprint?.speaker_name || response.data.identified_speaker_id}`, 'warning', '验证结果')
+        } else {
+          showAlert(`验证失败！未能识别为 ${selectedVoiceprint.speaker_name}`, 'error', '验证结果')
+        }
+      } else {
+        throw new Error(response.msg || '验证失败')
+      }
+    } catch (error: any) {
+      showAlert(error?.msg || error?.message || '声纹验证失败', 'error', '验证失败')
+      setVerifyResult(null)
+    } finally {
+      setIsVerifyingVoiceprint(false)
+    }
+  }
+
+  const getConfidenceColor = (confidence: string) => {
+    switch (confidence) {
+      case 'very_high': return 'text-green-600 dark:text-green-400'
+      case 'high': return 'text-blue-600 dark:text-blue-400'
+      case 'medium': return 'text-yellow-600 dark:text-yellow-400'
+      case 'low': return 'text-orange-600 dark:text-orange-400'
+      case 'very_low': return 'text-red-600 dark:text-red-400'
+      default: return 'text-gray-600 dark:text-gray-400'
+    }
+  }
+
+  const getConfidenceText = (confidence: string) => {
+    switch (confidence) {
+      case 'very_high': return '非常高'
+      case 'high': return '高'
+      case 'medium': return '中等'
+      case 'low': return '低'
+      case 'very_low': return '非常低'
+      default: return '未知'
     }
   }
 
@@ -248,6 +357,14 @@ const VoiceprintManagement = () => {
                     </h2>
                     <div className="flex gap-3">
                       <Button
+                        variant="outline"
+                        onClick={() => setShowTestModal(true)}
+                        leftIcon={<TestTube className="w-4 h-4" />}
+                        disabled={!systemInfo?.voiceprint?.enabled || voiceprints.length === 0}
+                      >
+                        测试识别
+                      </Button>
+                      <Button
                         variant="primary"
                         onClick={() => setShowAddModal(true)}
                         leftIcon={<Plus className="w-4 h-4" />}
@@ -318,7 +435,19 @@ const VoiceprintManagement = () => {
                                 <Button
                                   variant="ghost"
                                   size="sm"
-                                  onClick={() => handleDeleteVoiceprint(voiceprint.id, voiceprint.speaker_name)}
+                                  onClick={() => {
+                                    setSelectedVoiceprint(voiceprint)
+                                    setShowVerifyModal(true)
+                                  }}
+                                  className="text-blue-600 dark:text-blue-400 hover:bg-blue-50 dark:hover:bg-blue-900/20"
+                                  title="验证此声纹"
+                                >
+                                  <Play className="w-4 h-4" />
+                                </Button>
+                                <Button
+                                  variant="ghost"
+                                  size="sm"
+                                  onClick={() => handleDeleteVoiceprint(voiceprint)}
                                   className="text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20"
                                 >
                                   <Trash2 className="w-4 h-4" />
@@ -462,6 +591,335 @@ const VoiceprintManagement = () => {
           </div>
         </ModalContent>
       </Modal>
+
+      {/* 测试识别模态框 */}
+      <Modal isOpen={showTestModal} onClose={() => {
+        setShowTestModal(false)
+        setTestAudioFile(null)
+        setTestResult(null)
+      }}>
+        <ModalContent className="max-w-2xl">
+          <div className="space-y-6">
+            <div className="bg-blue-50 dark:bg-blue-900/20 p-4 rounded-lg">
+              <div className="flex items-start space-x-3">
+                <Bot className="w-5 h-5 text-blue-600 dark:text-blue-400 mt-0.5 flex-shrink-0" />
+                <div>
+                  <p className="text-sm font-medium text-blue-900 dark:text-blue-100">
+                    当前助手: {selectedAssistant?.name}
+                  </p>
+                  <p className="text-xs text-blue-700 dark:text-blue-300 mt-1">
+                    将在该助手的 {voiceprints.length} 个声纹中进行识别
+                  </p>
+                </div>
+              </div>
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-3">
+                选择测试音频 <span className="text-red-500">*</span>
+              </label>
+              <AudioFileUpload
+                onFileSelect={setTestAudioFile}
+                placeholder="选择WAV音频文件进行声纹识别测试"
+                maxSize={50}
+                required
+              />
+              <p className="text-xs text-gray-500 dark:text-gray-400 mt-2">
+                建议使用清晰、无噪音的音频文件，时长3-10秒
+              </p>
+            </div>
+
+            <div className="flex justify-center">
+              <Button
+                variant="primary"
+                onClick={handleTestVoiceprint}
+                loading={isTestingVoiceprint}
+                disabled={!testAudioFile}
+                leftIcon={<Play className="w-4 h-4" />}
+                className="px-8"
+              >
+                {isTestingVoiceprint ? '识别中...' : '开始识别'}
+              </Button>
+            </div>
+
+            {testResult && (
+              <div className="mt-6 p-4 bg-gray-50 dark:bg-gray-800/50 rounded-lg">
+                <h4 className="font-medium text-gray-900 dark:text-white mb-3 flex items-center gap-2">
+                  <Volume2 className="w-4 h-4" />
+                  识别结果
+                </h4>
+                <div className="space-y-3">
+                  <div className="flex justify-between items-center">
+                    <span className="text-sm text-gray-600 dark:text-gray-400">识别的说话人:</span>
+                    <span className="font-medium text-gray-900 dark:text-white">
+                      {testResult.speaker_id ? (
+                        voiceprints.find(v => v.speaker_id === testResult.speaker_id)?.speaker_name || testResult.speaker_id
+                      ) : '未识别'}
+                    </span>
+                  </div>
+                  <div className="flex justify-between items-center">
+                    <span className="text-sm text-gray-600 dark:text-gray-400">相似度分数:</span>
+                    <span className="font-medium text-gray-900 dark:text-white">
+                      {(testResult.score * 100).toFixed(2)}%
+                    </span>
+                  </div>
+                  <div className="flex justify-between items-center">
+                    <span className="text-sm text-gray-600 dark:text-gray-400">置信度:</span>
+                    <span className={`font-medium ${getConfidenceColor(testResult.confidence)}`}>
+                      {getConfidenceText(testResult.confidence)}
+                    </span>
+                  </div>
+                  <div className="flex justify-between items-center">
+                    <span className="text-sm text-gray-600 dark:text-gray-400">匹配状态:</span>
+                    <span className={`font-medium flex items-center gap-1 ${testResult.is_match ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'}`}>
+                      {testResult.is_match ? (
+                        <>
+                          <Shield className="w-4 h-4" />
+                          匹配成功
+                        </>
+                      ) : (
+                        <>
+                          <AlertCircle className="w-4 h-4" />
+                          未匹配
+                        </>
+                      )}
+                    </span>
+                  </div>
+                  
+                  {/* 相似度进度条 */}
+                  <div className="mt-4">
+                    <div className="flex justify-between text-xs text-gray-500 dark:text-gray-400 mb-1">
+                      <span>相似度</span>
+                      <span>{(testResult.score * 100).toFixed(1)}%</span>
+                    </div>
+                    <div className="w-full bg-gray-200 dark:bg-gray-700 rounded-full h-2">
+                      <div
+                        className={`h-2 rounded-full transition-all duration-300 ${
+                          testResult.score >= 0.8 ? 'bg-green-500' :
+                          testResult.score >= 0.6 ? 'bg-blue-500' :
+                          testResult.score >= 0.4 ? 'bg-yellow-500' :
+                          testResult.score >= 0.2 ? 'bg-orange-500' : 'bg-red-500'
+                        }`}
+                        style={{ width: `${testResult.score * 100}%` }}
+                      />
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
+            <div className="flex justify-end gap-3 pt-4 border-t border-gray-200 dark:border-gray-700">
+              <Button
+                variant="ghost"
+                onClick={() => {
+                  setShowTestModal(false)
+                  setTestAudioFile(null)
+                  setTestResult(null)
+                }}
+              >
+                关闭
+              </Button>
+            </div>
+          </div>
+        </ModalContent>
+      </Modal>
+
+      {/* 验证声纹模态框 */}
+      <Modal isOpen={showVerifyModal} onClose={() => {
+        setShowVerifyModal(false)
+        setVerifyAudioFile(null)
+        setVerifyResult(null)
+        setSelectedVoiceprint(null)
+      }}>
+        <ModalContent className="max-w-2xl">
+          <ModalHeader>
+            <ModalTitle className="flex items-center gap-2">
+              <Shield className="w-5 h-5" />
+              验证声纹
+            </ModalTitle>
+          </ModalHeader>
+          <div className="space-y-6">
+            {selectedVoiceprint && (
+              <div className="bg-purple-50 dark:bg-purple-900/20 p-4 rounded-lg">
+                <div className="flex items-start space-x-3">
+                  <User className="w-5 h-5 text-purple-600 dark:text-purple-400 mt-0.5 flex-shrink-0" />
+                  <div>
+                    <p className="text-sm font-medium text-purple-900 dark:text-purple-100">
+                      验证目标: {selectedVoiceprint.speaker_name}
+                    </p>
+                    <p className="text-xs text-purple-700 dark:text-purple-300 mt-1">
+                      ID: {selectedVoiceprint.speaker_id}
+                    </p>
+                    <p className="text-xs text-purple-700 dark:text-purple-300">
+                      注册时间: {new Date(selectedVoiceprint.created_at).toLocaleString()}
+                    </p>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            <div>
+              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-3">
+                选择验证音频 <span className="text-red-500">*</span>
+              </label>
+              <AudioFileUpload
+                onFileSelect={setVerifyAudioFile}
+                placeholder="选择WAV音频文件验证是否为目标说话人"
+                maxSize={50}
+                required
+              />
+              <p className="text-xs text-gray-500 dark:text-gray-400 mt-2">
+                上传音频将与目标声纹进行比对验证
+              </p>
+            </div>
+
+            <div className="flex justify-center">
+              <Button
+                variant="primary"
+                onClick={handleVerifyVoiceprint}
+                loading={isVerifyingVoiceprint}
+                disabled={!verifyAudioFile || !selectedVoiceprint}
+                leftIcon={<Shield className="w-4 h-4" />}
+                className="px-8"
+              >
+                {isVerifyingVoiceprint ? '验证中...' : '开始验证'}
+              </Button>
+            </div>
+
+            {verifyResult && selectedVoiceprint && (
+              <div className="mt-6 p-4 bg-gray-50 dark:bg-gray-800/50 rounded-lg">
+                <h4 className="font-medium text-gray-900 dark:text-white mb-3 flex items-center gap-2">
+                  <Shield className="w-4 h-4" />
+                  验证结果
+                </h4>
+                <div className="space-y-3">
+                  <div className="flex justify-between items-center">
+                    <span className="text-sm text-gray-600 dark:text-gray-400">目标说话人:</span>
+                    <span className="font-medium text-gray-900 dark:text-white">
+                      {selectedVoiceprint.speaker_name}
+                    </span>
+                  </div>
+                  <div className="flex justify-between items-center">
+                    <span className="text-sm text-gray-600 dark:text-gray-400">识别结果:</span>
+                    <span className="font-medium text-gray-900 dark:text-white">
+                      {verifyResult.identified_speaker_id ? (
+                        voiceprints.find(v => v.speaker_id === verifyResult.identified_speaker_id)?.speaker_name || verifyResult.identified_speaker_id
+                      ) : '未识别'}
+                    </span>
+                  </div>
+                  <div className="flex justify-between items-center">
+                    <span className="text-sm text-gray-600 dark:text-gray-400">相似度分数:</span>
+                    <span className="font-medium text-gray-900 dark:text-white">
+                      {(verifyResult.score * 100).toFixed(2)}%
+                    </span>
+                  </div>
+                  <div className="flex justify-between items-center">
+                    <span className="text-sm text-gray-600 dark:text-gray-400">置信度:</span>
+                    <span className={`font-medium ${getConfidenceColor(verifyResult.confidence)}`}>
+                      {getConfidenceText(verifyResult.confidence)}
+                    </span>
+                  </div>
+                  <div className="flex justify-between items-center">
+                    <span className="text-sm text-gray-600 dark:text-gray-400">验证状态:</span>
+                    <span className={`font-medium flex items-center gap-1 ${
+                      verifyResult.verification_passed
+                        ? 'text-green-600 dark:text-green-400'
+                        : 'text-red-600 dark:text-red-400'
+                    }`}>
+                      {verifyResult.verification_passed ? (
+                        <>
+                          <Shield className="w-4 h-4" />
+                          验证通过
+                        </>
+                      ) : (
+                        <>
+                          <AlertCircle className="w-4 h-4" />
+                          验证失败
+                        </>
+                      )}
+                    </span>
+                  </div>
+                  
+                  {/* 相似度进度条 */}
+                  <div className="mt-4">
+                    <div className="flex justify-between text-xs text-gray-500 dark:text-gray-400 mb-1">
+                      <span>相似度</span>
+                      <span>{(verifyResult.score * 100).toFixed(1)}%</span>
+                    </div>
+                    <div className="w-full bg-gray-200 dark:bg-gray-700 rounded-full h-2">
+                      <div
+                        className={`h-2 rounded-full transition-all duration-300 ${
+                          verifyResult.verification_passed
+                            ? 'bg-green-500'
+                            : verifyResult.score >= 0.6
+                            ? 'bg-yellow-500'
+                            : 'bg-red-500'
+                        }`}
+                        style={{ width: `${verifyResult.score * 100}%` }}
+                      />
+                    </div>
+                  </div>
+
+                  {/* 验证说明 */}
+                  <div className={`mt-4 p-3 rounded-lg ${
+                    verifyResult.verification_passed
+                      ? 'bg-green-50 dark:bg-green-900/20'
+                      : 'bg-red-50 dark:bg-red-900/20'
+                  }`}>
+                    <p className={`text-sm ${
+                      verifyResult.verification_passed
+                        ? 'text-green-800 dark:text-green-200'
+                        : 'text-red-800 dark:text-red-200'
+                    }`}>
+                      {verifyResult.verification_passed
+                        ? `✓ 验证成功！音频确实来自 ${selectedVoiceprint.speaker_name}`
+                        : verifyResult.is_match && !verifyResult.is_target_speaker
+                        ? `✗ 验证失败！音频来自其他说话人：${voiceprints.find(v => v.speaker_id === verifyResult.identified_speaker_id)?.speaker_name || '未知'}`
+                        : `✗ 验证失败！音频不匹配任何已注册的声纹或置信度不足`
+                      }
+                    </p>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            <div className="text-xs text-gray-500 dark:text-gray-400 space-y-1">
+              <p>• 验证功能用于确认音频是否来自特定的说话人</p>
+              <p>• 验证通过需要同时满足：识别为目标说话人且置信度足够高</p>
+              <p>• 建议使用与注册时相似的音频质量进行验证</p>
+            </div>
+
+            <div className="flex justify-end gap-3 pt-4 border-t border-gray-200 dark:border-gray-700">
+              <Button
+                variant="ghost"
+                onClick={() => {
+                  setShowVerifyModal(false)
+                  setVerifyAudioFile(null)
+                  setVerifyResult(null)
+                  setSelectedVoiceprint(null)
+                }}
+              >
+                关闭
+              </Button>
+            </div>
+          </div>
+        </ModalContent>
+      </Modal>
+
+      {/* 删除确认对话框 */}
+      {voiceprintToDelete && (
+        <VoiceprintDeleteConfirm
+          isOpen={showDeleteConfirm}
+          onClose={() => {
+            setShowDeleteConfirm(false)
+            setVoiceprintToDelete(null)
+          }}
+          onConfirm={confirmDeleteVoiceprint}
+          voiceprintName={voiceprintToDelete.speaker_name}
+          speakerId={voiceprintToDelete.speaker_id}
+          createdAt={voiceprintToDelete.created_at}
+          loading={isDeletingVoiceprint}
+        />
+      )}
     </div>
   )
 }

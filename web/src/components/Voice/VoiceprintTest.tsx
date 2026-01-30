@@ -127,12 +127,6 @@ const VoiceprintTest = ({ assistantId, assistantName }: VoiceprintTestProps) => 
             </div>
           </div>
         )}
-
-        <div className="text-xs text-gray-500 dark:text-gray-400 space-y-1">
-          <p>• 测试音频将与当前助手下的所有注册声纹进行比对</p>
-          <p>• 建议使用清晰、无噪音的音频文件进行测试</p>
-          <p>• 识别结果仅供参考，实际效果可能因环境而异</p>
-        </div>
       </CardContent>
     </Card>
   )

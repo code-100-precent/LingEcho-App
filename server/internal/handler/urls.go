@@ -352,6 +352,7 @@ func (h *Handlers) registerSystemRoutes(r *gin.RouterGroup) {
 		voiceprint.POST("", models.AuthRequired, h.CreateVoiceprint)            // 创建声纹记录
 		voiceprint.POST("/register", models.AuthRequired, h.RegisterVoiceprint) // 注册声纹（上传音频）
 		voiceprint.POST("/identify", models.AuthRequired, h.IdentifyVoiceprint) // 声纹识别
+		voiceprint.POST("/verify", models.AuthRequired, h.VerifyVoiceprint)     // 声纹验证
 		voiceprint.PUT("/:id", models.AuthRequired, h.UpdateVoiceprint)         // 更新声纹记录
 		voiceprint.DELETE("/:id", models.AuthRequired, h.DeleteVoiceprint)      // 删除声纹记录
 	}

@@ -39,6 +39,17 @@ export interface VoiceprintIdentifyResponse {
   is_match: boolean
 }
 
+// 声纹验证响应
+export interface VoiceprintVerifyResponse {
+  target_speaker_id: string
+  identified_speaker_id: string
+  score: number
+  confidence: string
+  is_match: boolean
+  is_target_speaker: boolean
+  verification_passed: boolean
+}
+
 // 获取声纹列表
 export const getVoiceprints = async (assistantId: string): Promise<ApiResponse<VoiceprintListResponse>> => {
   return get(`/voiceprint?assistant_id=${assistantId}`)
@@ -83,4 +94,18 @@ export const identifyVoiceprint = async (
   formData.append('audio_file', audioFile)
 
   return post('/voiceprint/identify', formData)
+}
+
+// 声纹验证
+export const verifyVoiceprint = async (
+  assistantId: string,
+  speakerId: string,
+  audioFile: File
+): Promise<ApiResponse<VoiceprintVerifyResponse>> => {
+  const formData = new FormData()
+  formData.append('assistant_id', assistantId)
+  formData.append('speaker_id', speakerId)
+  formData.append('audio_file', audioFile)
+
+  return post('/voiceprint/verify', formData)
 }

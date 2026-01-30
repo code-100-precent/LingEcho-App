@@ -245,6 +245,107 @@ func (h *Handlers) DeleteVoiceprint(c *gin.Context) {
 	response.Success(c, "Voiceprint deleted successfully", nil)
 }
 
+// VerifyVoiceprint 验证特定声纹
+func (h *Handlers) VerifyVoiceprint(c *gin.Context) {
+	assistantID := c.PostForm("assistant_id")
+	speakerID := c.PostForm("speaker_id")
+
+	if assistantID == "" || speakerID == "" {
+		response.Fail(c, "assistant_id and speaker_id are required", nil)
+		return
+	}
+
+	// 获取上传的音频文件
+	file, header, err := c.Request.FormFile("audio_file")
+	if err != nil {
+		response.Fail(c, "Failed to get audio file: "+err.Error(), nil)
+		return
+	}
+	defer file.Close()
+
+	// 验证文件格式
+	if !strings.HasSuffix(strings.ToLower(header.Filename), ".wav") {
+		response.Fail(c, "Only WAV format is supported", nil)
+		return
+	}
+
+	// 读取音频数据
+	audioData, err := io.ReadAll(file)
+	if err != nil {
+		response.Fail(c, "Failed to read audio file: "+err.Error(), nil)
+		return
+	}
+
+	// 验证目标声纹是否存在
+	var targetVoiceprint models.Voiceprint
+	if err := h.db.Where("speaker_id = ? AND assistant_id = ?", speakerID, assistantID).First(&targetVoiceprint).Error; err != nil {
+		if err == gorm.ErrRecordNotFound {
+			response.Fail(c, "Target voiceprint not found", nil)
+		} else {
+			response.Fail(c, "Database error: "+err.Error(), nil)
+		}
+		return
+	}
+
+	// 获取该助手下的所有声纹记录（用于识别）
+	var voiceprints []models.Voiceprint
+	if err := h.db.Where("assistant_id = ?", assistantID).Find(&voiceprints).Error; err != nil {
+		response.Fail(c, "Failed to get voiceprints: "+err.Error(), nil)
+		return
+	}
+
+	if len(voiceprints) == 0 {
+		response.Fail(c, "No voiceprints found for this assistant", nil)
+		return
+	}
+
+	// 构建候选ID列表
+	candidateIDs := make([]string, len(voiceprints))
+	for i, vp := range voiceprints {
+		candidateIDs[i] = vp.SpeakerID
+	}
+
+	// 调用voiceprint-api进行识别
+	identifiedSpeakerID, score, err := h.callVoiceprintIdentifyAPI(candidateIDs, assistantID, audioData)
+	if err != nil {
+		response.Fail(c, "Failed to verify voiceprint: "+err.Error(), nil)
+		return
+	}
+
+	// 判断是否为目标说话人
+	isTargetSpeaker := identifiedSpeakerID == speakerID
+
+	// 获取置信度等级
+	confidence := "low"
+	isMatch := false
+	if score >= 0.8 {
+		confidence = "very_high"
+		isMatch = true
+	} else if score >= 0.6 {
+		confidence = "high"
+		isMatch = true
+	} else if score >= 0.4 {
+		confidence = "medium"
+	} else if score >= 0.2 {
+		confidence = "low"
+	} else {
+		confidence = "very_low"
+	}
+
+	// 验证结果：需要同时满足识别为目标说话人且置信度足够高
+	verificationPassed := isTargetSpeaker && isMatch
+
+	response.Success(c, "Verification completed", models.VoiceprintVerifyResponse{
+		TargetSpeakerID:     speakerID,
+		IdentifiedSpeakerID: identifiedSpeakerID,
+		Score:               score,
+		Confidence:          confidence,
+		IsMatch:             isMatch,
+		IsTargetSpeaker:     isTargetSpeaker,
+		VerificationPassed:  verificationPassed,
+	})
+}
+
 // IdentifyVoiceprint 声纹识别
 func (h *Handlers) IdentifyVoiceprint(c *gin.Context) {
 	assistantID := c.PostForm("assistant_id")

@@ -71,3 +71,14 @@ type VoiceprintIdentifyResponse struct {
 	Confidence string  `json:"confidence"`
 	IsMatch    bool    `json:"is_match"`
 }
+
+// VoiceprintVerifyResponse 声纹验证响应
+type VoiceprintVerifyResponse struct {
+	TargetSpeakerID     string  `json:"target_speaker_id"`     // 目标说话人ID
+	IdentifiedSpeakerID string  `json:"identified_speaker_id"` // 识别出的说话人ID
+	Score               float64 `json:"score"`                 // 相似度分数
+	Confidence          string  `json:"confidence"`            // 置信度等级
+	IsMatch             bool    `json:"is_match"`              // 是否匹配（基于置信度阈值）
+	IsTargetSpeaker     bool    `json:"is_target_speaker"`     // 是否为目标说话人
+	VerificationPassed  bool    `json:"verification_passed"`   // 验证是否通过
+}
