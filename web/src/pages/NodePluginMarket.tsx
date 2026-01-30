@@ -24,7 +24,7 @@ import Card from '@/components/UI/Card'
 import Badge from '@/components/UI/Badge'
 import Modal from '@/components/UI/Modal'
 import ConfirmDialog from '@/components/UI/ConfirmDialog'
-import { useToast } from '@/components/UI/ToastContainer'
+import { showAlert } from '@/utils/notification'
 import { workflowPluginService, WorkflowPlugin, WorkflowPluginCategory } from '@/api/workflowPlugin'
 import { workflowService } from '@/api/workflow'
 import { useAuthStore } from '@/stores/authStore'
@@ -53,7 +53,6 @@ const categoryColors = {
 
 const NodePluginMarket: React.FC = () => {
   const { isAuthenticated, user } = useAuthStore()
-  const toast = useToast()
   const [plugins, setPlugins] = useState<WorkflowPlugin[]>([])
   const [loading, setLoading] = useState(true)
   const [searchKeyword, setSearchKeyword] = useState('')
@@ -100,11 +99,11 @@ const NodePluginMarket: React.FC = () => {
         setTotalPages(Math.ceil(response.data.total / pageSize))
       } else {
         console.error('加载插件失败:', response.msg)
-        toast.error('加载失败', response.msg || '无法加载插件列表')
+        showAlert(response.msg || '无法加载插件列表', 'error', '加载失败')
       }
     } catch (error: any) {
       console.error('加载插件失败:', error)
-      toast.error('加载失败', error.message || '网络错误，请稍后重试')
+      showAlert(error.message || '网络错误，请稍后重试', 'error', '加载失败')
     } finally {
       setLoading(false)
     }
@@ -124,7 +123,7 @@ const NodePluginMarket: React.FC = () => {
       }
     } catch (error: any) {
       console.error('加载已安装插件失败:', error)
-      toast.error('加载失败', '无法加载已安装插件列表')
+      showAlert('无法加载已安装插件列表', 'error', '加载失败')
     }
   }
 
@@ -144,7 +143,7 @@ const NodePluginMarket: React.FC = () => {
   // 安装插件
   const handleInstallPlugin = async (plugin: WorkflowPlugin) => {
     if (!isAuthenticated) {
-      toast.warning('请先登录', '请先登录后再安装插件')
+      showAlert('请先登录后再安装插件', 'warning', '请先登录')
       return
     }
     
@@ -152,11 +151,11 @@ const NodePluginMarket: React.FC = () => {
       const response = await workflowPluginService.installWorkflowPlugin(plugin.id)
       if (response.data) {
         setInstalledPlugins(prev => new Set([...prev, plugin.id]))
-        toast.success('安装成功', `插件 "${plugin.displayName}" 已成功安装`)
+        showAlert(`插件 "${plugin.displayName}" 已成功安装`, 'success', '安装成功')
       }
     } catch (error: any) {
       console.error('安装插件失败:', error)
-      toast.error('安装失败', error.message || '安装插件时发生错误，请稍后重试')
+      showAlert(error.message || '安装插件时发生错误，请稍后重试', 'error', '安装失败')
     }
   }
 
@@ -174,7 +173,7 @@ const NodePluginMarket: React.FC = () => {
     try {
       const response = await workflowPluginService.deleteWorkflowPlugin(pluginToDelete.id)
       if (response.data) {
-        toast.success('删除成功', `插件 "${pluginToDelete.displayName}" 已成功删除`)
+        showAlert(`插件 "${pluginToDelete.displayName}" 已成功删除`, 'success', '删除成功')
         // 重新加载插件列表
         loadPlugins()
         setShowDeleteConfirm(false)
@@ -182,7 +181,7 @@ const NodePluginMarket: React.FC = () => {
       }
     } catch (error: any) {
       console.error('删除插件失败:', error)
-      toast.error('删除失败', error.message || '删除插件时发生错误，请稍后重试')
+      showAlert(error.message || '删除插件时发生错误，请稍后重试', 'error', '删除失败')
     } finally {
       setDeleteLoading(false)
     }
@@ -205,7 +204,7 @@ const NodePluginMarket: React.FC = () => {
       }
     } catch (error: any) {
       console.error('获取插件详情失败:', error)
-      toast.error('加载失败', '无法获取插件详情，请稍后重试')
+      showAlert('无法获取插件详情，请稍后重试', 'error', '加载失败')
     }
   }
 
@@ -350,7 +349,7 @@ const NodePluginMarket: React.FC = () => {
             <Button
               onClick={() => {
                 if (!isAuthenticated) {
-                  toast.warning('请先登录', '请先登录后再发布工作流')
+                  showAlert('请先登录后再发布工作流', 'warning', '请先登录')
                   return
                 }
                 console.log('发布工作流按钮被点击')
@@ -505,7 +504,7 @@ const NodePluginMarket: React.FC = () => {
         title="发布工作流为插件"
         size="xl"
       >
-        <PublishWorkflowModal onClose={() => setShowCreatePlugin(false)} toast={toast} />
+        <PublishWorkflowModal onClose={() => setShowCreatePlugin(false)} />
       </Modal>
 
       {/* 删除确认对话框 */}
@@ -701,8 +700,7 @@ const PluginDetailModal: React.FC<{
 // 发布工作流组件
 const PublishWorkflowModal: React.FC<{
   onClose: () => void
-  toast: any
-}> = ({ onClose, toast }) => {
+}> = ({ onClose }) => {
   const [workflows, setWorkflows] = useState<any[]>([])
   const [selectedWorkflow, setSelectedWorkflow] = useState<any>(null)
   const [formData, setFormData] = useState({
@@ -738,7 +736,7 @@ const PublishWorkflowModal: React.FC<{
         }
       } catch (error: any) {
         console.error('加载工作流失败:', error)
-        toast.error('加载失败', '无法加载工作流列表')
+        showAlert('无法加载工作流列表', 'error', '加载失败')
       }
     }
     
@@ -770,16 +768,16 @@ const PublishWorkflowModal: React.FC<{
 
       const response = await workflowPluginService.publishWorkflowAsPlugin(selectedWorkflow.id, pluginData)
       if (response.code === 200 && response.data) {
-        toast.success('发布成功', '插件已创建为草稿状态，请在状态过滤器中选择"草稿"查看')
+        showAlert('插件已创建为草稿状态，请在状态过滤器中选择"草稿"查看', 'success', '发布成功')
         onClose()
         // 刷新插件列表
         window.location.reload()
       } else {
-        toast.error('发布失败', response.msg || '未知错误')
+        showAlert(response.msg || '未知错误', 'error', '发布失败')
       }
     } catch (error: any) {
       console.error('发布工作流失败:', error)
-      toast.error('发布失败', error.msg || error.message || '网络错误')
+      showAlert(error.msg || error.message || '网络错误', 'error', '发布失败')
     } finally {
       setLoading(false)
     }

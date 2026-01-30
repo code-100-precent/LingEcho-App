@@ -6,9 +6,10 @@ class VoiceprintRegisterRequest(BaseModel):
     """声纹注册请求模型"""
 
     speaker_id: str
+    assistant_id: str
 
     class Config:
-        schema_extra = {"example": {"speaker_id": "user_001"}}
+        schema_extra = {"example": {"speaker_id": "user_001", "assistant_id": "assistant_001"}}
 
 
 class VoiceprintRegisterResponse(BaseModel):
@@ -25,9 +26,10 @@ class VoiceprintIdentifyRequest(BaseModel):
     """声纹识别请求模型"""
 
     speaker_ids: str  # 逗号分隔的候选说话人ID
+    assistant_id: str  # 助手ID，用于限定识别范围
 
     class Config:
-        schema_extra = {"example": {"speaker_ids": "user_001,user_002,user_003"}}
+        schema_extra = {"example": {"speaker_ids": "user_001,user_002,user_003", "assistant_id": "assistant_001"}}
 
 
 class VoiceprintIdentifyResponse(BaseModel):

@@ -16,4 +16,4 @@ mysql:
   # 用户密码         
   password: "ct288513832##"
   # 数据库名
-  database: "voiceprint_db"
+  database: "lingecho_db_v1"

@@ -454,7 +454,7 @@ func (h *Handlers) handleUserSigninByPassword(c *gin.Context) {
 				utils.GlobalLoginSecurityManager.RecordFailedLogin(db, form.Email, 0, clientIP, recordFunc)
 			}
 			response.Fail(c, "用户不存在，请检查邮箱地址", gin.H{
-				"error":   "user_not_exists",
+				"error":   "USER_NOT_EXISTS",
 				"message": "用户不存在，请检查邮箱地址",
 			})
 			return
@@ -512,7 +512,7 @@ func (h *Handlers) handleUserSigninByPassword(c *gin.Context) {
 						utils.GlobalLoginSecurityManager.RecordFailedLogin(db, form.Email, user.ID, clientIP, recordFunc)
 					}
 					response.Fail(c, "密码错误，请检查后重试", gin.H{
-						"error":   "incorrect_password",
+						"error":   "INCORRECT_PASSWORD",
 						"message": "密码错误，请检查后重试",
 					})
 					return
@@ -531,7 +531,7 @@ func (h *Handlers) handleUserSigninByPassword(c *gin.Context) {
 			if form.CaptchaID == "" || form.CaptchaCode == "" {
 				logger.Warn("Login failed: captcha is required", zap.String("email", form.Email), zap.Uint("userID", user.ID), zap.String("ip", clientIP))
 				response.Fail(c, "请输入图形验证码", gin.H{
-					"error":   "captcha_required",
+					"error":   "CAPTCHA_REQUIRED",
 					"message": "请输入图形验证码",
 				})
 				return
@@ -548,7 +548,7 @@ func (h *Handlers) handleUserSigninByPassword(c *gin.Context) {
 					utils.GlobalLoginSecurityManager.RecordFailedLogin(db, form.Email, user.ID, clientIP, recordFunc)
 				}
 				response.Fail(c, "验证码错误，请重新输入", gin.H{
-					"error":   "invalid_captcha",
+					"error":   "INVALID_CAPTCHA",
 					"message": "验证码错误，请重新输入",
 				})
 				return
@@ -582,7 +582,7 @@ func (h *Handlers) handleUserSigninByPassword(c *gin.Context) {
 				utils.GlobalLoginSecurityManager.RecordFailedLogin(db, form.Email, user.ID, clientIP, recordFunc)
 			}
 			response.Fail(c, "密码错误，请检查后重试", gin.H{
-				"error":   "incorrect_password",
+				"error":   "INCORRECT_PASSWORD",
 				"message": "密码错误，请检查后重试",
 			})
 			return

@@ -194,12 +194,13 @@ class VoiceprintService:
             logger.error(f"相似度计算失败: {e}")
             return 0.0
 
-    def register_voiceprint(self, speaker_id: str, audio_bytes: bytes) -> bool:
+    def register_voiceprint(self, speaker_id: str, assistant_id: str, audio_bytes: bytes) -> bool:
         """
         注册声纹
 
         Args:
             speaker_id: 说话人ID
+            assistant_id: 助手ID
             audio_bytes: 音频字节数据
 
         Returns:
@@ -209,7 +210,7 @@ class VoiceprintService:
         try:
             # 简化音频验证，只做基本检查
             if len(audio_bytes) < 1000:  # 文件太小
-                logger.warning(f"音频文件过小: {speaker_id}")
+                logger.warning(f"音频文件过小: {speaker_id} (助手: {assistant_id})")
                 return False
 
             # 处理音频文件
@@ -219,17 +220,17 @@ class VoiceprintService:
             emb = self.extract_voiceprint(audio_path)
 
             # 保存到数据库
-            success = voiceprint_db.save_voiceprint(speaker_id, emb)
+            success = voiceprint_db.save_voiceprint(speaker_id, assistant_id, emb)
 
             if success:
-                logger.info(f"声纹注册成功: {speaker_id}")
+                logger.info(f"声纹注册成功: {speaker_id} (助手: {assistant_id})")
             else:
-                logger.error(f"声纹注册失败: {speaker_id}")
+                logger.error(f"声纹注册失败: {speaker_id} (助手: {assistant_id})")
 
             return success
 
         except Exception as e:
-            logger.error(f"声纹注册异常 {speaker_id}: {e}")
+            logger.error(f"声纹注册异常 {speaker_id} (助手: {assistant_id}): {e}")
             return False
         finally:
             # 清理临时文件
@@ -237,20 +238,21 @@ class VoiceprintService:
                 audio_processor.cleanup_temp_file(audio_path)
 
     def identify_voiceprint(
-        self, speaker_ids: List[str], audio_bytes: bytes
+        self, speaker_ids: List[str], assistant_id: str, audio_bytes: bytes
     ) -> Tuple[str, float]:
         """
         识别声纹
 
         Args:
             speaker_ids: 候选说话人ID列表
+            assistant_id: 助手ID，用于限定识别范围
             audio_bytes: 音频字节数据
 
         Returns:
             Tuple[str, float]: (识别出的说话人ID, 相似度分数)
         """
         start_time = time.time()
-        logger.info(f"开始声纹识别流程，候选说话人数量: {len(speaker_ids)}")
+        logger.info(f"开始声纹识别流程，候选说话人数量: {len(speaker_ids)}, 助手: {assistant_id}")
 
         audio_path = None
         try:
@@ -272,17 +274,17 @@ class VoiceprintService:
             extract_time = time.time() - extract_start
             logger.debug(f"声纹特征提取完成，耗时: {extract_time:.3f}秒")
 
-            # 获取候选声纹特征
+            # 获取候选声纹特征（限定在指定助手下）
             db_query_start = time.time()
-            logger.debug("开始查询数据库获取候选声纹特征...")
-            voiceprints = voiceprint_db.get_voiceprints(speaker_ids)
+            logger.debug(f"开始查询数据库获取候选声纹特征 (助手: {assistant_id})...")
+            voiceprints = voiceprint_db.get_voiceprints(speaker_ids, assistant_id)
             db_query_time = time.time() - db_query_start
             logger.debug(
                 f"数据库查询完成，获取到{len(voiceprints)}个声纹特征，耗时: {db_query_time:.3f}秒"
             )
 
             if not voiceprints:
-                logger.info("未找到候选说话人声纹")
+                logger.info(f"未找到候选说话人声纹 (助手: {assistant_id})")
                 return "", 0.0
 
             # 计算相似度
@@ -315,7 +317,7 @@ class VoiceprintService:
 
             total_time = time.time() - start_time
             logger.info(
-                f"识别到说话人: {match_name}, 分数: {match_score:.4f}, 总耗时: {total_time:.3f}秒"
+                f"识别到说话人: {match_name}, 分数: {match_score:.4f}, 助手: {assistant_id}, 总耗时: {total_time:.3f}秒"
             )
             return match_name, match_score
 
@@ -331,17 +333,18 @@ class VoiceprintService:
             cleanup_time = time.time() - cleanup_start
             logger.debug(f"临时文件清理完成，耗时: {cleanup_time:.3f}秒")
 
-    def delete_voiceprint(self, speaker_id: str) -> bool:
+    def delete_voiceprint(self, speaker_id: str, assistant_id: str = None) -> bool:
         """
         删除声纹
 
         Args:
             speaker_id: 说话人ID
+            assistant_id: 助手ID，如果指定则只删除该助手下的声纹
 
         Returns:
             bool: 删除是否成功
         """
-        return voiceprint_db.delete_voiceprint(speaker_id)
+        return voiceprint_db.delete_voiceprint(speaker_id, assistant_id)
 
     def get_voiceprint_count(self) -> int:
         """

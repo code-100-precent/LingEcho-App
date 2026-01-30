@@ -343,12 +343,26 @@ func (h *Handlers) registerSystemRoutes(r *gin.RouterGroup) {
 
 		// Voiceprint configuration routes
 		system.POST("/voiceprint/config", models.AuthRequired, h.SaveVoiceprintConfig)
+	}
 
+	// Voiceprint management routes (separate from system group)
+	voiceprint := r.Group("/voiceprint")
+	{
+		voiceprint.GET("", models.AuthRequired, h.GetVoiceprints)               // 获取声纹列表
+		voiceprint.POST("", models.AuthRequired, h.CreateVoiceprint)            // 创建声纹记录
+		voiceprint.POST("/register", models.AuthRequired, h.RegisterVoiceprint) // 注册声纹（上传音频）
+		voiceprint.POST("/identify", models.AuthRequired, h.IdentifyVoiceprint) // 声纹识别
+		voiceprint.PUT("/:id", models.AuthRequired, h.UpdateVoiceprint)         // 更新声纹记录
+		voiceprint.DELETE("/:id", models.AuthRequired, h.DeleteVoiceprint)      // 删除声纹记录
+	}
+
+	system2 := r.Group("system")
+	{
 		// Search configuration routes
-		system.GET("/search/status", h.GetSearchStatus)
-		system.PUT("/search/config", models.AuthRequired, h.UpdateSearchConfig)
-		system.POST("/search/enable", models.AuthRequired, h.EnableSearch)
-		system.POST("/search/disable", models.AuthRequired, h.DisableSearch)
+		system2.GET("/search/status", h.GetSearchStatus)
+		system2.PUT("/search/config", models.AuthRequired, h.UpdateSearchConfig)
+		system2.POST("/search/enable", models.AuthRequired, h.EnableSearch)
+		system2.POST("/search/disable", models.AuthRequired, h.DisableSearch)
 	}
 }
 

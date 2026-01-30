@@ -114,6 +114,11 @@ func (c *Client) RegisterVoiceprint(ctx context.Context, req *RegisterRequest) (
 		return nil, ErrAPIRequest(fmt.Sprintf("write speaker_id failed: %v", err))
 	}
 
+	// 添加 assistant_id 字段
+	if err := writer.WriteField("assistant_id", req.AssistantID); err != nil {
+		return nil, ErrAPIRequest(fmt.Sprintf("write assistant_id failed: %v", err))
+	}
+
 	// 添加音频文件
 	part, err := writer.CreateFormFile("file", req.SpeakerID+".wav")
 	if err != nil {
@@ -160,6 +165,7 @@ func (c *Client) RegisterVoiceprint(ctx context.Context, req *RegisterRequest) (
 	if c.config.LogEnabled {
 		c.logger.Info("Voiceprint registered successfully",
 			zap.String("speaker_id", req.SpeakerID),
+			zap.String("assistant_id", req.AssistantID),
 			zap.Bool("success", result.Success),
 			zap.Duration("duration", time.Since(startTime)))
 	}
@@ -185,6 +191,11 @@ func (c *Client) IdentifyVoiceprint(ctx context.Context, req *IdentifyRequest) (
 	speakerIDs := strings.Join(req.CandidateIDs, ",")
 	if err := writer.WriteField("speaker_ids", speakerIDs); err != nil {
 		return nil, ErrAPIRequest(fmt.Sprintf("write speaker_ids failed: %v", err))
+	}
+
+	// 添加助手ID
+	if err := writer.WriteField("assistant_id", req.AssistantID); err != nil {
+		return nil, ErrAPIRequest(fmt.Sprintf("write assistant_id failed: %v", err))
 	}
 
 	// 添加音频文件
@@ -233,6 +244,7 @@ func (c *Client) IdentifyVoiceprint(ctx context.Context, req *IdentifyRequest) (
 	if c.config.LogEnabled {
 		c.logger.Info("Voiceprint identified",
 			zap.String("speaker_id", result.SpeakerID),
+			zap.String("assistant_id", req.AssistantID),
 			zap.Float64("score", result.Score),
 			zap.String("confidence", result.Confidence),
 			zap.Int("candidates", len(req.CandidateIDs)),
@@ -243,7 +255,7 @@ func (c *Client) IdentifyVoiceprint(ctx context.Context, req *IdentifyRequest) (
 }
 
 // DeleteVoiceprint 删除声纹
-func (c *Client) DeleteVoiceprint(ctx context.Context, speakerID string) (*DeleteResponse, error) {
+func (c *Client) DeleteVoiceprint(ctx context.Context, speakerID string, assistantID ...string) (*DeleteResponse, error) {
 	if !c.config.Enabled {
 		return nil, ErrServiceDisabled
 	}
@@ -253,7 +265,18 @@ func (c *Client) DeleteVoiceprint(ctx context.Context, speakerID string) (*Delet
 	}
 
 	url := fmt.Sprintf("%s/voiceprint/%s", c.config.BaseURL, speakerID)
-	req, err := http.NewRequestWithContext(ctx, "DELETE", url, nil)
+
+	// 如果指定了助手ID，添加到请求体中
+	var reqBody io.Reader
+	if len(assistantID) > 0 && assistantID[0] != "" {
+		var buf bytes.Buffer
+		writer := multipart.NewWriter(&buf)
+		writer.WriteField("assistant_id", assistantID[0])
+		writer.Close()
+		reqBody = &buf
+	}
+
+	req, err := http.NewRequestWithContext(ctx, "DELETE", url, reqBody)
 	if err != nil {
 		return nil, ErrAPIRequest(fmt.Sprintf("create request failed: %v", err))
 	}
@@ -281,8 +304,13 @@ func (c *Client) DeleteVoiceprint(ctx context.Context, speakerID string) (*Delet
 	result.Timestamp = time.Now()
 
 	if c.config.LogEnabled {
+		assistantInfo := ""
+		if len(assistantID) > 0 && assistantID[0] != "" {
+			assistantInfo = fmt.Sprintf(" (assistant: %s)", assistantID[0])
+		}
 		c.logger.Info("Voiceprint deleted",
 			zap.String("speaker_id", speakerID),
+			zap.String("assistant_info", assistantInfo),
 			zap.Bool("success", result.Success),
 			zap.Duration("duration", time.Since(startTime)))
 	}
@@ -294,6 +322,10 @@ func (c *Client) DeleteVoiceprint(ctx context.Context, speakerID string) (*Delet
 func (c *Client) validateRegisterRequest(req *RegisterRequest) error {
 	if req.SpeakerID == "" {
 		return ErrInvalidConfig("speaker_id is required")
+	}
+
+	if req.AssistantID == "" {
+		return ErrInvalidConfig("assistant_id is required")
 	}
 
 	if len(req.AudioData) == 0 {
@@ -312,6 +344,10 @@ func (c *Client) validateRegisterRequest(req *RegisterRequest) error {
 func (c *Client) validateIdentifyRequest(req *IdentifyRequest) error {
 	if len(req.CandidateIDs) == 0 {
 		return ErrInvalidConfig("candidate_ids is required")
+	}
+
+	if req.AssistantID == "" {
+		return ErrInvalidConfig("assistant_id is required")
 	}
 
 	if len(req.CandidateIDs) > c.config.MaxCandidates {

@@ -199,5 +199,7 @@ func RunMigrations(db *gorm.DB) error {
 		&models.DeviceErrorLog{},
 		&models.CallRecording{},
 		&models.DevicePerformanceLog{},
+		// Voiceprint model
+		&models.Voiceprint{},
 	})
 }

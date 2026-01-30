@@ -25,6 +25,7 @@ router = APIRouter()
 async def register_voiceprint(
     token: AuthorizationToken,
     speaker_id: str = Form(..., description="说话人ID"),
+    assistant_id: str = Form(..., description="助手ID"),
     file: UploadFile = File(..., description="WAV音频文件"),
 ):
     """
@@ -33,6 +34,7 @@ async def register_voiceprint(
     Args:
         token: 接口令牌（Header）
         speaker_id: 说话人ID
+        assistant_id: 助手ID
         file: 说话人音频文件（WAV）
 
     Returns:
@@ -47,10 +49,10 @@ async def register_voiceprint(
         audio_bytes = await file.read()
 
         # 注册声纹
-        success = voiceprint_service.register_voiceprint(speaker_id, audio_bytes)
+        success = voiceprint_service.register_voiceprint(speaker_id, assistant_id, audio_bytes)
 
         if success:
-            return VoiceprintRegisterResponse(success=True, msg=f"已登记: {speaker_id}")
+            return VoiceprintRegisterResponse(success=True, msg=f"已登记: {speaker_id} (助手: {assistant_id})")
         else:
             raise HTTPException(status_code=500, detail="声纹注册失败")
 
@@ -71,6 +73,7 @@ async def register_voiceprint(
 async def identify_voiceprint(
     token: AuthorizationToken,
     speaker_ids: str = Form(..., description="候选说话人ID，逗号分隔"),
+    assistant_id: str = Form(..., description="助手ID"),
     file: UploadFile = File(..., description="WAV音频文件"),
 ):
     """
@@ -79,13 +82,14 @@ async def identify_voiceprint(
     Args:
         token: 接口令牌（Header）
         speaker_ids: 候选说话人ID，逗号分隔
+        assistant_id: 助手ID
         file: 待识别音频文件（WAV）
 
     Returns:
         VoiceprintIdentifyResponse: 识别结果
     """
     start_time = time.time()
-    logger.info(f"开始声纹识别请求 - 候选说话人: {speaker_ids}, 文件: {file.filename}")
+    logger.info(f"开始声纹识别请求 - 候选说话人: {speaker_ids}, 助手: {assistant_id}, 文件: {file.filename}")
 
     try:
         # 验证文件类型
@@ -117,7 +121,7 @@ async def identify_voiceprint(
         identify_start = time.time()
         logger.info("开始调用声纹识别服务...")
         match_name, match_score = voiceprint_service.identify_voiceprint(
-            candidate_ids, audio_bytes
+            candidate_ids, assistant_id, audio_bytes
         )
         identify_time = time.time() - identify_start
         logger.info(f"声纹识别服务调用完成，耗时: {identify_time:.3f}秒")
@@ -148,6 +152,7 @@ async def identify_voiceprint(
 async def delete_voiceprint(
     token: AuthorizationToken,
     speaker_id: str,
+    assistant_id: str = Form(None, description="助手ID，如果指定则只删除该助手下的声纹"),
 ):
     """
     删除声纹接口
@@ -155,17 +160,24 @@ async def delete_voiceprint(
     Args:
         token: 接口令牌（Header）
         speaker_id: 说话人ID
+        assistant_id: 助手ID，可选
 
     Returns:
         dict: 删除结果
     """
     try:
-        success = voiceprint_service.delete_voiceprint(speaker_id)
+        success = voiceprint_service.delete_voiceprint(speaker_id, assistant_id)
 
         if success:
-            return {"success": True, "msg": f"已删除: {speaker_id}"}
+            msg = f"已删除: {speaker_id}"
+            if assistant_id:
+                msg += f" (助手: {assistant_id})"
+            return {"success": True, "msg": msg}
         else:
-            raise HTTPException(status_code=404, detail=f"未找到说话人: {speaker_id}")
+            detail = f"未找到说话人: {speaker_id}"
+            if assistant_id:
+                detail += f" (助手: {assistant_id})"
+            raise HTTPException(status_code=404, detail=detail)
 
     except HTTPException:
         raise

@@ -22,11 +22,24 @@ func Success(c *gin.Context, msg string, data interface{}) {
 }
 
 func Fail(c *gin.Context, msg string, data interface{}) {
-	c.JSON(http.StatusOK, gin.H{
+	// Standardize error response format
+	errorResponse := gin.H{
 		"code": 500,
 		"msg":  msg,
 		"data": data,
-	})
+	}
+
+	// If data contains error information, extract it for consistent format
+	if dataMap, ok := data.(gin.H); ok {
+		if errorCode, exists := dataMap["error"]; exists {
+			errorResponse["error"] = errorCode
+		}
+		if message, exists := dataMap["message"]; exists && msg == "" {
+			errorResponse["msg"] = message
+		}
+	}
+
+	c.JSON(http.StatusOK, errorResponse)
 }
 
 func Result(context *gin.Context, httpStatus int, code int, msg string, data gin.H) {

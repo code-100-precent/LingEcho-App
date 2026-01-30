@@ -22,7 +22,7 @@ import Modal from '@/components/UI/Modal'
 import EmptyState from '@/components/UI/EmptyState'
 import WorkflowEditor, { Workflow, WorkflowConnection } from '@/components/Voice/WorkflowEditor'
 import Terminal, { TerminalLog } from '@/components/Workflow/Terminal'
-import { useToast } from '@/components/UI/ToastContainer'
+import { showAlert } from '@/utils/notification'
 import workflowService, { 
   WorkflowDefinition, 
   WorkflowGraph, 
@@ -43,7 +43,6 @@ type WorkflowStatus = 'draft' | 'active' | 'archived'
 
 
 const WorkflowManager: React.FC = () => {
-  const toast = useToast()
   const [workflows, setWorkflows] = useState<WorkflowDefinition[]>([])
   const [filteredWorkflows, setFilteredWorkflows] = useState<WorkflowDefinition[]>([])
   const [selectedStatus, setSelectedStatus] = useState<string>('all')
@@ -202,16 +201,16 @@ const WorkflowManager: React.FC = () => {
         setVersions(response.data || [])
         console.log('版本列表:', response.data) // 调试日志
         if (!response.data || response.data.length === 0) {
-          toast.info('提示', '该工作流暂无版本历史记录。创建或更新工作流时会自动保存版本。')
+          showAlert('该工作流暂无版本历史记录。创建或更新工作流时会自动保存版本。', 'info', '提示')
         }
       } else {
         setError(response.msg || '加载版本历史失败')
-        toast.error('加载失败', response.msg || '加载版本历史失败')
+        showAlert(response.msg || '加载版本历史失败', 'error', '加载失败')
       }
     } catch (err: any) {
       console.error('加载版本历史错误:', err) // 调试日志
       setError(err.msg || err.message || '加载版本历史失败')
-      toast.error('加载失败', err.msg || err.message || '加载版本历史失败')
+      showAlert(err.msg || err.message || '加载版本历史失败', 'error', '加载失败')
     } finally {
       setLoadingVersions(false)
     }
@@ -249,7 +248,7 @@ const WorkflowManager: React.FC = () => {
           }
         }
         setShowVersionHistory(false)
-        toast.success('回滚成功', '工作流已成功回滚到指定版本')
+        showAlert('工作流已成功回滚到指定版本', 'success', '回滚成功')
       } else {
         setError(response.msg || '回滚失败')
       }
@@ -515,7 +514,7 @@ const WorkflowManager: React.FC = () => {
               }}
               onSave={async (workflow: Workflow) => {
                 if (!selectedWorkflow) {
-                  toast.error('保存失败', '没有选中的工作流')
+                  showAlert('没有选中的工作流', 'error', '保存失败')
                   return
                 }
                 
@@ -660,10 +659,10 @@ const WorkflowManager: React.FC = () => {
                     setSelectedWorkflow(response.data)
                     
                     // 显示成功提示
-                    toast.success('保存成功', '工作流已成功保存')
+                    showAlert('工作流已成功保存', 'success', '保存成功')
                   } else {
                     setError(response.msg || '更新工作流失败')
-                    toast.error('保存失败', response.msg || '更新工作流失败')
+                    showAlert(response.msg || '更新工作流失败', 'error', '保存失败')
                     
                     if (response.msg?.includes('version conflict')) {
                       // 版本冲突，重新加载数据
@@ -677,7 +676,7 @@ const WorkflowManager: React.FC = () => {
                   }
                 } catch (error: any) {
                   setError(error.msg || error.message || '保存工作流失败')
-                  toast.error('保存失败', error.msg || error.message || '保存工作流时发生错误')
+                  showAlert(error.msg || error.message || '保存工作流时发生错误', 'error', '保存失败')
                   console.error('Failed to save workflow:', error)
                 } finally {
                   setSaving(false)
@@ -685,7 +684,7 @@ const WorkflowManager: React.FC = () => {
               }}
               onRun={async (workflow, parameters = {}) => {
                 if (!selectedWorkflow) {
-                  toast.error('运行失败', '没有选中的工作流')
+                  showAlert('没有选中的工作流', 'error', '运行失败')
                   return
                 }
                 
@@ -824,7 +823,7 @@ const WorkflowManager: React.FC = () => {
                         message: `工作流执行完成，耗时: ${duration}`
                       }])
                       
-                      toast.success('运行成功', `工作流执行完成，耗时: ${duration}`)
+                      showAlert(`工作流执行完成，耗时: ${duration}`, 'success', '运行成功')
                     } else if (instance && instance.status === 'failed') {
                       const failedTime = new Date()
                       const failedTimestamp = `${failedTime.getHours().toString().padStart(2, '0')}:${failedTime.getMinutes().toString().padStart(2, '0')}:${failedTime.getSeconds().toString().padStart(2, '0')}.${failedTime.getMilliseconds().toString().padStart(3, '0')}`
@@ -834,7 +833,7 @@ const WorkflowManager: React.FC = () => {
                         message: instance.resultData?.error || '工作流执行失败'
                       }])
                       
-                      toast.error('运行失败', instance.resultData?.error || '工作流执行失败')
+                      showAlert(instance.resultData?.error || '工作流执行失败', 'error', '运行失败')
                     }
                   } else {
                     const errorTime = new Date()
@@ -845,7 +844,7 @@ const WorkflowManager: React.FC = () => {
                       message: response.msg || '运行工作流时发生错误'
                     }])
                     
-                    toast.error('运行失败', response.msg || '运行工作流时发生错误')
+                    showAlert(response.msg || '运行工作流时发生错误', 'error', '运行失败')
                   }
                 } catch (error: any) {
                   const catchErrorTime = new Date()
@@ -856,7 +855,7 @@ const WorkflowManager: React.FC = () => {
                     message: error.msg || error.message || '运行工作流时发生错误'
                   }])
                   
-                  toast.error('运行失败', error.msg || error.message || '运行工作流时发生错误')
+                  showAlert(error.msg || error.message || '运行工作流时发生错误', 'error', '运行失败')
                   console.error('Failed to run workflow:', error)
                 } finally {
                   // 关闭 WebSocket 连接
@@ -1014,12 +1013,12 @@ const WorkflowManager: React.FC = () => {
                   setSelectedWorkflow(response.data)
                   setShowTriggerConfig(false)
                   
-                  toast.success('保存成功', '触发器配置已保存')
+                  showAlert('触发器配置已保存', 'success', '保存成功')
                 } else {
-                  toast.error('保存失败', response.msg || '保存触发器配置失败')
+                  showAlert(response.msg || '保存触发器配置失败', 'error', '保存失败')
                 }
               } catch (error: any) {
-                toast.error('保存失败', error.msg || error.message || '保存触发器配置时发生错误')
+                showAlert(error.msg || error.message || '保存触发器配置时发生错误', 'error', '保存失败')
               } finally {
                 setSaving(false)
               }
@@ -1851,7 +1850,7 @@ const TriggerConfigPanel: React.FC<TriggerConfigPanelProps> = ({
                   size="sm"
                   onClick={() => {
                     navigator.clipboard.writeText(getWebhookURL())
-                    toast.success('已复制', 'Webhook URL 已复制到剪贴板')
+                    showAlert('Webhook URL 已复制到剪贴板', 'success', '已复制')
                   }}
                 >
                   复制

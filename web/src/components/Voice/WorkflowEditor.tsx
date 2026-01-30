@@ -4,7 +4,6 @@ import {
   Play, 
   Square, 
   Trash2, 
-  Save, 
   AlertCircle,
   Settings,
   FileText,
@@ -31,7 +30,7 @@ import { cn } from '@/utils/cn'
 import Modal from '@/components/UI/Modal'
 import Button from '@/components/UI/Button'
 import Input from '@/components/UI/Input'
-import { useToast } from '@/components/UI/ToastContainer'
+import { showAlert } from '@/utils/notification'
 import { workflowService } from '@/api/workflow'
 import { workflowPluginService, WorkflowPluginCategory } from '@/api/workflowPlugin'
 import { useI18nStore } from '@/stores/i18nStore'
@@ -204,7 +203,6 @@ const WorkflowEditor: React.FC<WorkflowEditorProps> = ({
   className = ''
 }) => {
   const { t } = useI18nStore()
-  const toast = useToast()
   const NODE_TYPES = getNodeTypes(t)
   const canvasRef = useRef<HTMLDivElement>(null)
   const [nodes, setNodes] = useState<WorkflowNode[]>(workflow?.nodes || [])
@@ -3806,7 +3804,6 @@ const PublishWorkflowPluginModal: React.FC<{
   workflowId: number
   onClose: () => void
 }> = ({ workflowId, onClose }) => {
-  const toast = useToast()
   const [workflow, setWorkflow] = useState<any>(null)
   const [loading, setLoading] = useState(false)
   const [step, setStep] = useState(1) // 添加步骤状态
@@ -3867,7 +3864,7 @@ const PublishWorkflowPluginModal: React.FC<{
       const response = await workflowPluginService.publishWorkflowAsPlugin(workflowId, pluginData)
       if (response.data) {
         // 使用 Toast 显示成功提示
-        toast.success('插件发布成功！', '您的工作流插件已成功发布到插件市场')
+        showAlert('您的工作流插件已成功发布到插件市场', 'success', '插件发布成功！')
         setStep(3) // 显示成功页面
         setTimeout(() => {
           onClose()
@@ -3875,7 +3872,7 @@ const PublishWorkflowPluginModal: React.FC<{
       }
     } catch (error) {
       console.error('发布工作流失败:', error)
-      toast.error('发布失败', '插件发布时发生错误，请稍后重试')
+      showAlert('插件发布时发生错误，请稍后重试', 'error', '发布失败')
     } finally {
       setLoading(false)
     }

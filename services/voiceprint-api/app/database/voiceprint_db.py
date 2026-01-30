@@ -10,12 +10,13 @@ logger = get_logger(__name__)
 class VoiceprintDB:
     """声纹数据库操作类，负责声纹特征的存储与读取"""
 
-    def save_voiceprint(self, speaker_id: str, emb: np.ndarray) -> bool:
+    def save_voiceprint(self, speaker_id: str, assistant_id: str, emb: np.ndarray) -> bool:
         """
         保存或更新声纹特征
 
         Args:
             speaker_id: 说话人ID
+            assistant_id: 助手ID
             emb: 声纹特征向量
 
         Returns:
@@ -24,25 +25,26 @@ class VoiceprintDB:
         try:
             with db_connection.get_cursor() as cursor:
                 sql = """
-                INSERT INTO voiceprints (speaker_id, feature_vector)
-                VALUES (%s, %s)
+                INSERT INTO voiceprints (speaker_id, assistant_id, feature_vector)
+                VALUES (%s, %s, %s)
                 ON DUPLICATE KEY UPDATE feature_vector=VALUES(feature_vector)
                 """
-                cursor.execute(sql, (speaker_id, emb.tobytes()))
-                logger.success(f"声纹特征保存成功: {speaker_id}")
+                cursor.execute(sql, (speaker_id, assistant_id, emb.tobytes()))
+                logger.success(f"声纹特征保存成功: {speaker_id} (助手: {assistant_id})")
                 return True
         except Exception as e:
-            logger.fail(f"保存声纹特征失败 {speaker_id}: {e}")
+            logger.fail(f"保存声纹特征失败 {speaker_id} (助手: {assistant_id}): {e}")
             return False
 
     def get_voiceprints(
-        self, speaker_ids: Optional[List[str]] = None
+        self, speaker_ids: Optional[List[str]] = None, assistant_id: Optional[str] = None
     ) -> Dict[str, np.ndarray]:
         """
         获取指定说话人ID的声纹特征（如未指定则获取全部）
 
         Args:
             speaker_ids: 说话人ID列表
+            assistant_id: 助手ID，用于限定查询范围
 
         Returns:
             Dict[str, np.ndarray]: {speaker_id: 特征向量}
@@ -53,15 +55,28 @@ class VoiceprintDB:
             if speaker_ids
             else "全量查询"
         )
+        if assistant_id:
+            query_type += f" [助手: {assistant_id}]"
         logger.info(f"开始数据库查询: {query_type}")
 
         try:
             with db_connection.get_cursor() as cursor:
-                if speaker_ids:
+                if speaker_ids and assistant_id:
+                    # 指定助手和说话人ID
+                    format_strings = ",".join(["%s"] * len(speaker_ids))
+                    sql = f"SELECT speaker_id, feature_vector FROM voiceprints WHERE assistant_id = %s AND speaker_id IN ({format_strings})"
+                    cursor.execute(sql, (assistant_id,) + tuple(speaker_ids))
+                elif assistant_id:
+                    # 只指定助手ID
+                    sql = "SELECT speaker_id, feature_vector FROM voiceprints WHERE assistant_id = %s"
+                    cursor.execute(sql, (assistant_id,))
+                elif speaker_ids:
+                    # 只指定说话人ID（兼容旧版本）
                     format_strings = ",".join(["%s"] * len(speaker_ids))
                     sql = f"SELECT speaker_id, feature_vector FROM voiceprints WHERE speaker_id IN ({format_strings})"
                     cursor.execute(sql, tuple(speaker_ids))
                 else:
+                    # 全量查询
                     sql = "SELECT speaker_id, feature_vector FROM voiceprints"
                     cursor.execute(sql)
 
@@ -90,22 +105,29 @@ class VoiceprintDB:
             logger.error(f"获取声纹特征失败，总耗时: {total_time:.3f}秒，错误: {e}")
             return {}
 
-    def delete_voiceprint(self, speaker_id: str) -> bool:
+    def delete_voiceprint(self, speaker_id: str, assistant_id: Optional[str] = None) -> bool:
         """
         删除指定说话人的声纹特征
 
         Args:
             speaker_id: 说话人ID
+            assistant_id: 助手ID，如果指定则只删除该助手下的声纹
 
         Returns:
             bool: 操作是否成功
         """
         try:
             with db_connection.get_cursor() as cursor:
-                sql = "DELETE FROM voiceprints WHERE speaker_id = %s"
-                cursor.execute(sql, (speaker_id,))
+                if assistant_id:
+                    sql = "DELETE FROM voiceprints WHERE speaker_id = %s AND assistant_id = %s"
+                    cursor.execute(sql, (speaker_id, assistant_id))
+                    logger.info(f"声纹特征删除成功: {speaker_id} (助手: {assistant_id})")
+                else:
+                    sql = "DELETE FROM voiceprints WHERE speaker_id = %s"
+                    cursor.execute(sql, (speaker_id,))
+                    logger.info(f"声纹特征删除成功: {speaker_id} (所有助手)")
+                
                 if cursor.rowcount > 0:
-                    logger.info(f"声纹特征删除成功: {speaker_id}")
                     return True
                 else:
                     logger.warning(f"未找到要删除的声纹特征: {speaker_id}")
