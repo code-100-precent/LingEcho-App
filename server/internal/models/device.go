@@ -75,9 +75,9 @@ type Device struct {
 	LastErrorAt *time.Time `json:"lastErrorAt,omitempty"`                // 最后错误时间
 
 	// 系统信息
-	SystemInfo   string `json:"systemInfo,omitempty" gorm:"type:json"`   // 系统信息JSON
-	HardwareInfo string `json:"hardwareInfo,omitempty" gorm:"type:json"` // 硬件信息JSON
-	NetworkInfo  string `json:"networkInfo,omitempty" gorm:"type:json"`  // 网络信息JSON
+	SystemInfo   *string `json:"systemInfo,omitempty" gorm:"type:json"`   // 系统信息JSON
+	HardwareInfo *string `json:"hardwareInfo,omitempty" gorm:"type:json"` // 硬件信息JSON
+	NetworkInfo  *string `json:"networkInfo,omitempty" gorm:"type:json"`  // 网络信息JSON
 
 	// 性能状态
 	CPUUsage    float64 `json:"cpuUsage"`    // CPU使用率
@@ -85,10 +85,10 @@ type Device struct {
 	Temperature float64 `json:"temperature"` // 设备温度
 
 	// 音频设备状态
-	AudioStatus string `json:"audioStatus,omitempty" gorm:"type:json"` // 音频设备状态JSON
+	AudioStatus *string `json:"audioStatus,omitempty" gorm:"type:json"` // 音频设备状态JSON
 
 	// 服务状态
-	ServiceStatus string `json:"serviceStatus,omitempty" gorm:"type:json"` // 服务状态JSON
+	ServiceStatus *string `json:"serviceStatus,omitempty" gorm:"type:json"` // 服务状态JSON
 
 	LastConnected *time.Time `json:"lastConnected,omitempty"`
 	CreatedAt     time.Time  `json:"createdAt" gorm:"autoCreateTime"`

@@ -682,27 +682,32 @@ func (h *Handlers) UpdateDeviceStatus(c *gin.Context) {
 
 	if req.SystemInfo != nil {
 		systemInfoJSON, _ := json.Marshal(req.SystemInfo)
-		updates["system_info"] = string(systemInfoJSON)
+		jsonStr := string(systemInfoJSON)
+		updates["system_info"] = &jsonStr
 	}
 
 	if req.HardwareInfo != nil {
 		hardwareInfoJSON, _ := json.Marshal(req.HardwareInfo)
-		updates["hardware_info"] = string(hardwareInfoJSON)
+		jsonStr := string(hardwareInfoJSON)
+		updates["hardware_info"] = &jsonStr
 	}
 
 	if req.NetworkInfo != nil {
 		networkInfoJSON, _ := json.Marshal(req.NetworkInfo)
-		updates["network_info"] = string(networkInfoJSON)
+		jsonStr := string(networkInfoJSON)
+		updates["network_info"] = &jsonStr
 	}
 
 	if req.AudioStatus != nil {
 		audioStatusJSON, _ := json.Marshal(req.AudioStatus)
-		updates["audio_status"] = string(audioStatusJSON)
+		jsonStr := string(audioStatusJSON)
+		updates["audio_status"] = &jsonStr
 	}
 
 	if req.ServiceStatus != nil {
 		serviceStatusJSON, _ := json.Marshal(req.ServiceStatus)
-		updates["service_status"] = string(serviceStatusJSON)
+		jsonStr := string(serviceStatusJSON)
+		updates["service_status"] = &jsonStr
 	}
 
 	err := models.UpdateDeviceStatus(h.db, req.MacAddress, updates)
