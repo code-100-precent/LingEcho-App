@@ -136,6 +136,7 @@ func (h *Handlers) BindDevice(c *gin.Context) {
 		AssistantID:   &assistantID,
 		AutoUpdate:    1,
 		LastConnected: &now,
+		LastSeen:      now, // Set LastSeen to current time to avoid MySQL datetime error
 	}
 
 	if err := models.CreateDevice(h.db, newDevice); err != nil {
@@ -409,6 +410,7 @@ func (h *Handlers) ManualAddDevice(c *gin.Context) {
 		AssistantID:   &assistantID,
 		AutoUpdate:    1,
 		LastConnected: &now,
+		LastSeen:      now, // Set LastSeen to current time to avoid MySQL datetime error
 	}
 
 	if err := models.CreateDevice(h.db, newDevice); err != nil {
