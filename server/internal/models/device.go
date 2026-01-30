@@ -2,10 +2,13 @@ package models
 
 import (
 	"encoding/json"
+	"fmt"
 	"strconv"
 	"time"
 
 	"github.com/code-100-precent/LingEcho/pkg/hardware/conversation"
+	"github.com/code-100-precent/LingEcho/pkg/logger"
+	"go.uber.org/zap"
 	"gorm.io/gorm"
 )
 
@@ -109,7 +112,54 @@ func GetDeviceByMacAddress(db *gorm.DB, macAddress string) (*Device, error) {
 
 // CreateDevice creates a new device
 func CreateDevice(db *gorm.DB, device *Device) error {
-	return db.Create(device).Error
+	if db == nil {
+		return fmt.Errorf("database connection is nil")
+	}
+
+	if device == nil {
+		return fmt.Errorf("device is nil")
+	}
+
+	// 记录即将创建的设备信息
+	logger.Info("准备创建设备数据库记录",
+		zap.String("deviceId", device.ID),
+		zap.String("macAddress", device.MacAddress),
+		zap.Uint("userId", device.UserID),
+		zap.Any("assistantId", device.AssistantID),
+		zap.Any("groupId", device.GroupID),
+		zap.String("board", device.Board),
+		zap.String("appVersion", device.AppVersion),
+		zap.Any("lastSeen", device.LastSeen),
+		zap.Any("lastConnected", device.LastConnected))
+
+	// 检查必填字段
+	if device.ID == "" {
+		return fmt.Errorf("device ID cannot be empty")
+	}
+	if device.MacAddress == "" {
+		return fmt.Errorf("device MAC address cannot be empty")
+	}
+	if device.UserID == 0 {
+		return fmt.Errorf("device user ID cannot be zero")
+	}
+
+	// 执行数据库创建操作
+	result := db.Create(device)
+	if result.Error != nil {
+		logger.Error("数据库创建设备记录失败",
+			zap.Error(result.Error),
+			zap.String("deviceId", device.ID),
+			zap.String("macAddress", device.MacAddress),
+			zap.Int64("rowsAffected", result.RowsAffected))
+		return result.Error
+	}
+
+	logger.Info("设备数据库记录创建成功",
+		zap.String("deviceId", device.ID),
+		zap.String("macAddress", device.MacAddress),
+		zap.Int64("rowsAffected", result.RowsAffected))
+
+	return nil
 }
 
 // UpdateDevice updates device information

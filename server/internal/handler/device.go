@@ -26,7 +26,13 @@ func (h *Handlers) BindDevice(c *gin.Context) {
 	agentIdStr := c.Param("agentId")
 	deviceCode := c.Param("deviceCode")
 
+	logger.Info("开始设备绑定流程",
+		zap.String("agentId", agentIdStr),
+		zap.String("deviceCode", deviceCode),
+		zap.String("clientIP", c.ClientIP()))
+
 	if deviceCode == "" {
+		logger.Error("设备绑定失败：激活码为空")
 		response.Fail(c, "Activation code cannot be empty", nil)
 		return
 	}
@@ -38,42 +44,64 @@ func (h *Handlers) BindDevice(c *gin.Context) {
 
 	// Get device ID from local cache (key format consistent with xiaozhi-esp32 Redis key)
 	deviceKey := fmt.Sprintf("ota:activation:code:%s", deviceCode)
+	logger.Info("查找激活码缓存", zap.String("deviceKey", deviceKey))
+
 	deviceIdObj, ok := cacheClient.Get(ctx, deviceKey)
 	if !ok {
+		logger.Error("激活码验证失败：缓存中未找到激活码", zap.String("deviceCode", deviceCode))
 		response.Fail(c, "激活码错误", nil)
 		return
 	}
 
 	deviceId, ok := deviceIdObj.(string)
 	if !ok {
+		logger.Error("激活码验证失败：缓存数据类型错误", zap.Any("deviceIdObj", deviceIdObj))
 		response.Fail(c, "激活码错误", nil)
 		return
 	}
 
+	logger.Info("激活码验证成功", zap.String("deviceId", deviceId))
+
 	// Get device data
 	safeDeviceId := strings.ReplaceAll(strings.ToLower(deviceId), ":", "_")
 	dataKey := fmt.Sprintf("ota:activation:data:%s", safeDeviceId)
+	logger.Info("获取设备数据", zap.String("dataKey", dataKey))
+
 	dataObj, ok := cacheClient.Get(ctx, dataKey)
 	if !ok {
+		logger.Error("获取设备数据失败：缓存中未找到设备数据", zap.String("dataKey", dataKey))
 		response.Fail(c, "激活码错误", nil)
 		return
 	}
 
 	dataMap, ok := dataObj.(map[string]interface{})
 	if !ok {
+		logger.Error("设备数据格式错误", zap.Any("dataObj", dataObj))
 		response.Fail(c, "激活码错误", nil)
 		return
 	}
 
 	cachedCode, ok := dataMap["activation_code"].(string)
 	if !ok || cachedCode != deviceCode {
+		logger.Error("激活码不匹配",
+			zap.String("cachedCode", cachedCode),
+			zap.String("deviceCode", deviceCode))
 		response.Fail(c, "激活码错误", nil)
 		return
 	}
 
+	logger.Info("设备数据验证成功", zap.Any("deviceData", dataMap))
+
 	// Check if device has already been activated
+	logger.Info("检查设备是否已激活", zap.String("deviceId", deviceId))
 	existingDevice, err := models.GetDeviceByMacAddress(h.db, deviceId)
-	if err == nil && existingDevice != nil {
+	if err != nil {
+		logger.Warn("查询现有设备时出错", zap.Error(err), zap.String("deviceId", deviceId))
+	}
+	if existingDevice != nil {
+		logger.Error("设备绑定失败：设备已被激活",
+			zap.String("deviceId", deviceId),
+			zap.Uint("existingUserId", existingDevice.UserID))
 		response.Fail(c, "Device has already been activated", nil)
 		return
 	}
@@ -81,31 +109,49 @@ func (h *Handlers) BindDevice(c *gin.Context) {
 	// Get current user
 	user := models.CurrentUser(c)
 	if user == nil {
+		logger.Error("设备绑定失败：用户未登录")
 		response.Fail(c, "User not logged in", nil)
 		return
 	}
 
+	logger.Info("获取当前用户成功",
+		zap.Uint("userId", user.ID),
+		zap.String("userEmail", user.Email))
+
 	// Parse agentId (assistant ID)
 	agentId, err := strconv.ParseUint(agentIdStr, 10, 32)
 	if err != nil {
+		logger.Error("解析助手ID失败", zap.Error(err), zap.String("agentIdStr", agentIdStr))
 		response.Fail(c, "Invalid assistant ID", nil)
 		return
 	}
 	assistantID := uint(agentId)
 
+	logger.Info("解析助手ID成功", zap.Uint("assistantID", assistantID))
+
 	// Verify that assistant exists and belongs to current user
 	var assistant models.Assistant
 	if err := h.db.Where("id = ?", assistantID).First(&assistant).Error; err != nil {
+		logger.Error("查询助手失败", zap.Error(err), zap.Uint("assistantID", assistantID))
 		response.Fail(c, "Assistant does not exist", nil)
 		return
 	}
 
+	logger.Info("查询助手成功",
+		zap.Uint("assistantID", uint(assistant.ID)),
+		zap.String("assistantName", assistant.Name),
+		zap.Uint("assistantUserId", assistant.UserID))
+
 	if assistant.UserID != user.ID {
 		// Check if it's an organization-shared assistant
 		if assistant.GroupID == nil {
+			logger.Error("权限验证失败：助手不属于当前用户",
+				zap.Uint("assistantUserId", assistant.UserID),
+				zap.Uint("currentUserId", user.ID))
 			response.Fail(c, "Insufficient permissions: Assistant does not belong to you", nil)
 			return
 		}
+		logger.Info("助手属于组织，跳过权限检查", zap.Uint("groupId", *assistant.GroupID))
 		// TODO: Organization member permission check can be added here
 	}
 
@@ -124,6 +170,14 @@ func (h *Handlers) BindDevice(c *gin.Context) {
 		appVersion = "1.0.0"
 	}
 
+	logger.Info("准备创建设备",
+		zap.String("deviceId", deviceId),
+		zap.String("macAddress", macAddress),
+		zap.String("board", board),
+		zap.String("appVersion", appVersion),
+		zap.Uint("userId", user.ID),
+		zap.Uint("assistantID", assistantID))
+
 	// Create device
 	now := time.Now()
 	newDevice := &models.Device{
@@ -139,17 +193,31 @@ func (h *Handlers) BindDevice(c *gin.Context) {
 		LastSeen:      &now, // Set LastSeen to current time to avoid MySQL datetime error
 	}
 
+	logger.Info("开始创建设备记录", zap.Any("deviceData", newDevice))
+
 	if err := models.CreateDevice(h.db, newDevice); err != nil {
-		logger.Error("Failed to create device", zap.Error(err), zap.String("deviceId", deviceId))
-		response.Fail(c, "Failed to create device", nil)
+		logger.Error("创建设备失败",
+			zap.Error(err),
+			zap.String("deviceId", deviceId),
+			zap.String("macAddress", macAddress),
+			zap.Uint("userId", user.ID),
+			zap.Uint("assistantID", assistantID),
+			zap.String("errorType", fmt.Sprintf("%T", err)))
+
+		// 提供更详细的错误信息
+		errorMsg := fmt.Sprintf("Failed to create device: %v", err)
+		response.Fail(c, errorMsg, nil)
 		return
 	}
 
+	logger.Info("设备创建成功", zap.String("deviceId", deviceId))
+
 	// Clean up local cache (key format consistent with xiaozhi-esp32 Redis key)
+	logger.Info("清理缓存", zap.String("dataKey", dataKey), zap.String("deviceKey", deviceKey))
 	cacheClient.Delete(ctx, dataKey)
 	cacheClient.Delete(ctx, deviceKey)
 
-	logger.Info("Device activated successfully",
+	logger.Info("设备激活成功",
 		zap.String("deviceId", deviceId),
 		zap.String("activationCode", deviceCode),
 		zap.Uint("userId", user.ID),
@@ -327,20 +395,40 @@ func (h *Handlers) ManualAddDevice(c *gin.Context) {
 		GroupID    *uint  `json:"groupId,omitempty"` // 组织ID，如果设置则表示这是组织共享的设备
 	}
 
+	logger.Info("开始手动添加设备流程", zap.String("clientIP", c.ClientIP()))
+
 	if err := c.ShouldBindJSON(&req); err != nil {
+		logger.Error("手动添加设备失败：参数绑定错误", zap.Error(err))
 		response.Fail(c, "参数错误", nil)
 		return
 	}
 
+	logger.Info("请求参数解析成功",
+		zap.String("agentId", req.AgentID),
+		zap.String("board", req.Board),
+		zap.String("appVersion", req.AppVersion),
+		zap.String("macAddress", req.MacAddress),
+		zap.Any("groupId", req.GroupID))
+
 	// Validate MAC address format
 	if !isMacAddressValid(req.MacAddress) {
+		logger.Error("MAC地址格式无效", zap.String("macAddress", req.MacAddress))
 		response.Fail(c, "Invalid MAC address", nil)
 		return
 	}
 
+	logger.Info("MAC地址格式验证通过", zap.String("macAddress", req.MacAddress))
+
 	// Check if MAC address already exists
+	logger.Info("检查MAC地址是否已存在", zap.String("macAddress", req.MacAddress))
 	existingDevice, err := models.GetDeviceByMacAddress(h.db, req.MacAddress)
-	if err == nil && existingDevice != nil {
+	if err != nil {
+		logger.Warn("查询现有设备时出错", zap.Error(err), zap.String("macAddress", req.MacAddress))
+	}
+	if existingDevice != nil {
+		logger.Error("手动添加设备失败：MAC地址已存在",
+			zap.String("macAddress", req.MacAddress),
+			zap.Uint("existingUserId", existingDevice.UserID))
 		response.Fail(c, "MAC address already exists", nil)
 		return
 	}
@@ -348,31 +436,49 @@ func (h *Handlers) ManualAddDevice(c *gin.Context) {
 	// 获取当前用户
 	user := models.CurrentUser(c)
 	if user == nil {
+		logger.Error("手动添加设备失败：用户未登录")
 		response.Fail(c, "用户未登录", nil)
 		return
 	}
 
+	logger.Info("获取当前用户成功",
+		zap.Uint("userId", user.ID),
+		zap.String("userEmail", user.Email))
+
 	// 解析 agentId (assistant ID)
 	agentId, err := strconv.ParseUint(req.AgentID, 10, 32)
 	if err != nil {
+		logger.Error("解析助手ID失败", zap.Error(err), zap.String("agentId", req.AgentID))
 		response.Fail(c, "无效的助手ID", nil)
 		return
 	}
 	assistantID := uint(agentId)
 
+	logger.Info("解析助手ID成功", zap.Uint("assistantID", assistantID))
+
 	// 验证 assistant 是否存在且属于当前用户
 	var assistant models.Assistant
 	if err := h.db.Where("id = ?", assistantID).First(&assistant).Error; err != nil {
+		logger.Error("查询助手失败", zap.Error(err), zap.Uint("assistantID", assistantID))
 		response.Fail(c, "助手不存在", nil)
 		return
 	}
 
+	logger.Info("查询助手成功",
+		zap.Uint("assistantID", uint(assistant.ID)),
+		zap.String("assistantName", assistant.Name),
+		zap.Uint("assistantUserId", assistant.UserID))
+
 	if assistant.UserID != user.ID {
 		// 检查是否是组织共享的助手
 		if assistant.GroupID == nil {
+			logger.Error("权限验证失败：助手不属于当前用户",
+				zap.Uint("assistantUserId", assistant.UserID),
+				zap.Uint("currentUserId", user.ID))
 			response.Fail(c, "权限不足：助手不属于您", nil)
 			return
 		}
+		logger.Info("助手属于组织，跳过权限检查", zap.Uint("groupId", *assistant.GroupID))
 		// TODO: 可以在这里添加组织成员权限检查
 	}
 
@@ -383,8 +489,10 @@ func (h *Handlers) ManualAddDevice(c *gin.Context) {
 
 	// 如果设置了 GroupID，验证用户是否有权限共享到该组织
 	if req.GroupID != nil {
+		logger.Info("验证组织权限", zap.Uint("groupId", *req.GroupID))
 		var group models.Group
 		if err := h.db.Where("id = ?", *req.GroupID).First(&group).Error; err != nil {
+			logger.Error("查询组织失败", zap.Error(err), zap.Uint("groupId", *req.GroupID))
 			response.Fail(c, "组织不存在", nil)
 			return
 		}
@@ -392,11 +500,24 @@ func (h *Handlers) ManualAddDevice(c *gin.Context) {
 		if group.CreatorID != user.ID {
 			var member models.GroupMember
 			if err := h.db.Where("group_id = ? AND user_id = ?", *req.GroupID, user.ID).First(&member).Error; err != nil {
+				logger.Error("组织权限验证失败",
+					zap.Uint("groupId", *req.GroupID),
+					zap.Uint("userId", user.ID),
+					zap.Error(err))
 				response.Fail(c, "权限不足", "您不是该组织的成员")
 				return
 			}
 		}
+		logger.Info("组织权限验证通过", zap.Uint("groupId", *req.GroupID))
 	}
+
+	logger.Info("准备创建设备",
+		zap.String("macAddress", req.MacAddress),
+		zap.String("board", req.Board),
+		zap.String("appVersion", req.AppVersion),
+		zap.Uint("userId", user.ID),
+		zap.Uint("assistantID", assistantID),
+		zap.Any("groupId", req.GroupID))
 
 	// 创建设备
 	now := time.Now()
@@ -413,11 +534,23 @@ func (h *Handlers) ManualAddDevice(c *gin.Context) {
 		LastSeen:      &now, // Set LastSeen to current time to avoid MySQL datetime error
 	}
 
+	logger.Info("开始创建设备记录", zap.Any("deviceData", newDevice))
+
 	if err := models.CreateDevice(h.db, newDevice); err != nil {
-		logger.Error("Failed to create device", zap.Error(err))
-		response.Fail(c, "创建设备失败", nil)
+		logger.Error("创建设备失败",
+			zap.Error(err),
+			zap.String("macAddress", req.MacAddress),
+			zap.Uint("userId", user.ID),
+			zap.Uint("assistantID", assistantID),
+			zap.String("errorType", fmt.Sprintf("%T", err)))
+
+		// 提供更详细的错误信息
+		errorMsg := fmt.Sprintf("创建设备失败: %v", err)
+		response.Fail(c, errorMsg, nil)
 		return
 	}
+
+	logger.Info("设备创建成功", zap.String("macAddress", req.MacAddress))
 
 	response.Success(c, "Device added successfully", newDevice)
 }
