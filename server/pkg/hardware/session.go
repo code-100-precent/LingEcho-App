@@ -245,7 +245,28 @@ func NewSession(config *SessionConfig) (*Session, error) {
 
 			// 记录用户输入到录音会话 - 只记录最终结果
 			if isLast && text != "" {
+				// 计算ASR开始和结束时间
+				endTime := time.Now()
+				startTime := endTime.Add(-duration)
+
+				// 先确保有用户轮次（如果还没有的话）
+				processor.RecordUserTurnStartIfNeeded()
+
+				// 记录ASR时间到录音会话
+				if session.recordingSession != nil {
+					session.recordingSession.RecordASRTiming(startTime, endTime, text)
+				}
+
+				// 记录ASR时间到processor
+				processor.RecordASRTiming(startTime, endTime, text)
+
+				// 结束用户轮次
+				processor.RecordUserTurnEnd(text)
+
 				processor.ProcessUserInput(text)
+			} else if incremental != "" && !isLast {
+				// 如果是第一次收到ASR增量结果，创建用户轮次
+				processor.RecordUserTurnStartIfNeeded()
 			}
 		},
 		func(err error) {
@@ -296,6 +317,8 @@ func (s *Session) Start() error {
 			s.config.Logger.Warn("启动录音失败", zap.Error(err))
 		} else {
 			s.recordingSession = recordingSession
+			// 设置录音会话到processor，用于时间记录
+			s.processor.SetRecordingSession(recordingSession)
 			s.config.Logger.Info("录音已启动",
 				zap.String("session_id", recordingConfig.SessionID),
 				zap.String("mac_address", recordingConfig.MacAddress))

@@ -65,13 +65,13 @@ func AbortWithStatusJSON(c *gin.Context, httpStatus int, err error) {
 	// 根据错误类型添加更多信息
 	errorMsg := err.Error()
 	switch {
-	case strings.Contains(errorMsg, "username must be at least 3 characters long"):
+	case strings.Contains(errorMsg, "username must be at least 2 characters long"):
 		errorResponse["code"] = 400
-		errorResponse["msg"] = "用户名至少需要3个字符"
+		errorResponse["msg"] = "用户名至少需要2个字符"
 		errorResponse["error"] = "INVALID_USERNAME_LENGTH"
 	case strings.Contains(errorMsg, "username can only contain"):
 		errorResponse["code"] = 400
-		errorResponse["msg"] = "用户名只能包含字母、数字、下划线和连字符"
+		errorResponse["msg"] = "用户名只能包含字母（包括中文）、数字、下划线和连字符"
 		errorResponse["error"] = "INVALID_USERNAME_FORMAT"
 	case strings.Contains(errorMsg, "email has exists"):
 		errorResponse["code"] = 400

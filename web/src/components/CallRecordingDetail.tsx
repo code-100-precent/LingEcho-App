@@ -31,7 +31,7 @@ const CallRecordingDetail: React.FC<CallRecordingDetailProps> = ({ recording, re
   const prepareDelayTrendData = () => {
     if (!recordingDetail?.conversationDetailsData?.turns) return [];
     
-    return recordingDetail.conversationDetailsData.turns
+    return (recordingDetail.conversationDetailsData.turns || [])
       .filter((turn: any) => turn.type === 'ai' && turn.responseDelay)
       .map((turn: any, index: number) => ({
         turn: index + 1,
@@ -58,7 +58,7 @@ const CallRecordingDetail: React.FC<CallRecordingDetailProps> = ({ recording, re
   const prepareConversationFlow = () => {
     if (!recordingDetail?.conversationDetailsData?.turns) return [];
     
-    return recordingDetail.conversationDetailsData.turns.map((turn: any, index: number) => ({
+    return (recordingDetail.conversationDetailsData.turns || []).map((turn: any, index: number) => ({
       turn: index + 1,
       type: turn.type,
       duration: turn.duration,
@@ -209,7 +209,7 @@ const CallRecordingDetail: React.FC<CallRecordingDetailProps> = ({ recording, re
           <div className="space-y-4">
             {/* 对话轮次列表 */}
             <div className="max-h-80 overflow-y-auto space-y-2">
-              {recordingDetail.conversationDetailsData.turns.map((turn: any, index: number) => (
+              {(recordingDetail.conversationDetailsData?.turns || []).map((turn: any, index: number) => (
                 <div key={index} className={`p-3 rounded-lg ${turn.type === 'user' ? 'bg-blue-50 dark:bg-blue-900/20' : 'bg-green-50 dark:bg-green-900/20'}`}>
                   <div className="flex justify-between items-start mb-2">
                     <div className="flex items-center gap-2">

@@ -10,6 +10,7 @@ import { getSystemInit, SystemInitInfo } from '@/api/system'
 import { getAssistantList, AssistantListItem } from '@/api/assistant'
 import EmptyState from '@/components/UI/EmptyState'
 import AudioFileUpload from '@/components/UI/AudioFileUpload'
+import { useI18nStore } from '@/stores/i18nStore'
 import {
   getVoiceprints,
   registerVoiceprint,
@@ -18,6 +19,7 @@ import {
 } from '@/api/voiceprint'
 
 const VoiceprintManagement = () => {
+  const { t } = useI18nStore()
   const [loading, setLoading] = useState(false)
   const [assistants, setAssistants] = useState<AssistantListItem[]>([])
   const [selectedAssistantId, setSelectedAssistantId] = useState<string | null>(null)
@@ -109,33 +111,33 @@ const VoiceprintManagement = () => {
 
       if (response.code === 200) {
         const selectedAssistant = assistants.find(a => String(a.id) === selectedAssistantId)
-        showAlert(`已为助手 ${selectedAssistant?.name} 注册声纹`, 'success', '注册成功')
+        showAlert(`${t('voiceprint.register.success')} ${selectedAssistant?.name}`, 'success', t('voiceprint.register.success'))
         setShowAddModal(false)
         setNewSpeaker({ name: '', audioFile: null })
         await loadVoiceprints()
       } else {
-        throw new Error(response.msg || '注册失败')
+        throw new Error(response.msg || t('voiceprint.register.failed'))
       }
     } catch (error: any) {
-      showAlert(error?.msg || error?.message || '声纹注册失败', 'error', '注册失败')
+      showAlert(error?.msg || error?.message || t('voiceprint.register.failed'), 'error', t('voiceprint.register.failed'))
     } finally {
       setLoading(false)
     }
   }
 
   const handleDeleteVoiceprint = async (voiceprintId: number, speakerName: string) => {
-    if (!confirm(`确定要删除 ${speakerName} 的声纹吗？`)) return
+    if (!confirm(t('voiceprint.delete.confirm'))) return
 
     try {
       const response = await deleteVoiceprint(voiceprintId)
       if (response.code === 200) {
-        showAlert(`已删除 ${speakerName} 的声纹`, 'success', '删除成功')
+        showAlert(`${t('voiceprint.delete.success')} ${speakerName}`, 'success', t('voiceprint.delete.success'))
         await loadVoiceprints()
       } else {
-        throw new Error(response.msg || '删除失败')
+        throw new Error(response.msg || t('voiceprint.delete.failed'))
       }
     } catch (error: any) {
-      showAlert(error?.msg || error?.message || '删除声纹失败', 'error', '删除失败')
+      showAlert(error?.msg || error?.message || t('voiceprint.delete.failed'), 'error', t('voiceprint.delete.failed'))
     }
   }
 
@@ -155,10 +157,10 @@ const VoiceprintManagement = () => {
           </div>
           <div>
             <h1 className="text-2xl font-bold text-gray-900 dark:text-white">
-              声纹识别管理
+              {t('voiceprint.title')}
             </h1>
             <p className="text-gray-600 dark:text-gray-400">
-              为不同助手配置和管理声纹识别功能
+              {t('voiceprint.subtitle')}
             </p>
           </div>
         </div>
@@ -346,31 +348,31 @@ const VoiceprintManagement = () => {
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
               <AlertCircle className="w-5 h-5" />
-              使用说明
+              {t('voiceprint.usage.title')}
             </CardTitle>
           </CardHeader>
           <CardContent className="space-y-4">
             <div className="bg-blue-50 dark:bg-blue-900/20 p-4 rounded-lg">
               <h4 className="font-medium text-blue-900 dark:text-blue-100 mb-2">
-                助手声纹识别功能
+                {t('voiceprint.usage.feature.title')}
               </h4>
               <ul className="text-sm text-blue-800 dark:text-blue-200 space-y-1">
-                <li>• 每个助手都有独立的声纹识别范围，互不干扰</li>
-                <li>• 在语音对话中，系统会自动识别当前助手下注册的说话人</li>
-                <li>• 支持为同一个用户在不同助手下注册不同的声纹</li>
-                <li>• 识别结果仅在当前助手的上下文中有效</li>
+                <li>{t('voiceprint.usage.feature.item1')}</li>
+                <li>{t('voiceprint.usage.feature.item2')}</li>
+                <li>{t('voiceprint.usage.feature.item3')}</li>
+                <li>{t('voiceprint.usage.feature.item4')}</li>
               </ul>
             </div>
 
             <div className="bg-yellow-50 dark:bg-yellow-900/20 p-4 rounded-lg">
               <h4 className="font-medium text-yellow-900 dark:text-yellow-100 mb-2">
-                注意事项
+                {t('voiceprint.usage.notes.title')}
               </h4>
               <ul className="text-sm text-yellow-800 dark:text-yellow-200 space-y-1">
-                <li>• 声纹识别服务由系统管理员配置</li>
-                <li>• 建议在安静环境下录制声纹样本，时长3-10秒</li>
-                <li>• 音频质量会直接影响识别准确性</li>
-                <li>• 删除声纹后无法恢复，请谨慎操作</li>
+                <li>{t('voiceprint.usage.notes.item1')}</li>
+                <li>{t('voiceprint.usage.notes.item2')}</li>
+                <li>{t('voiceprint.usage.notes.item3')}</li>
+                <li>{t('voiceprint.usage.notes.item4')}</li>
               </ul>
             </div>
           </CardContent>

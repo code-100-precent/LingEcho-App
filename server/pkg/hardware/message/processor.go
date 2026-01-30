@@ -271,6 +271,13 @@ func (p *Processor) SetAudioConfig(audioFormat string, sampleRate, channels int,
 	}
 }
 
+// SetUserInputCallback 设置用户输入回调函数
+func (p *Processor) SetUserInputCallback(callback func(text string)) {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	p.userInputCallback = callback
+}
+
 // ProcessASRResult 处理ASR识别结果
 func (p *Processor) ProcessASRResult(ctx context.Context, text string) {
 	if text == "" {
@@ -376,7 +383,13 @@ func (p *Processor) processText(ctx context.Context, text string) {
 	p.mu.Unlock()
 
 	// 调用LLM（在锁外执行，不阻塞其他操作）
+	// 先创建AI轮次，用于时间记录
+	p.recordAITurnStart()
+
+	llmStartTime := time.Now()
 	response, err := p.llmService.Query(ctx, text)
+	llmEndTime := time.Now()
+
 	if err != nil {
 		p.handleServiceError(err, "LLM")
 		return
@@ -386,6 +399,9 @@ func (p *Processor) processText(ctx context.Context, text string) {
 		p.logger.Warn("LLM返回空响应")
 		return
 	}
+
+	// 记录LLM处理时间
+	p.recordLLMTiming(llmStartTime, llmEndTime)
 
 	// 添加助手回复（最小化锁持有时间）
 	assistantMsg := llm.Message{
@@ -473,6 +489,7 @@ func (p *Processor) synthesizeTTS(ctx context.Context, text string) {
 	// 合成语音
 	p.logger.Debug("TTS合成文本", zap.String("text", text))
 
+	ttsStartTime := time.Now()
 	audioChan, err := p.ttsService.Synthesize(ttsCtx, text)
 	if err != nil {
 		p.logger.Error("TTS合成失败", zap.Error(err))
@@ -493,6 +510,7 @@ func (p *Processor) synthesizeTTS(ctx context.Context, text string) {
 	var pcmBuffer []byte // 累积PCM数据（用于OPUS编码）
 	var totalBytesReceived int
 	var frameCount int
+	var firstAudioSent bool // 标记是否已发送第一个音频包
 
 	// 使用defer确保在任何情况下都能正确清理
 	defer func() {
@@ -554,6 +572,17 @@ func (p *Processor) synthesizeTTS(ctx context.Context, text string) {
 			}
 
 			totalBytesReceived += len(data)
+
+			// 如果是第一个音频数据包，记录TTS准备完成时间
+			if !firstAudioSent {
+				ttsFirstAudioTime := time.Now()
+				// 记录TTS准备时间（从TTS开始到第一个音频包准备好的时间）
+				p.recordTTSTiming(ttsStartTime, ttsFirstAudioTime, text)
+				firstAudioSent = true
+				p.logger.Info("TTS第一个音频包准备完成",
+					zap.Duration("prepareTime", ttsFirstAudioTime.Sub(ttsStartTime)),
+				)
+			}
 
 			// 记录TTS输出到音频管理器（用于回声消除）
 			if p.audioManager != nil {
@@ -828,18 +857,18 @@ func (p *Processor) calculatePlaybackWaitTime(frameCount int, audioFormat string
 	return time.Duration(baseWaitMs) * time.Millisecond
 }
 
+// SetRecordingSession 设置录音会话（用于时间记录）
+func (p *Processor) SetRecordingSession(session interface{}) {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	p.recordingSession = session
+}
+
 // SetAIResponseCallback 设置AI回复回调函数
 func (p *Processor) SetAIResponseCallback(callback func(text string)) {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 	p.aiResponseCallback = callback
-}
-
-// SetUserInputCallback 设置用户输入回调函数
-func (p *Processor) SetUserInputCallback(callback func(text string)) {
-	p.mu.Lock()
-	defer p.mu.Unlock()
-	p.userInputCallback = callback
 }
 
 // HandleTextMessage 处理文本消息
@@ -1008,7 +1037,51 @@ func (p *Processor) safeSendTTSAudio(data []byte, ctx context.Context) error {
 
 // 录音会话相关方法
 
-// recordUserTurnStart 记录用户发言开始
+// recordLLMTiming 记录LLM处理时间
+func (p *Processor) recordLLMTiming(startTime, endTime time.Time) {
+	p.mu.RLock()
+	session := p.recordingSession
+	p.mu.RUnlock()
+
+	if session != nil {
+		if rs, ok := session.(interface{ RecordLLMTiming(time.Time, time.Time) }); ok {
+			rs.RecordLLMTiming(startTime, endTime)
+		}
+	}
+}
+
+// recordTTSTiming 记录TTS处理时间
+func (p *Processor) recordTTSTiming(startTime, endTime time.Time, text string) {
+	p.mu.RLock()
+	session := p.recordingSession
+	p.mu.RUnlock()
+
+	if session != nil {
+		if rs, ok := session.(interface {
+			RecordTTSTiming(time.Time, time.Time, string)
+		}); ok {
+			rs.RecordTTSTiming(startTime, endTime, text)
+		}
+	}
+}
+
+// RecordASRTiming 记录ASR处理时间
+func (p *Processor) RecordASRTiming(startTime, endTime time.Time, text string) {
+	p.recordASRTiming(startTime, endTime, text)
+}
+func (p *Processor) recordASRTiming(startTime, endTime time.Time, text string) {
+	p.mu.RLock()
+	session := p.recordingSession
+	p.mu.RUnlock()
+
+	if session != nil {
+		if rs, ok := session.(interface {
+			RecordASRTiming(time.Time, time.Time, string)
+		}); ok {
+			rs.RecordASRTiming(startTime, endTime, text)
+		}
+	}
+}
 func (p *Processor) recordUserTurnStart() {
 	p.mu.RLock()
 	session := p.recordingSession
@@ -1034,6 +1107,11 @@ func (p *Processor) RecordUserTurnStartIfNeeded() {
 			rs.StartUserTurnIfNeeded()
 		}
 	}
+}
+
+// RecordUserTurnEnd 记录用户发言结束（公开方法）
+func (p *Processor) RecordUserTurnEnd(content string) {
+	p.recordUserTurnEnd(content)
 }
 
 // recordUserTurnEnd 记录用户发言结束

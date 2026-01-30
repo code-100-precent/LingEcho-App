@@ -166,8 +166,9 @@ func ValidateDisplayName(name string) error {
 		return nil // Display name can be empty
 	}
 
-	// Length check
-	if len(name) > 50 {
+	// Length check (using rune count for proper Unicode support)
+	runeCount := len([]rune(name))
+	if runeCount > 50 {
 		return errors.New("display name too long")
 	}
 
@@ -185,19 +186,22 @@ func ValidateUserName(username string) error {
 		return errors.New("username is required")
 	}
 
-	// Length check
-	if len(username) < 3 {
-		return errors.New("username must be at least 3 characters long")
+	// Length check (using rune count for proper Unicode support)
+	runeCount := len([]rune(username))
+	if runeCount < 2 {
+		return errors.New("username must be at least 2 characters long")
 	}
 
-	if len(username) > 30 {
+	if runeCount > 30 {
 		return errors.New("username too long")
 	}
 
-	// Only allow letters, numbers, underscores and hyphens
-	usernameRegex := regexp.MustCompile(`^[a-zA-Z0-9_-]+$`)
-	if !usernameRegex.MatchString(username) {
-		return errors.New("username can only contain letters, numbers, underscores and hyphens")
+	// Allow letters (including Unicode letters like Chinese), numbers, underscores and hyphens
+	// Check each character individually
+	for _, r := range username {
+		if !unicode.IsLetter(r) && !unicode.IsDigit(r) && r != '_' && r != '-' {
+			return errors.New("username can only contain letters, numbers, underscores and hyphens")
+		}
 	}
 
 	return nil

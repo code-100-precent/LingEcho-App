@@ -5,6 +5,7 @@ import (
 	"strconv"
 	"time"
 
+	"github.com/code-100-precent/LingEcho/pkg/hardware/conversation"
 	"gorm.io/gorm"
 )
 
@@ -439,10 +440,72 @@ type CallRecording struct {
 	AnalyzedAt      *time.Time `json:"analyzedAt"`                                            // 分析完成时间
 	AutoAnalyzed    bool       `json:"autoAnalyzed" gorm:"default:false"`                     // 是否自动分析
 	AnalysisVersion int        `json:"analysisVersion" gorm:"default:1"`                      // 分析版本号
+
+	// 对话详情数据 (JSON格式存储)
+	ConversationDetailsJSON string `json:"-" gorm:"type:longtext;column:conversation_details"` // 对话详情JSON数据
+	TimingMetricsJSON       string `json:"-" gorm:"type:longtext;column:timing_metrics"`       // 时间指标JSON数据
 }
 
 func (CallRecording) TableName() string {
 	return "call_recordings"
+}
+
+// SetConversationDetails 设置对话详情数据
+func (cr *CallRecording) SetConversationDetails(details *conversation.ConversationDetails) error {
+	if details == nil {
+		cr.ConversationDetailsJSON = ""
+		return nil
+	}
+
+	data, err := json.Marshal(details)
+	if err != nil {
+		return err
+	}
+	cr.ConversationDetailsJSON = string(data)
+	return nil
+}
+
+// GetConversationDetails 获取对话详情数据
+func (cr *CallRecording) GetConversationDetails() (*conversation.ConversationDetails, error) {
+	if cr.ConversationDetailsJSON == "" {
+		return nil, nil
+	}
+
+	var details conversation.ConversationDetails
+	err := json.Unmarshal([]byte(cr.ConversationDetailsJSON), &details)
+	if err != nil {
+		return nil, err
+	}
+	return &details, nil
+}
+
+// SetTimingMetrics 设置时间指标数据
+func (cr *CallRecording) SetTimingMetrics(metrics *conversation.TimingMetrics) error {
+	if metrics == nil {
+		cr.TimingMetricsJSON = ""
+		return nil
+	}
+
+	data, err := json.Marshal(metrics)
+	if err != nil {
+		return err
+	}
+	cr.TimingMetricsJSON = string(data)
+	return nil
+}
+
+// GetTimingMetrics 获取时间指标数据
+func (cr *CallRecording) GetTimingMetrics() (*conversation.TimingMetrics, error) {
+	if cr.TimingMetricsJSON == "" {
+		return nil, nil
+	}
+
+	var metrics conversation.TimingMetrics
+	err := json.Unmarshal([]byte(cr.TimingMetricsJSON), &metrics)
+	if err != nil {
+		return nil, err
+	}
+	return &metrics, nil
 }
 
 // DevicePerformanceLog 设备性能日志表（用于历史趋势分析）

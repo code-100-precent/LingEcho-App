@@ -48,6 +48,7 @@ import PhoneNumberManager from '@/pages/PhoneNumberManager.tsx';
 import VoicemailBox from '@/pages/VoicemailBox.tsx';
 import VoicemailDetail from '@/pages/VoicemailDetail.tsx';
 import VoiceprintManagement from '@/pages/VoiceprintManagement.tsx';
+import DeviceLifecycle from "@/pages/DeviceLifecycle.tsx";
 
 function App() {
     const [showPerformanceMonitor, setShowPerformanceMonitor] = useState(false);
@@ -103,6 +104,13 @@ function App() {
                             <ProtectedRoute>
                                 <Layout>
                                     <DeviceManagement />
+                                </Layout>
+                            </ProtectedRoute>
+                        } />
+                        <Route path="/devices/:deviceId/lifecycle" element={
+                            <ProtectedRoute>
+                                <Layout>
+                                    <DeviceLifecycle />
                                 </Layout>
                             </ProtectedRoute>
                         } />

@@ -453,10 +453,7 @@ func (h *Handlers) handleUserSigninByPassword(c *gin.Context) {
 				}
 				utils.GlobalLoginSecurityManager.RecordFailedLogin(db, form.Email, 0, clientIP, recordFunc)
 			}
-			response.Fail(c, "用户不存在，请检查邮箱地址", gin.H{
-				"error":   "USER_NOT_EXISTS",
-				"message": "用户不存在，请检查邮箱地址",
-			})
+			response.Fail(c, "用户不存在，请检查邮箱地址", nil)
 			return
 		}
 
@@ -511,10 +508,7 @@ func (h *Handlers) handleUserSigninByPassword(c *gin.Context) {
 						}
 						utils.GlobalLoginSecurityManager.RecordFailedLogin(db, form.Email, user.ID, clientIP, recordFunc)
 					}
-					response.Fail(c, "密码错误，请检查后重试", gin.H{
-						"error":   "INCORRECT_PASSWORD",
-						"message": "密码错误，请检查后重试",
-					})
+					response.Fail(c, "密码错误，请检查后重试", nil)
 					return
 				}
 				// 密码正确，但需要邮箱验证
@@ -530,10 +524,7 @@ func (h *Handlers) handleUserSigninByPassword(c *gin.Context) {
 		if captcha.GlobalCaptchaManager != nil {
 			if form.CaptchaID == "" || form.CaptchaCode == "" {
 				logger.Warn("Login failed: captcha is required", zap.String("email", form.Email), zap.Uint("userID", user.ID), zap.String("ip", clientIP))
-				response.Fail(c, "请输入图形验证码", gin.H{
-					"error":   "CAPTCHA_REQUIRED",
-					"message": "请输入图形验证码",
-				})
+				response.Fail(c, "请输入图形验证码", nil)
 				return
 			}
 
@@ -547,10 +538,7 @@ func (h *Handlers) handleUserSigninByPassword(c *gin.Context) {
 					}
 					utils.GlobalLoginSecurityManager.RecordFailedLogin(db, form.Email, user.ID, clientIP, recordFunc)
 				}
-				response.Fail(c, "验证码错误，请重新输入", gin.H{
-					"error":   "INVALID_CAPTCHA",
-					"message": "验证码错误，请重新输入",
-				})
+				response.Fail(c, "验证码错误，请重新输入", nil)
 				return
 			}
 		}
@@ -581,10 +569,7 @@ func (h *Handlers) handleUserSigninByPassword(c *gin.Context) {
 				}
 				utils.GlobalLoginSecurityManager.RecordFailedLogin(db, form.Email, user.ID, clientIP, recordFunc)
 			}
-			response.Fail(c, "密码错误，请检查后重试", gin.H{
-				"error":   "INCORRECT_PASSWORD",
-				"message": "密码错误，请检查后重试",
-			})
+			response.Fail(c, "密码错误，请检查后重试", nil)
 			return
 		}
 	} else {

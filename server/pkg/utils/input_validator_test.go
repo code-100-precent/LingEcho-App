@@ -370,13 +370,23 @@ func TestValidateUserName(t *testing.T) {
 			wantErr:  false,
 		},
 		{
+			name:     "valid username with Chinese characters",
+			username: "用户123",
+			wantErr:  false,
+		},
+		{
+			name:     "valid Chinese username",
+			username: "张三",
+			wantErr:  false,
+		},
+		{
 			name:     "empty username",
 			username: "",
 			wantErr:  true,
 		},
 		{
 			name:     "username too short",
-			username: "ab",
+			username: "a",
 			wantErr:  true,
 		},
 		{
@@ -439,8 +449,14 @@ func TestSanitizeAndValidate(t *testing.T) {
 			wantErr:   false,
 		},
 		{
+			name:      "valid Chinese username",
+			input:     "张三",
+			inputType: "username",
+			wantErr:   false,
+		},
+		{
 			name:      "invalid username - too short",
-			input:     "ab",
+			input:     "a",
 			inputType: "username",
 			wantErr:   true,
 		},

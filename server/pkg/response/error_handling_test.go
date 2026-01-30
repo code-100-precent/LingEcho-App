@@ -19,15 +19,15 @@ func TestFriendlyErrorMessages(t *testing.T) {
 	}{
 		{
 			name:          "用户名长度不足",
-			inputError:    "username must be at least 3 characters long",
-			expectedMsg:   "用户名至少需要3个字符",
+			inputError:    "username must be at least 2 characters long",
+			expectedMsg:   "用户名至少需要2个字符",
 			expectedError: "INVALID_USERNAME_LENGTH",
 			expectedCode:  400,
 		},
 		{
 			name:          "用户名格式错误",
 			inputError:    "username can only contain letters, numbers, underscores and hyphens",
-			expectedMsg:   "用户名只能包含字母、数字、下划线和连字符",
+			expectedMsg:   "用户名只能包含字母（包括中文）、数字、下划线和连字符",
 			expectedError: "INVALID_USERNAME_FORMAT",
 			expectedCode:  400,
 		},
@@ -107,7 +107,7 @@ func TestRegistrationErrorScenario(t *testing.T) {
 	r, rr := newCtx()
 	r.POST("/register", func(c *gin.Context) {
 		// 模拟用户名验证失败
-		AbortWithStatusJSON(c, http.StatusBadRequest, errors.New("username must be at least 3 characters long"))
+		AbortWithStatusJSON(c, http.StatusBadRequest, errors.New("username must be at least 2 characters long"))
 	})
 
 	req, _ := http.NewRequest(http.MethodPost, "/register", nil)
@@ -123,7 +123,7 @@ func TestRegistrationErrorScenario(t *testing.T) {
 	// 验证返回的是友好的中文错误信息
 	expectedResponse := map[string]interface{}{
 		"code":  float64(400),
-		"msg":   "用户名至少需要3个字符",
+		"msg":   "用户名至少需要2个字符",
 		"error": "INVALID_USERNAME_LENGTH",
 		"data":  nil,
 	}

@@ -166,7 +166,7 @@ func TestAbortWithStatusJSON(t *testing.T) {
 func TestAbortWithStatusJSON_UsernameError(t *testing.T) {
 	r, rr := newCtx()
 	r.GET("/username-error", func(c *gin.Context) {
-		AbortWithStatusJSON(c, http.StatusBadRequest, errors.New("username must be at least 3 characters long"))
+		AbortWithStatusJSON(c, http.StatusBadRequest, errors.New("username must be at least 2 characters long"))
 	})
 
 	req, _ := http.NewRequest(http.MethodGet, "/username-error", nil)
@@ -180,8 +180,8 @@ func TestAbortWithStatusJSON_UsernameError(t *testing.T) {
 	readJSON(t, rr, &got)
 
 	// 检查友好的中文错误信息
-	if got["msg"] != "用户名至少需要3个字符" {
-		t.Fatalf("msg field=%v, want '用户名至少需要3个字符'", got["msg"])
+	if got["msg"] != "用户名至少需要2个字符" {
+		t.Fatalf("msg field=%v, want '用户名至少需要2个字符'", got["msg"])
 	}
 	if got["error"] != "INVALID_USERNAME_LENGTH" {
 		t.Fatalf("error field=%v, want 'INVALID_USERNAME_LENGTH'", got["error"])

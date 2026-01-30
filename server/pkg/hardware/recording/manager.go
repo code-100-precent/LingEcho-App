@@ -14,6 +14,7 @@ import (
 	"github.com/code-100-precent/LingEcho/internal/models"
 	"github.com/code-100-precent/LingEcho/pkg/config"
 	"github.com/code-100-precent/LingEcho/pkg/hardware/analysis"
+	"github.com/code-100-precent/LingEcho/pkg/hardware/conversation"
 	"go.uber.org/zap"
 	"gorm.io/gorm"
 )
@@ -74,6 +75,11 @@ type RecordingSession struct {
 	isWAV            bool
 	wavHeaderWritten bool
 	pcmDataSize      int64 // PCM数据大小，用于WAV头部
+
+	// 对话轮次跟踪
+	conversationTurns []conversation.ConversationTurn
+	currentTurnID     int
+	interruptions     int
 }
 
 // StartRecording 开始录音
@@ -232,6 +238,9 @@ func (rs *RecordingSession) AddUserInput(text string) {
 	}
 	rs.userInput.WriteString(fmt.Sprintf("[%s] %s",
 		time.Now().Format("15:04:05"), text))
+
+	// 自动创建用户对话轮次
+	rs.createUserTurn(text)
 }
 
 // AddAIResponse 添加AI回复文本
@@ -241,6 +250,213 @@ func (rs *RecordingSession) AddAIResponse(text string) {
 	}
 	rs.aiResponse.WriteString(fmt.Sprintf("[%s] %s",
 		time.Now().Format("15:04:05"), text))
+
+	// 自动创建AI对话轮次
+	rs.createAITurn(text)
+}
+
+// createUserTurn 创建用户对话轮次
+func (rs *RecordingSession) createUserTurn(content string) {
+	rs.currentTurnID++
+	now := time.Now()
+
+	turn := conversation.ConversationTurn{
+		TurnID:    rs.currentTurnID,
+		Timestamp: now,
+		Type:      "user",
+		Content:   content,
+		StartTime: now,
+		EndTime:   now,
+		Duration:  0, // 将通过RecordASRTiming更新
+	}
+
+	rs.conversationTurns = append(rs.conversationTurns, turn)
+}
+
+// createAITurn 创建AI对话轮次
+func (rs *RecordingSession) createAITurn(content string) {
+	rs.currentTurnID++
+	now := time.Now()
+
+	turn := conversation.ConversationTurn{
+		TurnID:    rs.currentTurnID,
+		Timestamp: now,
+		Type:      "ai",
+		Content:   content,
+		StartTime: now,
+		EndTime:   now,
+		Duration:  0, // 将通过RecordTTSTiming更新
+	}
+
+	rs.conversationTurns = append(rs.conversationTurns, turn)
+}
+
+// StartUserTurn 开始用户对话轮次（无参数版本，供消息处理器调用）
+func (rs *RecordingSession) StartUserTurn() {
+	rs.currentTurnID++
+	now := time.Now()
+
+	turn := conversation.ConversationTurn{
+		TurnID:    rs.currentTurnID,
+		Timestamp: now,
+		Type:      "user",
+		Content:   "", // 内容将在EndUserTurn时设置
+		StartTime: now,
+		Duration:  0,
+	}
+
+	rs.conversationTurns = append(rs.conversationTurns, turn)
+}
+
+// StartUserTurnIfNeeded 如果需要的话开始用户对话轮次
+func (rs *RecordingSession) StartUserTurnIfNeeded() {
+	// 检查是否已经有进行中的用户轮次
+	if len(rs.conversationTurns) > 0 {
+		lastTurn := &rs.conversationTurns[len(rs.conversationTurns)-1]
+		if lastTurn.Type == "user" && lastTurn.Content == "" {
+			// 已经有进行中的用户轮次，不需要重复创建
+			return
+		}
+	}
+	rs.StartUserTurn()
+}
+
+// EndUserTurn 结束用户对话轮次（字符串参数版本，供消息处理器调用）
+func (rs *RecordingSession) EndUserTurn(content string) {
+	if len(rs.conversationTurns) == 0 {
+		return
+	}
+
+	lastTurn := &rs.conversationTurns[len(rs.conversationTurns)-1]
+	if lastTurn.Type != "user" {
+		return
+	}
+
+	now := time.Now()
+	lastTurn.Content = content
+	lastTurn.EndTime = now
+	lastTurn.Duration = now.Sub(lastTurn.StartTime).Milliseconds()
+
+	// 同时添加到传统的userInput字段以保持兼容性
+	rs.AddUserInput(content)
+}
+
+// StartAITurn 开始AI对话轮次（无参数版本，供消息处理器调用）
+func (rs *RecordingSession) StartAITurn() {
+	rs.currentTurnID++
+	now := time.Now()
+
+	turn := conversation.ConversationTurn{
+		TurnID:    rs.currentTurnID,
+		Timestamp: now,
+		Type:      "ai",
+		Content:   "", // 内容将在后续设置
+		StartTime: now,
+		Duration:  0,
+	}
+
+	rs.conversationTurns = append(rs.conversationTurns, turn)
+}
+
+// RecordLLMTiming 记录LLM处理时间
+func (rs *RecordingSession) RecordLLMTiming(startTime, endTime time.Time) {
+	if len(rs.conversationTurns) == 0 {
+		return
+	}
+
+	// 查找最后一个AI轮次
+	for i := len(rs.conversationTurns) - 1; i >= 0; i-- {
+		turn := &rs.conversationTurns[i]
+		if turn.Type == "ai" && turn.LLMStartTime == nil {
+			// 记录LLM时间
+			duration := endTime.Sub(startTime).Milliseconds()
+			turn.LLMStartTime = &startTime
+			turn.LLMEndTime = &endTime
+			turn.LLMDuration = &duration
+
+			// 计算响应延迟：从上一个用户轮次结束到LLM开始的时间
+			if i > 0 {
+				for j := i - 1; j >= 0; j-- {
+					if rs.conversationTurns[j].Type == "user" {
+						responseDelay := startTime.Sub(rs.conversationTurns[j].EndTime).Milliseconds()
+						if responseDelay < 0 {
+							responseDelay = 0
+						}
+						turn.ResponseDelay = &responseDelay
+						break
+					}
+				}
+			}
+			break
+		}
+	}
+}
+
+// RecordTTSTiming 记录TTS处理时间（从LLM完成到TTS开始发送音频的时间）
+func (rs *RecordingSession) RecordTTSTiming(startTime, endTime time.Time, text string) {
+	if len(rs.conversationTurns) == 0 {
+		return
+	}
+
+	// 查找最后一个AI轮次
+	for i := len(rs.conversationTurns) - 1; i >= 0; i-- {
+		turn := &rs.conversationTurns[i]
+		if turn.Type == "ai" && turn.TTSStartTime == nil {
+			// 记录TTS时间（这里应该是TTS准备时间，不是整个合成时间）
+			duration := endTime.Sub(startTime).Milliseconds()
+			turn.TTSStartTime = &startTime
+			turn.TTSEndTime = &endTime
+			turn.TTSDuration = &duration
+
+			// 更新AI轮次的结束时间（TTS开始发送音频的时间）
+			turn.EndTime = endTime
+			turn.Duration = endTime.Sub(turn.StartTime).Milliseconds()
+
+			// 计算总延迟：从用户说话结束到TTS开始发送音频的总时间
+			if turn.ResponseDelay != nil && turn.LLMDuration != nil {
+				totalDelay := *turn.ResponseDelay + *turn.LLMDuration + *turn.TTSDuration
+				turn.TotalDelay = &totalDelay
+			}
+
+			// 设置内容
+			if turn.Content == "" {
+				turn.Content = text
+			}
+			break
+		}
+	}
+}
+
+// RecordASRTiming 记录ASR处理时间
+func (rs *RecordingSession) RecordASRTiming(startTime, endTime time.Time, text string) {
+	if len(rs.conversationTurns) == 0 {
+		return
+	}
+
+	// 查找最后一个用户轮次
+	for i := len(rs.conversationTurns) - 1; i >= 0; i-- {
+		turn := &rs.conversationTurns[i]
+		if turn.Type == "user" && turn.ASRStartTime == nil {
+			// 记录ASR时间
+			duration := endTime.Sub(startTime).Milliseconds()
+			turn.ASRStartTime = &startTime
+			turn.ASREndTime = &endTime
+			turn.ASRDuration = &duration
+
+			// 更新用户轮次的结束时间和总时长
+			turn.EndTime = endTime
+			turn.Duration = endTime.Sub(turn.StartTime).Milliseconds()
+
+			// 设置内容
+			if turn.Content == "" {
+				turn.Content = text
+			}
+			break
+		}
+	}
+}
+func (rs *RecordingSession) RecordInterruption() {
+	rs.interruptions++
 }
 
 // StopRecording 停止录音并保存记录
@@ -318,6 +534,18 @@ func (rs *RecordingSession) StopRecording(callStatus string) (*models.CallRecord
 		NoiseLevel:   rs.calculateNoiseLevel(),
 	}
 
+	// 生成并保存对话详情数据
+	conversationDetails := rs.generateConversationDetails()
+	if err := recording.SetConversationDetails(conversationDetails); err != nil {
+		rs.manager.logger.Error("保存对话详情失败", zap.Error(err))
+	}
+
+	// 生成并保存时间指标数据
+	timingMetrics := rs.generateTimingMetrics()
+	if err := recording.SetTimingMetrics(timingMetrics); err != nil {
+		rs.manager.logger.Error("保存时间指标失败", zap.Error(err))
+	}
+
 	// 保存到数据库
 	if err := models.CreateCallRecording(rs.manager.db, recording); err != nil {
 		return nil, fmt.Errorf("保存录音记录失败: %w", err)
@@ -376,7 +604,152 @@ func (rs *RecordingSession) updateWAVHeader() error {
 	return err
 }
 
-// generateSummary 生成对话摘要
+// generateConversationDetails 生成对话详情数据
+func (rs *RecordingSession) generateConversationDetails() *conversation.ConversationDetails {
+	userTurns := 0
+	aiTurns := 0
+
+	for _, turn := range rs.conversationTurns {
+		if turn.Type == "user" {
+			userTurns++
+		} else if turn.Type == "ai" {
+			aiTurns++
+		}
+	}
+
+	return &conversation.ConversationDetails{
+		SessionID:     rs.config.SessionID,
+		StartTime:     rs.startTime,
+		EndTime:       rs.endTime,
+		TotalTurns:    len(rs.conversationTurns),
+		UserTurns:     userTurns,
+		AITurns:       aiTurns,
+		Turns:         rs.conversationTurns,
+		Interruptions: rs.interruptions,
+	}
+}
+
+// generateTimingMetrics 生成时间指标数据
+func (rs *RecordingSession) generateTimingMetrics() *conversation.TimingMetrics {
+	metrics := &conversation.TimingMetrics{
+		SessionDuration: rs.endTime.Sub(rs.startTime).Milliseconds(),
+	}
+
+	// 统计ASR指标
+	asrTimes := []int64{}
+	for _, turn := range rs.conversationTurns {
+		if turn.Type == "user" && turn.ASRDuration != nil {
+			asrTimes = append(asrTimes, *turn.ASRDuration)
+		}
+	}
+
+	if len(asrTimes) > 0 {
+		metrics.ASRCalls = len(asrTimes)
+		metrics.ASRTotalTime = sumInt64Slice(asrTimes)
+		metrics.ASRAverageTime = metrics.ASRTotalTime / int64(len(asrTimes))
+		metrics.ASRMinTime = minInt64Slice(asrTimes)
+		metrics.ASRMaxTime = maxInt64Slice(asrTimes)
+	}
+
+	// 统计LLM指标
+	llmTimes := []int64{}
+	for _, turn := range rs.conversationTurns {
+		if turn.Type == "ai" && turn.LLMDuration != nil {
+			llmTimes = append(llmTimes, *turn.LLMDuration)
+		}
+	}
+
+	if len(llmTimes) > 0 {
+		metrics.LLMCalls = len(llmTimes)
+		metrics.LLMTotalTime = sumInt64Slice(llmTimes)
+		metrics.LLMAverageTime = metrics.LLMTotalTime / int64(len(llmTimes))
+		metrics.LLMMinTime = minInt64Slice(llmTimes)
+		metrics.LLMMaxTime = maxInt64Slice(llmTimes)
+	}
+
+	// 统计TTS指标
+	ttsTimes := []int64{}
+	for _, turn := range rs.conversationTurns {
+		if turn.Type == "ai" && turn.TTSDuration != nil {
+			ttsTimes = append(ttsTimes, *turn.TTSDuration)
+		}
+	}
+
+	if len(ttsTimes) > 0 {
+		metrics.TTSCalls = len(ttsTimes)
+		metrics.TTSTotalTime = sumInt64Slice(ttsTimes)
+		metrics.TTSAverageTime = metrics.TTSTotalTime / int64(len(ttsTimes))
+		metrics.TTSMinTime = minInt64Slice(ttsTimes)
+		metrics.TTSMaxTime = maxInt64Slice(ttsTimes)
+	}
+
+	// 统计响应延迟指标
+	responseDelays := []int64{}
+	for _, turn := range rs.conversationTurns {
+		if turn.Type == "ai" && turn.ResponseDelay != nil {
+			responseDelays = append(responseDelays, *turn.ResponseDelay)
+		}
+	}
+
+	if len(responseDelays) > 0 {
+		metrics.ResponseDelays = responseDelays
+		metrics.AverageResponseDelay = sumInt64Slice(responseDelays) / int64(len(responseDelays))
+		metrics.MinResponseDelay = minInt64Slice(responseDelays)
+		metrics.MaxResponseDelay = maxInt64Slice(responseDelays)
+	}
+
+	// 统计总延迟指标
+	totalDelays := []int64{}
+	for _, turn := range rs.conversationTurns {
+		if turn.Type == "ai" && turn.TotalDelay != nil {
+			totalDelays = append(totalDelays, *turn.TotalDelay)
+		}
+	}
+
+	if len(totalDelays) > 0 {
+		metrics.TotalDelays = totalDelays
+		metrics.AverageTotalDelay = sumInt64Slice(totalDelays) / int64(len(totalDelays))
+		metrics.MinTotalDelay = minInt64Slice(totalDelays)
+		metrics.MaxTotalDelay = maxInt64Slice(totalDelays)
+	}
+
+	return metrics
+}
+
+// 辅助函数
+func sumInt64Slice(slice []int64) int64 {
+	sum := int64(0)
+	for _, v := range slice {
+		sum += v
+	}
+	return sum
+}
+
+func minInt64Slice(slice []int64) int64 {
+	if len(slice) == 0 {
+		return 0
+	}
+	min := slice[0]
+	for _, v := range slice[1:] {
+		if v < min {
+			min = v
+		}
+	}
+	return min
+}
+
+func maxInt64Slice(slice []int64) int64 {
+	if len(slice) == 0 {
+		return 0
+	}
+	max := slice[0]
+	for _, v := range slice[1:] {
+		if v > max {
+			max = v
+		}
+	}
+	return max
+}
 func (rs *RecordingSession) generateSummary() string {
 	userText := rs.userInput.String()
 	aiText := rs.aiResponse.String()
