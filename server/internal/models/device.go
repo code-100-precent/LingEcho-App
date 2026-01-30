@@ -63,13 +63,13 @@ type Device struct {
 	Alias       string `json:"alias,omitempty" gorm:"size:128"`      // Device alias
 
 	// 运行状态监控
-	IsOnline    bool      `json:"isOnline" gorm:"default:false;index"`  // 在线状态
-	LastSeen    time.Time `json:"lastSeen,omitempty" gorm:"index"`      // 最后在线时间
-	StartTime   time.Time `json:"startTime,omitempty"`                  // 启动时间
-	Uptime      int64     `json:"uptime" gorm:"default:0"`              // 运行时长(秒)
-	ErrorCount  int       `json:"errorCount" gorm:"default:0"`          // 错误计数
-	LastError   string    `json:"lastError,omitempty" gorm:"type:text"` // 最后错误信息
-	LastErrorAt time.Time `json:"lastErrorAt,omitempty"`                // 最后错误时间
+	IsOnline    bool       `json:"isOnline" gorm:"default:false;index"`  // 在线状态
+	LastSeen    *time.Time `json:"lastSeen,omitempty" gorm:"index"`      // 最后在线时间
+	StartTime   *time.Time `json:"startTime,omitempty"`                  // 启动时间
+	Uptime      int64      `json:"uptime" gorm:"default:0"`              // 运行时长(秒)
+	ErrorCount  int        `json:"errorCount" gorm:"default:0"`          // 错误计数
+	LastError   string     `json:"lastError,omitempty" gorm:"type:text"` // 最后错误信息
+	LastErrorAt *time.Time `json:"lastErrorAt,omitempty"`                // 最后错误时间
 
 	// 系统信息
 	SystemInfo   string `json:"systemInfo,omitempty" gorm:"type:json"`   // 系统信息JSON
@@ -176,12 +176,13 @@ func UpdateDeviceStatus(db *gorm.DB, macAddress string, status map[string]interf
 
 // UpdateDeviceOnlineStatus 更新设备在线状态
 func UpdateDeviceOnlineStatus(db *gorm.DB, macAddress string, isOnline bool) error {
+	now := time.Now()
 	updates := map[string]interface{}{
 		"is_online": isOnline,
-		"last_seen": time.Now(),
+		"last_seen": &now,
 	}
 	if isOnline {
-		updates["start_time"] = time.Now()
+		updates["start_time"] = &now
 	}
 	return UpdateDeviceStatus(db, macAddress, updates)
 }
@@ -200,10 +201,11 @@ func LogDeviceError(db *gorm.DB, deviceID, macAddress, errorType, errorLevel, er
 	}
 
 	// 同时更新设备的错误计数和最后错误信息
+	now := time.Now()
 	db.Model(&Device{}).Where("mac_address = ?", macAddress).Updates(map[string]interface{}{
 		"error_count":   gorm.Expr("error_count + 1"),
 		"last_error":    errorMsg,
-		"last_error_at": time.Now(),
+		"last_error_at": &now,
 	})
 
 	return db.Create(&errorLog).Error
