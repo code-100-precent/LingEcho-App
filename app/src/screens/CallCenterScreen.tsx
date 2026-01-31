@@ -9,9 +9,10 @@ import CallTab from './CallCenter/CallTab';
 import SchemeTab from './CallCenter/SchemeTab';
 import NumbersTab from './CallCenter/NumbersTab';
 import VoicemailTab from './CallCenter/VoicemailTab';
+import CallHistoryTab from './CallCenter/CallHistoryTab';
 
 // 标签页类型
-type TabType = 'call' | 'schemes' | 'numbers' | 'voicemail';
+type TabType = 'call' | 'schemes' | 'numbers' | 'voicemail' | 'history';
 
 const CallCenterScreen: React.FC = () => {
   const [activeTab, setActiveTab] = useState<TabType>('call');
@@ -19,6 +20,7 @@ const CallCenterScreen: React.FC = () => {
   // 标签页配置
   const tabs = [
     { id: 'call' as TabType, name: '通话控制', icon: 'phone-call' },
+    { id: 'history' as TabType, name: '通话记录', icon: 'clock' },
     { id: 'schemes' as TabType, name: '代接方案', icon: 'settings' },
     { id: 'numbers' as TabType, name: '号码管理', icon: 'smartphone' },
     { id: 'voicemail' as TabType, name: '留言箱', icon: 'mail' },
@@ -56,6 +58,7 @@ const CallCenterScreen: React.FC = () => {
       {/* 标签页内容 */}
       <View style={styles.tabContent}>
         {activeTab === 'call' && <CallTab />}
+        {activeTab === 'history' && <CallHistoryTab />}
         {activeTab === 'schemes' && <SchemeTab />}
         {activeTab === 'numbers' && <NumbersTab />}
         {activeTab === 'voicemail' && <VoicemailTab />}

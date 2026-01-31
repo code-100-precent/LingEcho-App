@@ -15,6 +15,7 @@ import (
 	"github.com/code-100-precent/LingEcho/pkg/utils/search"
 	"github.com/code-100-precent/LingEcho/pkg/websocket"
 	"github.com/gin-gonic/gin"
+	"github.com/sirupsen/logrus"
 	"go.uber.org/zap"
 	"gorm.io/gorm"
 )
@@ -778,6 +779,7 @@ func (h *Handlers) registerSipRoutes(r *gin.RouterGroup) {
 		// 通话历史
 		sip.GET("/calls", models.AuthRequired, h.sipHandler.GetCallHistory)
 		sip.GET("/calls/:callId/detail", models.AuthRequired, h.sipHandler.GetCallDetail)
+		sip.POST("/calls/:callId/transcribe", models.AuthRequired, h.sipHandler.RequestTranscription)
 	}
 }
 
@@ -901,5 +903,19 @@ func (h *Handlers) registerPhoneNumberRoutes(r *gin.RouterGroup) {
 		phoneNumbers.POST("/:id/bind-scheme", phoneNumberHandler.BindScheme)                      // 绑定方案
 		phoneNumbers.POST("/:id/unbind-scheme", phoneNumberHandler.UnbindScheme)                  // 解绑方案
 		phoneNumbers.POST("/:id/call-forward-status", phoneNumberHandler.UpdateCallForwardStatus) // 更新呼叫转移状态
+	}
+
+	// Call Forward Routes (呼叫转移)
+	callForwardLogger := logrus.New()
+	callForwardHandler := NewCallForwardHandler(h.db, callForwardLogger)
+	callForward := r.Group("call-forward")
+	callForward.Use(models.AuthRequired)
+	{
+		callForward.POST("/setup-instructions", callForwardHandler.GetSetupInstructions)         // 获取设置指引
+		callForward.GET("/:id/disable-instructions", callForwardHandler.GetDisableInstructions)  // 获取取消指引
+		callForward.POST("/:id/status", callForwardHandler.UpdateStatus)                         // 更新状态
+		callForward.POST("/:id/verify", callForwardHandler.VerifyStatus)                         // 验证状态
+		callForward.POST("/:id/test", callForwardHandler.TestCallForward)                        // 测试呼叫转移
+		callForward.GET("/carrier-codes", callForwardHandler.GetCarrierCodes)                    // 获取运营商代码
 	}
 }
