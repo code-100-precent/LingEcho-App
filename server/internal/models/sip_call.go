@@ -71,6 +71,11 @@ type SipCall struct {
 	// 通话记录
 	RecordURL string `json:"recordUrl,omitempty" gorm:"size:500"` // 通话录音文件URL
 
+	// 转录信息
+	Transcription       string `json:"transcription,omitempty" gorm:"type:text"`      // 转录文本
+	TranscriptionStatus string `json:"transcriptionStatus,omitempty" gorm:"size:20"`  // 转录状态：pending, processing, completed, failed
+	TranscriptionError  string `json:"transcriptionError,omitempty" gorm:"size:500"`  // 转录错误信息
+
 	// 元数据
 	Metadata string `json:"metadata,omitempty" gorm:"type:text"` // JSON格式的额外信息
 	Notes    string `json:"notes,omitempty" gorm:"type:text"`    // 备注

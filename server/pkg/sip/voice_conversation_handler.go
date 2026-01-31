@@ -737,7 +737,20 @@ func (h *VoiceConversationHandler) sendAudioToClient(audioData []byte) {
 		"pcmu_len": len(pcmuData),
 	}).Info("🔄 PCM -> PCMU 转换完成")
 	
-	// 3. 分包发送
+	// 3. 如果启用了录音，将AI的音频也添加到录音缓冲区
+	if h.isRecording {
+		h.recordingMutex.Lock()
+		h.recordingBuffer = append(h.recordingBuffer, pcmuData...)
+		h.recordingMutex.Unlock()
+		
+		logrus.WithFields(logrus.Fields{
+			"call_id":        h.callID,
+			"ai_audio_size":  len(pcmuData),
+			"total_recorded": len(h.recordingBuffer),
+		}).Info("📼 AI音频已添加到录音缓冲区")
+	}
+	
+	// 4. 分包发送
 	h.sendPCMUPackets(pcmuData)
 }
 

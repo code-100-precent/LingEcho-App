@@ -1,7 +1,52 @@
 /**
  * SIP 通话相关 API
  */
-import { request } from '../../utils/request';
+import { get, post } from '../../utils/request';
+
+// SIP 用户
+export interface SipUser {
+  id: number;
+  username: string;
+  displayName?: string;
+  alias?: string;
+  contact?: string;
+  contactIp?: string;
+  contactPort?: number;
+  status: 'registered' | 'unregistered' | 'expired';
+  enabled: boolean;
+  registerCount: number;
+  callCount: number;
+  lastRegister?: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+// 呼出请求
+export interface MakeOutgoingCallRequest {
+  targetUri: string;
+  userId?: number;
+  groupId?: number;
+  notes?: string;
+}
+
+// 呼出响应
+export interface MakeOutgoingCallResponse {
+  callId: string;
+  status: string;
+  targetUri: string;
+}
+
+// 呼出会话
+export interface OutgoingSession {
+  remoteRtpAddr: string;
+  callId: string;
+  targetUri: string;
+  status: string;
+  startTime: string;
+  answerTime?: string;
+  endTime?: string;
+  error?: string;
+}
 
 // 通话记录
 export interface SipCall {
@@ -26,7 +71,9 @@ export interface SipCall {
   errorCode?: number;
   errorMessage?: string;
   recordUrl?: string;
-  transcription?: string; // ASR 转录文本
+  transcription?: string;
+  transcriptionStatus?: 'pending' | 'processing' | 'completed' | 'failed';
+  transcriptionError?: string;
   metadata?: string;
   notes?: string;
   createdAt: string;
@@ -49,23 +96,6 @@ export interface CallHistoryResponse {
   limit: number;
 }
 
-// 获取通话历史
-export const getCallHistory = async (params?: CallHistoryParams) => {
-  return request<CallHistoryResponse>({
-    url: '/sip/calls',
-    method: 'GET',
-    params,
-  });
-};
-
-// 获取通话详情
-export const getCallDetail = async (callId: string) => {
-  return request<SipCall>({
-    url: `/sip/calls/${callId}/detail`,
-    method: 'GET',
-  });
-};
-
 // ASR 转录请求
 export interface TranscriptionRequest {
   audioUrl: string;
@@ -83,11 +113,54 @@ export interface TranscriptionResponse {
   }>;
 }
 
+// 获取 SIP 用户列表
+export const getSipUsers = async () => {
+  return get<SipUser[]>('/sip/users');
+};
+
+// 发起呼出
+export const makeOutgoingCall = async (data: MakeOutgoingCallRequest) => {
+  return post<MakeOutgoingCallResponse>('/sip/calls/outgoing', data);
+};
+
+// 获取呼出状态
+export const getOutgoingCallStatus = async (callId: string) => {
+  return get<OutgoingSession>(`/sip/calls/outgoing/${callId}`);
+};
+
+// 取消呼出
+export const cancelOutgoingCall = async (callId: string) => {
+  return post<void>(`/sip/calls/outgoing/${callId}/cancel`);
+};
+
+// 挂断呼出（已接通的通话）
+export const hangupOutgoingCall = async (callId: string) => {
+  return post<void>(`/sip/calls/outgoing/${callId}/hangup`);
+};
+
+// 获取通话历史
+export const getCallHistory = async (params?: CallHistoryParams) => {
+  return get<CallHistoryResponse>('/sip/calls', { params });
+};
+
+// 获取通话详情
+export const getCallDetail = async (callId: string) => {
+  return get<SipCall>(`/sip/calls/${callId}/detail`);
+};
+
 // 请求 ASR 转录（如果服务端支持）
 export const requestTranscription = async (callId: string, data: TranscriptionRequest) => {
-  return request<TranscriptionResponse>({
-    url: `/sip/calls/${callId}/transcribe`,
-    method: 'POST',
-    data,
-  });
+  return post<TranscriptionResponse>(`/sip/calls/${callId}/transcribe`, data);
+};
+
+// 默认导出所有函数
+export default {
+  getSipUsers,
+  makeOutgoingCall,
+  getOutgoingCallStatus,
+  cancelOutgoingCall,
+  hangupOutgoingCall,
+  getCallHistory,
+  getCallDetail,
+  requestTranscription,
 };

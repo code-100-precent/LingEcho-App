@@ -15,7 +15,10 @@ import {
 import { useNavigation } from '@react-navigation/native';
 import { Feather } from '@expo/vector-icons';
 import { EmptyState } from '../../components';
-import { getCallHistory, SipCall } from '../../services/api/sip';
+import * as sipApi from '../../services/api/sip';
+
+type SipCall = sipApi.SipCall;
+type CallHistoryParams = sipApi.CallHistoryParams;
 
 const CallHistoryTab: React.FC = () => {
   const navigation = useNavigation();
@@ -35,7 +38,7 @@ const CallHistoryTab: React.FC = () => {
     }
 
     try {
-      const params: any = {
+      const params: CallHistoryParams = {
         page: pageNum,
         limit: 20,
       };
@@ -44,10 +47,17 @@ const CallHistoryTab: React.FC = () => {
         params.status = filter;
       }
 
-      const response = await getCallHistory(params);
+      const response = await sipApi.getCallHistory(params);
       
       if (response.code === 200 && response.data) {
         const newCalls = response.data.list || [];
+        
+        console.log('=== 通话记录加载成功 ===');
+        console.log('记录数量:', newCalls.length);
+        if (newCalls.length > 0) {
+          console.log('第一条记录:', JSON.stringify(newCalls[0], null, 2));
+          console.log('是否有录音:', !!newCalls[0].recordUrl);
+        }
         
         if (refresh || pageNum === 1) {
           setCalls(newCalls);

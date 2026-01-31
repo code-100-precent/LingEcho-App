@@ -779,6 +779,7 @@ func (h *Handlers) registerSipRoutes(r *gin.RouterGroup) {
 		// 通话历史
 		sip.GET("/calls", models.AuthRequired, h.sipHandler.GetCallHistory)
 		sip.GET("/calls/:callId/detail", models.AuthRequired, h.sipHandler.GetCallDetail)
+		sip.POST("/calls/:callId/transcribe", models.AuthRequired, h.sipHandler.RequestTranscription)
 	}
 }
 

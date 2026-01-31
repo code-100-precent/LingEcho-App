@@ -1,13 +1,11 @@
 /**
- * API服务统一导出
+ * API 统一导出
  */
-export * from './auth';
-export * from './profile';
-export * from './device';
-export * from './billing';
-export * from './assistant';
-export * from './group';
-export * from './notification';
-export * from './system';
-export * from './credential';
 
+// 重新导出所有 SIP API
+export * from './sip';
+export { default as sipApi } from './sip';
+
+// 重新导出其他 API
+export * from './assistant';
+export * from './chat';

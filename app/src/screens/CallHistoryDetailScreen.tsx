@@ -14,8 +14,10 @@ import {
 import { useRoute, useNavigation, RouteProp } from '@react-navigation/native';
 import { Feather } from '@expo/vector-icons';
 import { MainLayout, CallAudioPlayer, Card } from '../components';
-import { getCallDetail, SipCall, requestTranscription } from '../services/api/sip';
+import * as sipApi from '../services/api/sip';
 import { getUploadsBaseURL } from '../config/apiConfig';
+
+type SipCall = sipApi.SipCall;
 
 type CallHistoryDetailRouteParams = {
   CallHistoryDetail: {
@@ -38,7 +40,7 @@ const CallHistoryDetailScreen: React.FC = () => {
     const loadCallDetail = async () => {
       setIsLoading(true);
       try {
-        const response = await getCallDetail(callId);
+        const response = await sipApi.getCallDetail(callId);
         if (response.code === 200 && response.data) {
           setCall(response.data);
           // 如果已有转录文本，直接显示
@@ -71,27 +73,85 @@ const CallHistoryDetailScreen: React.FC = () => {
     setIsTranscribing(true);
     try {
       const uploadsBaseURL = getUploadsBaseURL();
-      const audioUrl = call.recordUrl.startsWith('http')
-        ? call.recordUrl
-        : call.recordUrl.replace('/media/', `${uploadsBaseURL}/`);
+      
+      // 处理音频URL
+      let audioUrl = '';
+      if (call.recordUrl.startsWith('http')) {
+        audioUrl = call.recordUrl;
+      } else if (call.recordUrl.startsWith('/api/files/')) {
+        // 临时方案：将 /api/files/ 替换为 /api/uploads/
+        const baseURL = uploadsBaseURL.replace(/\/uploads$/, '').replace(/\/$/, '');
+        const fixedPath = call.recordUrl.replace('/api/files/', '/api/uploads/');
+        audioUrl = `${baseURL}${fixedPath}`;
+      } else if (call.recordUrl.startsWith('/api/')) {
+        const baseURL = uploadsBaseURL.replace(/\/uploads$/, '').replace(/\/$/, '');
+        audioUrl = `${baseURL}${call.recordUrl}`;
+      } else if (call.recordUrl.startsWith('/media/')) {
+        audioUrl = call.recordUrl.replace('/media/', `${uploadsBaseURL}/`);
+      } else {
+        audioUrl = `${uploadsBaseURL}/${call.recordUrl}`;
+      }
 
-      const response = await requestTranscription(callId, {
+      const response = await sipApi.requestTranscription(callId, {
         audioUrl,
         language: 'zh-CN',
       });
 
-      if (response.code === 200 && response.data) {
-        setTranscription(response.data.text);
-        Alert.alert('成功', '转录完成');
+      if (response.code === 200) {
+        // 转录任务已提交，开始轮询检查状态
+        Alert.alert('提示', '转录任务已提交，正在处理中...');
+        pollTranscriptionStatus();
       } else {
         Alert.alert('错误', response.msg || '转录失败');
+        setIsTranscribing(false);
       }
     } catch (error: any) {
       console.error('Transcription error:', error);
       Alert.alert('错误', error.msg || '转录失败，该功能可能未启用');
-    } finally {
       setIsTranscribing(false);
     }
+  };
+
+  // 轮询转录状态
+  const pollTranscriptionStatus = async () => {
+    const maxAttempts = 30; // 最多轮询30次（30秒）
+    let attempts = 0;
+
+    const checkStatus = async () => {
+      try {
+        const response = await sipApi.getCallDetail(callId);
+        if (response.code === 200 && response.data) {
+          const status = response.data.transcriptionStatus;
+          
+          if (status === 'completed') {
+            // 转录完成
+            setTranscription(response.data.transcription || '');
+            setIsTranscribing(false);
+            Alert.alert('成功', '转录完成');
+            return;
+          } else if (status === 'failed') {
+            // 转录失败
+            setIsTranscribing(false);
+            Alert.alert('错误', response.data.transcriptionError || '转录失败');
+            return;
+          } else if (status === 'processing' || status === 'pending') {
+            // 继续轮询
+            attempts++;
+            if (attempts < maxAttempts) {
+              setTimeout(checkStatus, 1000); // 1秒后再次检查
+            } else {
+              setIsTranscribing(false);
+              Alert.alert('超时', '转录超时，请稍后重试');
+            }
+          }
+        }
+      } catch (error) {
+        console.error('Poll transcription status error:', error);
+        setIsTranscribing(false);
+      }
+    };
+
+    checkStatus();
   };
 
   // 格式化时长
@@ -156,11 +216,38 @@ const CallHistoryDetailScreen: React.FC = () => {
 
   const statusInfo = getStatusInfo(call.status);
   const uploadsBaseURL = getUploadsBaseURL();
-  const audioUrl = call.recordUrl
-    ? call.recordUrl.startsWith('http')
-      ? call.recordUrl
-      : call.recordUrl.replace('/media/', `${uploadsBaseURL}/`)
-    : '';
+  
+  // 处理录音 URL
+  let audioUrl = '';
+  if (call.recordUrl) {
+    if (call.recordUrl.startsWith('http')) {
+      // 已经是完整URL
+      audioUrl = call.recordUrl;
+    } else if (call.recordUrl.startsWith('/api/files/')) {
+      // /api/files/audio/xxx.wav -> http://host:port/api/uploads/audio/xxx.wav
+      // 临时方案：将 /api/files/ 替换为 /api/uploads/（因为服务端可能还没重启）
+      const baseURL = uploadsBaseURL.replace(/\/uploads$/, '').replace(/\/$/, '');
+      const fixedPath = call.recordUrl.replace('/api/files/', '/api/uploads/');
+      audioUrl = `${baseURL}${fixedPath}`;
+    } else if (call.recordUrl.startsWith('/api/')) {
+      // 其他 /api/ 开头的路径
+      const baseURL = uploadsBaseURL.replace(/\/uploads$/, '').replace(/\/$/, '');
+      audioUrl = `${baseURL}${call.recordUrl}`;
+    } else if (call.recordUrl.startsWith('/media/')) {
+      // /media/xxx.wav -> http://host:port/uploads/xxx.wav
+      audioUrl = call.recordUrl.replace('/media/', `${uploadsBaseURL}/`);
+    } else {
+      // 其他相对路径，直接拼接到 uploads
+      audioUrl = `${uploadsBaseURL}/${call.recordUrl}`;
+    }
+    console.log('=== 录音信息 ===');
+    console.log('原始 recordUrl:', call.recordUrl);
+    console.log('处理后 audioUrl:', audioUrl);
+    console.log('uploadsBaseURL:', uploadsBaseURL);
+  } else {
+    console.log('=== 无录音 ===');
+    console.log('call.recordUrl 为空');
+  }
 
   return (
     <MainLayout
@@ -240,7 +327,7 @@ const CallHistoryDetailScreen: React.FC = () => {
         </Card>
 
         {/* 通话录音 */}
-        {call.recordUrl && audioUrl && (
+        {call.recordUrl && (
           <Card style={styles.card}>
             <View style={styles.sectionHeader}>
               <Feather name="mic" size={18} color="#1e293b" />
@@ -262,7 +349,7 @@ const CallHistoryDetailScreen: React.FC = () => {
             <View style={styles.sectionHeader}>
               <Feather name="file-text" size={18} color="#1e293b" />
               <Text style={styles.sectionTitle}>语音转文字</Text>
-              {!transcription && (
+              {!transcription && !call.transcription && (
                 <TouchableOpacity
                   style={styles.transcribeButton}
                   onPress={handleTranscribe}
@@ -281,9 +368,11 @@ const CallHistoryDetailScreen: React.FC = () => {
               )}
             </View>
 
-            {transcription ? (
+            {transcription || call.transcription ? (
               <View style={styles.transcriptionContainer}>
-                <Text style={styles.transcriptionText}>{transcription}</Text>
+                <Text style={styles.transcriptionText}>
+                  {transcription || call.transcription}
+                </Text>
               </View>
             ) : (
               <View style={styles.emptyTranscription}>
