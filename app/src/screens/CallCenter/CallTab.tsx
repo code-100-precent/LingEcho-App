@@ -15,16 +15,10 @@ import {
 } from 'react-native';
 import { Feather } from '@expo/vector-icons';
 import { Card, Button, Badge } from '../../components';
-import {
-  getSipUsers,
-  makeOutgoingCall,
-  getOutgoingCallStatus,
-  cancelOutgoingCall,
-  hangupOutgoingCall,
-  getCallHistory,
-  SipUser,
-  SipCall,
-} from '../../services/api/sip';
+import * as sipApi from '../../services/api/sip';
+
+type SipUser = sipApi.SipUser;
+type SipCall = sipApi.SipCall;
 
 const CallTab: React.FC = () => {
   const [sipUsers, setSipUsers] = useState<SipUser[]>([]);
@@ -97,7 +91,7 @@ const CallTab: React.FC = () => {
 
   const loadSipUsers = async () => {
     try {
-      const response = await getSipUsers();
+      const response = await sipApi.getSipUsers();
       if (response.code === 200) {
         setSipUsers(response.data || []);
         setFilteredUsers(response.data || []);
@@ -111,7 +105,7 @@ const CallTab: React.FC = () => {
 
   const loadCallHistory = async () => {
     try {
-      const response = await getCallHistory({ limit: 20 });
+      const response = await sipApi.getCallHistory({ limit: 20 });
       if (response.code === 200) {
         setCallHistory(response.data?.list || []);
       }
@@ -122,7 +116,7 @@ const CallTab: React.FC = () => {
 
   const checkCallStatus = async (callId: string) => {
     try {
-      const response = await getOutgoingCallStatus(callId);
+      const response = await sipApi.getOutgoingCallStatus(callId);
       if (response.code === 200 && response.data) {
         setCallStatus(response.data.status);
 
@@ -166,7 +160,7 @@ const CallTab: React.FC = () => {
           selectedUser.contactPort || 5060
         }`;
 
-      const response = await makeOutgoingCall({
+      const response = await sipApi.makeOutgoingCall({
         targetUri,
         notes: `外呼到 ${selectedUser.displayName || selectedUser.username}`,
       });
@@ -192,8 +186,8 @@ const CallTab: React.FC = () => {
     try {
       const response =
         callStatus === 'answered'
-          ? await hangupOutgoingCall(currentCallId)
-          : await cancelOutgoingCall(currentCallId);
+          ? await sipApi.hangupOutgoingCall(currentCallId)
+          : await sipApi.cancelOutgoingCall(currentCallId);
 
       if (response.code === 200) {
         setCalling(false);
