@@ -66,10 +66,15 @@ const VoicemailTab: React.FC = () => {
       if (response.code === 200 && response.data) {
         setVoicemails(response.data.list || []);
       } else {
-        Alert.alert('错误', response.msg || '获取留言列表失败');
+        // 只在非空数据错误时显示提示
+        if (response.code !== 404) {
+          Alert.alert('错误', response.msg || '获取留言列表失败');
+        } else {
+          setVoicemails([]);
+        }
       }
     } catch (error: any) {
-      Alert.alert('错误', error.message || '获取留言列表失败');
+      console.error('获取留言列表失败', error);
       setVoicemails([]);
     }
   };

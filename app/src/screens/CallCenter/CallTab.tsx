@@ -102,10 +102,18 @@ const CallTab: React.FC = () => {
         setSipUsers(response.data || []);
         setFilteredUsers(response.data || []);
       } else {
-        Alert.alert('错误', response.msg || '获取 SIP 用户列表失败');
+        // 只在非空数据错误时显示提示
+        if (response.code !== 404) {
+          Alert.alert('错误', response.msg || '获取 SIP 用户列表失败');
+        } else {
+          setSipUsers([]);
+          setFilteredUsers([]);
+        }
       }
     } catch (error: any) {
-      Alert.alert('错误', error.message || '获取 SIP 用户列表失败');
+      console.error('获取 SIP 用户列表失败', error);
+      setSipUsers([]);
+      setFilteredUsers([]);
     }
   };
 
@@ -117,6 +125,7 @@ const CallTab: React.FC = () => {
       }
     } catch (error) {
       console.error('获取通话历史失败', error);
+      setCallHistory([]);
     }
   };
 

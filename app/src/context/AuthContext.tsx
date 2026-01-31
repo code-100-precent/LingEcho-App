@@ -44,22 +44,24 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const loadUser = async () => {
     try {
+      console.log('=== AuthContext: 开始加载用户 ===');
       // 先检查是否有保存的用户信息
       const currentUser = await authService.getCurrentUser();
       
       if (currentUser) {
         setUser(currentUser);
-        console.log('已加载保存的用户:', currentUser);
+        console.log('=== AuthContext: 已加载保存的用户 ===', currentUser);
       } else {
         // 如果没有用户，保持为 null，显示登录页面
         setUser(null);
-        console.log('未找到已保存的用户，需要登录');
+        console.log('=== AuthContext: 未找到已保存的用户，需要登录 ===');
       }
     } catch (error) {
-      console.error('Error loading user:', error);
+      console.error('=== AuthContext: 加载用户出错 ===', error);
       // 出错时也保持为 null，显示登录页面
       setUser(null);
     } finally {
+      console.log('=== AuthContext: 设置 isLoading = false ===');
       setIsLoading(false);
     }
   };

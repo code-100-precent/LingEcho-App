@@ -63,10 +63,17 @@ const SchemeTab: React.FC = () => {
       if (response.code === 200) {
         setSchemes(response.data || []);
       } else {
-        Alert.alert('错误', response.msg || '获取方案列表失败');
+        // 只在非空数据错误时显示提示
+        if (response.code !== 404) {
+          Alert.alert('错误', response.msg || '获取方案列表失败');
+        } else {
+          setSchemes([]);
+        }
       }
     } catch (error: any) {
-      Alert.alert('错误', error.message || '获取方案列表失败');
+      // 网络错误或其他异常才显示错误
+      console.error('获取方案列表失败', error);
+      setSchemes([]);
     } finally {
       setIsLoading(false);
     }
