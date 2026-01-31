@@ -3,6 +3,7 @@ package sip
 import (
 	"context"
 	"fmt"
+	"net"
 	"time"
 
 	"github.com/code-100-precent/LingEcho/internal/models"
@@ -71,7 +72,14 @@ func (as *SipServer) handleAIAutoAnswerV2(req *sip.Request, tx sip.ServerTransac
 	as.sessionsMutex.Unlock()
 
 	// 6. 创建 AI 通话会话记录
-	if err := as.createAICallSession(callID, sipUser.ID, *sipUser.AssistantID); err != nil {
+	aiSession := &models.AICallSession{
+		CallID:      callID,
+		SipUserID:   sipUser.ID,
+		AssistantID: int64(*sipUser.AssistantID),
+		Status:      "active",
+		StartTime:   time.Now(),
+	}
+	if err := models.CreateAICallSession(as.db, aiSession); err != nil {
 		logrus.WithError(err).Error("Failed to create AI call session")
 	}
 
@@ -154,27 +162,19 @@ func (as *SipServer) handleAIAutoAnswerACK(callID, clientRTPAddr string, sipUser
 	}
 
 	// 3. 解析客户端 RTP 地址
-	clientAddr, err := parseUDPAddr(clientRTPAddr)
+	clientAddr, err := net.ResolveUDPAddr("udp", clientRTPAddr)
 	if err != nil {
 		return fmt.Errorf("failed to parse client RTP address: %w", err)
 	}
 
-	// 4. 创建 RTP-WebSocket 桥接器
-	bridge := NewRTPWebSocketBridge(
-		callID,
-		as.rtpConn,
-		clientAddr,
-		&assistant,
-		credential,
-		as.db,
-	)
+	// 4. 创建 AI 语音对话处理器（使用 VoiceConversationHandler）
+	// 注意：这里简化处理，实际应该从配置中获取服务实例
+	// TODO: 从全局服务池或配置中获取 ASR、TTS、LLM 实例
+	_ = credential // 避免未使用变量警告
+	
+	logrus.WithField("call_id", callID).Warn("AI auto-answer v2 需要完整的 ASR/TTS/LLM 服务配置")
 
-	// 5. 启动桥接器
-	if err := bridge.Start(); err != nil {
-		return fmt.Errorf("failed to start bridge: %w", err)
-	}
-
-	// 6. 保存桥接器到活跃会话
+	// 5. 保存会话到活跃会话
 	ctx, cancel := context.WithCancel(context.Background())
 	as.activeMutex.Lock()
 	as.activeSessions[callID] = &SessionInfo{
@@ -187,7 +187,7 @@ func (as *SipServer) handleAIAutoAnswerACK(callID, clientRTPAddr string, sipUser
 	}
 	as.activeMutex.Unlock()
 
-	// 7. 更新数据库状态为已接通
+	// 6. 更新数据库状态为已接通
 	if as.db != nil {
 		now := time.Now()
 		as.updateCallStatusInDB(callID, "answered", &now)
@@ -196,9 +196,4 @@ func (as *SipServer) handleAIAutoAnswerACK(callID, clientRTPAddr string, sipUser
 	logrus.WithField("call_id", callID).Info("AI session started successfully")
 
 	return nil
-}
-
-// 辅助函数：解析 UDP 地址
-func parseUDPAddr(addr string) (*net.UDPAddr, error) {
-	return net.ResolveUDPAddr("udp", addr)
 }

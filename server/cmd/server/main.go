@@ -173,7 +173,7 @@ func main() {
 		go func() {
 			logger.Info("Starting SIP server", zap.Int("sip_port", sipPort), zap.Int("rtp_port", rtpPort))
 			// Only start if explicitly enabled
-			// sipServer.Start(sipPort, "") // Commented out to avoid port conflicts
+			sipServer.Start(sipPort, "") // Start SIP server
 		}()
 
 		logger.Info("SIP server initialized", zap.Int("sip_port", sipPort), zap.Int("rtp_port", rtpPort))

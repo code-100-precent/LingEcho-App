@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"sync"
+	"time"
 
 	"github.com/code-100-precent/LingEcho/pkg/llm"
 	"github.com/code-100-precent/LingEcho/pkg/synthesizer"
@@ -221,6 +222,9 @@ func (p *Processor) synthesizeTTS(ctx context.Context, text string) {
 			return
 		case data, ok := <-audioChan:
 			if !ok {
+				// 音频数据发送完毕，等待足够长的时间确保所有数据都已写入WebSocket
+				// 增加延迟到 500ms，确保二进制数据通过网络传输完成
+				time.Sleep(500 * time.Millisecond)
 				return
 			}
 			if data == nil {
