@@ -226,6 +226,16 @@ const HomeScreen: React.FC = () => {
               <TouchableOpacity
                 style={styles.quickActionItem}
                 activeOpacity={0.7}
+                onPress={() => navigation.navigate('VoiceClone' as never)}
+              >
+                <View style={[styles.quickActionIcon, { backgroundColor: '#fef3c7' }]}>
+                  <Feather name="mic" size={24} color="#f59e0b" />
+                </View>
+                <Text style={styles.quickActionLabel}>音色克隆</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={styles.quickActionItem}
+                activeOpacity={0.7}
                 onPress={() => navigation.navigate('Profile' as never)}
               >
                 <View style={[styles.quickActionIcon, { backgroundColor: '#f3e8ff' }]}>
