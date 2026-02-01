@@ -700,8 +700,13 @@ func (h *Handlers) registerVolcengineTTSRoutes(r *gin.RouterGroup) {
 // registerVoiceTrainingRoutes 注册音色训练路由
 func (h *Handlers) registerVoiceTrainingRoutes(r *gin.RouterGroup) {
 	voice := r.Group("/voice")
+	
+	// 无需认证的接口
 	voice.GET("/lingecho/v1/", h.HandleHardwareWebSocketVoice)
-	voice.Use(models.AuthRequired) // 需要认证
+	voice.POST("/simple_text_chat", h.SimpleTextChat) // 简单文本对话（无需token验证）
+	
+	// 需要认证的接口
+	voice.Use(models.AuthRequired)
 	{
 		// 训练任务管理
 		voice.POST("/training/create", h.CreateTrainingTask)

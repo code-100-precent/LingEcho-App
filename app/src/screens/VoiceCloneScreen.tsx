@@ -36,6 +36,7 @@ import {
   TrainingTextSegment,
   TrainingTask,
 } from '../services/api/voiceClone';
+import { get } from '../utils/request';
 import { Audio } from 'expo-av';
 import * as DocumentPicker from 'expo-document-picker';
 import { Picker } from '@react-native-picker/picker';

@@ -710,11 +710,30 @@ func (h *SipHandler) processTranscription(callID string, sipCall *models.SipCall
 		return
 	}
 
-	// 发送音频数据
-	if err := asrTranscriber.SendAudioBytes(pcmData); err != nil {
-		logrus.WithError(err).Error("ASR发送音频失败")
-		h.updateTranscriptionError(callID, "ASR发送音频失败: "+err.Error())
-		return
+	// 发送音频数据 - 分块发送以避免速率限制
+	// 火山引擎要求：1秒内最多发送3秒音频数据
+	// 16000 Hz, 16-bit PCM = 32000 bytes/秒
+	// 3秒音频 = 96000 bytes，所以每秒最多发送 96000 bytes
+	const chunkSize = 9600 // 每次发送0.3秒的音频（9600字节）
+	const sendInterval = 100 * time.Millisecond // 每100ms发送一次
+	
+	for offset := 0; offset < len(pcmData); offset += chunkSize {
+		end := offset + chunkSize
+		if end > len(pcmData) {
+			end = len(pcmData)
+		}
+		
+		chunk := pcmData[offset:end]
+		if err := asrTranscriber.SendAudioBytes(chunk); err != nil {
+			logrus.WithError(err).Error("ASR发送音频失败")
+			h.updateTranscriptionError(callID, "ASR发送音频失败: "+err.Error())
+			return
+		}
+		
+		// 控制发送速率，避免触发速率限制
+		if offset+chunkSize < len(pcmData) {
+			time.Sleep(sendInterval)
+		}
 	}
 
 	// 发送结束标记
