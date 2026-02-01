@@ -12,6 +12,12 @@ import AppNavigator from './src/navigation/AppNavigator';
 LogBox.ignoreAllLogs(true);
 
 export default function App() {
+  console.log('=== App.tsx: 开始渲染 ===');
+  
+  useEffect(() => {
+    console.log('=== App.tsx: useEffect 执行 ===');
+  }, []);
+  
   return (
     <SafeAreaProvider>
       <AuthProvider>
