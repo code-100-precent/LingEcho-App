@@ -506,8 +506,8 @@ func (h *VoiceConversationHandler) processBufferedAudio() {
 			"call_id": h.callID,
 			"reply":   aiResponse,
 		}).Info("🎯 使用关键词回复")
-	} else {
-		// 4. LLM 对话 - 使用独立的 context
+	} else if h.sipUser != nil && h.sipUser.AIFreeResponse {
+		// 4. 启用了AI自由回答，使用 LLM 对话
 		var err error
 		aiResponse, err = h.llmProvider.Query(text, "")
 		if err != nil {
@@ -530,7 +530,19 @@ func (h *VoiceConversationHandler) processBufferedAudio() {
 			logrus.WithFields(logrus.Fields{
 				"call_id":  h.callID,
 				"response": aiResponse,
-			}).Info("🤖 LLM 回复")
+			}).Info("🤖 LLM 自由回复")
+		}
+	} else {
+		// 5. 未启用AI自由回答，使用兜底回复或跳过
+		if h.sipUser != nil && h.sipUser.FallbackMessage != "" {
+			aiResponse = h.sipUser.FallbackMessage
+			logrus.WithFields(logrus.Fields{
+				"call_id": h.callID,
+				"reply":   aiResponse,
+			}).Info("🔄 使用兜底回复（AI自由回答已禁用）")
+		} else {
+			logrus.WithField("call_id", h.callID).Info("⚠️  AI自由回答已禁用且无兜底回复，跳过")
+			return
 		}
 	}
 	

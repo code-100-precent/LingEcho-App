@@ -863,10 +863,10 @@ func NewSynthesisServiceFromCredential(config TTSCredentialConfig) (SynthesisSer
 		if accessToken == "" {
 			accessToken = config.getString("access_token") // 兼容下划线格式
 		}
-		cluster := config.getString("cluster")
-		if cluster == "" {
-			cluster = "volcano_tts" // 默认集群
+		if accessToken == "" {
+			accessToken = config.getString("token") // 兼容 token 字段
 		}
+		cluster := config.getStr
 		if appID == "" || accessToken == "" {
 			return nil, fmt.Errorf("火山引擎TTS配置不完整：缺少appId或accessToken")
 		}
