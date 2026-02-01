@@ -382,40 +382,68 @@ export const authService = {
     try {
       // 先检查本地存储
       const userStr = await AsyncStorage.getItem('user_info');
-      if (userStr) {
+      const token = await AsyncStorage.getItem('auth_token');
+      
+      if (userStr && token) {
         const user = JSON.parse(userStr);
-        // 验证token是否有效，如果无效则重新获取
-        const token = await AsyncStorage.getItem('auth_token');
-        if (token) {
-          try {
-            // 尝试从服务器获取最新用户信息
-            const response = await getUserInfo();
-            if (response.code === 200 && response.data) {
-              const updatedUser = response.data;
-              await AsyncStorage.setItem('user_info', JSON.stringify(updatedUser));
-              return updatedUser;
-            }
-          } catch (error) {
-            console.error('Error fetching user info from server:', error);
-            // 如果获取失败，返回本地缓存的用户信息
-            return user;
-          }
-        }
+        
+        // 立即返回本地缓存的用户信息，不阻塞启动
+        // 在后台异步更新用户信息
+        this.refreshUserInBackground(token);
+        
         return user;
       }
       
-      // 如果没有本地缓存，尝试从服务器获取
-      const token = await AsyncStorage.getItem('auth_token');
+      // 如果没有本地缓存但有token，尝试从服务器获取
       if (token) {
-        const response = await getUserInfo();
-        if (response.code === 200 && response.data) {
-          const user = response.data;
-          await AsyncStorage.setItem('user_info', JSON.stringify(user));
-          return user;
+        try {
+          const response = await getUserInfo();
+          if (response.code === 200 && response.data) {
+            const user = response.data;
+            await AsyncStorage.setItem('user_info', JSON.stringify(user));
+            return user;
+          }
+        } catch (error) {
+          console.error('Error fetching user info from server:', error);
         }
       }
     } catch (error) {
       console.error('Error getting current user:', error);
+    }
+    return null;
+  },
+
+  // 后台刷新用户信息（不阻塞）
+  async refreshUserInBackground(token: string) {
+    try {
+      const response = await getUserInfo();
+      if (response.code === 200 && response.data) {
+        const updatedUser = response.data;
+        await AsyncStorage.setItem('user_info', JSON.stringify(updatedUser));
+        console.log('User info refreshed in background');
+      }
+    } catch (error) {
+      // 静默失败，不影响用户体验
+      console.log('Background user refresh failed (non-critical):', error);
+    }
+  },
+
+  // 强制刷新用户信息（供外部调用）
+  async forceRefreshUser(): Promise<User | null> {
+    try {
+      const token = await AsyncStorage.getItem('auth_token');
+      if (!token) {
+        return null;
+      }
+      
+      const response = await getUserInfo();
+      if (response.code === 200 && response.data) {
+        const user = response.data;
+        await AsyncStorage.setItem('user_info', JSON.stringify(user));
+        return user;
+      }
+    } catch (error) {
+      console.error('Error force refreshing user:', error);
     }
     return null;
   },
