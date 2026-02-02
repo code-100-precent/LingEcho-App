@@ -4,10 +4,13 @@ import (
 	"context"
 	"fmt"
 	"net"
+	"os"
+	"time"
 
 	"github.com/code-100-precent/LingEcho/internal/models"
 	"github.com/code-100-precent/LingEcho/pkg/llm"
 	"github.com/code-100-precent/LingEcho/pkg/recognizer"
+	"github.com/code-100-precent/LingEcho/pkg/sip/codec"
 	"github.com/code-100-precent/LingEcho/pkg/voice/factory"
 	"github.com/emiago/sipgo/sip"
 	"github.com/pion/rtp"
@@ -41,10 +44,11 @@ func (as *SipServer) checkAIAutoAnswer(req *sip.Request) (bool, *models.SipUser,
 	logrus.WithField("to_username", toUsername).Info("🔍 检查被叫号码是否有代接方案")
 	
 	// 查询 SipUser（同时匹配 username 和 bound_phone_number）
+	// 必须同时满足：enabled = true（启用）AND is_active = true（激活）
 	var sipUser models.SipUser
-	query := as.db.Where("(username = ? OR bound_phone_number = ?) AND enabled = ?", toUsername, toUsername, true)
+	query := as.db.Where("(username = ? OR bound_phone_number = ?) AND enabled = ? AND is_active = ?", toUsername, toUsername, true, true)
 	
-	// 先检查是否有匹配的记录（不管是否启用）
+	// 先检查是否有匹配的记录（不管是否启用/激活）
 	var count int64
 	as.db.Model(&models.SipUser{}).Where("username = ? OR bound_phone_number = ?", toUsername, toUsername).Count(&count)
 	logrus.WithFields(logrus.Fields{
@@ -69,7 +73,8 @@ func (as *SipServer) checkAIAutoAnswer(req *sip.Request) (bool, *models.SipUser,
 		"auto_answer":  sipUser.AutoAnswer,
 		"assistant_id": sipUser.AssistantID,
 		"enabled":      sipUser.Enabled,
-	}).Info("✅ 找到匹配的代接方案")
+		"is_active":    sipUser.IsActive,
+	}).Info("✅ 找到匹配的激活代接方案")
 	
 	// 检查是否绑定了 AI 助手
 	if sipUser.AssistantID == nil || *sipUser.AssistantID == 0 {
@@ -318,7 +323,87 @@ func (as *SipServer) stopAIVoiceSession(callID string) {
 	as.voiceHandlersMu.Unlock()
 	
 	if exists {
+		// 在停止前保存录音
+		if handler.IsRecording() {
+			recordingAudio := handler.GetRecordingAudio()
+			if len(recordingAudio) > 0 {
+				logrus.WithFields(logrus.Fields{
+					"call_id":    callID,
+					"audio_size": len(recordingAudio),
+				}).Info("📼 保存AI通话录音")
+				
+				// 保存录音文件
+				go as.saveAIRecording(callID, recordingAudio, handler)
+			}
+		}
+		
 		handler.Stop()
 		logrus.WithField("call_id", callID).Info("✅ AI 语音会话已停止")
+	}
+}
+
+// saveAIRecording 保存AI通话录音
+func (as *SipServer) saveAIRecording(callID string, pcmuAudio []byte, handler *VoiceConversationHandler) {
+	if as.db == nil {
+		logrus.WithField("call_id", callID).Warn("数据库未初始化，无法保存录音")
+		return
+	}
+	
+	// 创建录音目录
+	recordDir := "uploads/audio"
+	if err := os.MkdirAll(recordDir, 0755); err != nil {
+		logrus.WithError(err).Error("Failed to create audio directory")
+		return
+	}
+	
+	// 生成录音文件名
+	recordingFile := fmt.Sprintf("%s/recorded_%s.wav", recordDir, callID)
+	
+	// 将PCMU转换为PCM16
+	pcmBytes := codec.PCMUToPCM16(pcmuAudio)
+	
+	// 将[]byte转换为[]int16
+	pcmSamples := make([]int16, len(pcmBytes)/2)
+	for i := 0; i < len(pcmSamples); i++ {
+		low := int16(pcmBytes[i*2])
+		high := int16(pcmBytes[i*2+1])
+		pcmSamples[i] = high<<8 | low
+	}
+	
+	// 保存为WAV文件
+	if err := saveWAV(recordingFile, pcmSamples, 8000); err != nil {
+		logrus.WithFields(logrus.Fields{
+			"call_id": callID,
+			"error":   err,
+		}).Error("保存录音文件失败")
+		return
+	}
+	
+	logrus.WithFields(logrus.Fields{
+		"call_id": callID,
+		"file":    recordingFile,
+		"size":    len(pcmSamples),
+	}).Info("✅ AI通话录音文件已保存")
+	
+	// 生成录音URL并保存到数据库
+	time.Sleep(500 * time.Millisecond) // 等待文件写入完成
+	as.saveRecordingURL(callID, recordingFile)
+	
+	// 如果handler有SipUser信息，也可以保存为留言
+	if handler.sipUser != nil && handler.IsInMessageMode() {
+		// 获取主叫号码
+		var callerNumber string
+		sipCall, err := models.GetSipCallByCallID(as.db, callID)
+		if err == nil {
+			callerNumber = sipCall.FromUsername
+		}
+		
+		// 保存留言
+		if voicemail, err := handler.SaveVoicemail(as.db, callerNumber, &sipCall.ID); err == nil {
+			logrus.WithFields(logrus.Fields{
+				"call_id":      callID,
+				"voicemail_id": voicemail.ID,
+			}).Info("✅ 留言已保存")
+		}
 	}
 }

@@ -31,6 +31,7 @@ type CreateSchemeRequest struct {
 	OpeningMessage   string                    `json:"openingMessage"`
 	KeywordReplies   models.KeywordReplies     `json:"keywordReplies"`
 	FallbackMessage  string                    `json:"fallbackMessage"`
+	AIFreeResponse   bool                      `json:"aiFreeResponse"`
 	RecordingEnabled bool                      `json:"recordingEnabled"`
 	RecordingMode    models.RecordingMode      `json:"recordingMode"`
 	MessageEnabled   bool                      `json:"messageEnabled"`
@@ -49,6 +50,7 @@ type UpdateSchemeRequest struct {
 	OpeningMessage   *string                   `json:"openingMessage"`
 	KeywordReplies   *models.KeywordReplies    `json:"keywordReplies"`
 	FallbackMessage  *string                   `json:"fallbackMessage"`
+	AIFreeResponse   *bool                     `json:"aiFreeResponse"`
 	RecordingEnabled *bool                     `json:"recordingEnabled"`
 	RecordingMode    *models.RecordingMode     `json:"recordingMode"`
 	MessageEnabled   *bool                     `json:"messageEnabled"`
@@ -155,6 +157,7 @@ func (h *SchemeHandler) CreateScheme(c *gin.Context) {
 		OpeningMessage:   req.OpeningMessage,
 		KeywordReplies:   req.KeywordReplies,
 		FallbackMessage:  req.FallbackMessage,
+		AIFreeResponse:   req.AIFreeResponse,
 		RecordingEnabled: req.RecordingEnabled,
 		RecordingMode:    req.RecordingMode,
 		MessageEnabled:   req.MessageEnabled,
@@ -245,6 +248,9 @@ func (h *SchemeHandler) UpdateScheme(c *gin.Context) {
 	}
 	if req.FallbackMessage != nil {
 		scheme.FallbackMessage = *req.FallbackMessage
+	}
+	if req.AIFreeResponse != nil {
+		scheme.AIFreeResponse = *req.AIFreeResponse
 	}
 	if req.RecordingEnabled != nil {
 		scheme.RecordingEnabled = *req.RecordingEnabled

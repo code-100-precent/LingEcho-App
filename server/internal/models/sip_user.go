@@ -107,6 +107,7 @@ type SipUser struct {
 	OpeningMessage  string         `json:"openingMessage,omitempty" gorm:"type:text"`  // 开场白（接通后的第一句话）
 	KeywordReplies  KeywordReplies `json:"keywordReplies,omitempty" gorm:"type:json"`  // 关键词回复配置
 	FallbackMessage string         `json:"fallbackMessage,omitempty" gorm:"type:text"` // 兜底回复（未配置时由AI自由生成）
+	AIFreeResponse  bool           `json:"aiFreeResponse" gorm:"default:true"`         // 是否启用AI自由回答
 
 	// ========== 录音配置 ==========
 	RecordingEnabled bool          `json:"recordingEnabled" gorm:"default:true"`           // 是否开启录音
@@ -253,7 +254,8 @@ func GetSipUsersByGroupID(db *gorm.DB, groupID uint) ([]SipUser, error) {
 // GetSipUserByPhoneNumber 根据手机号获取代接方案
 func GetSipUserByPhoneNumber(db *gorm.DB, phoneNumber string) (*SipUser, error) {
 	var sipUser SipUser
-	err := db.Where("bound_phone_number = ? AND enabled = ?", phoneNumber, true).First(&sipUser).Error
+	// 必须同时满足：enabled = true（启用）AND is_active = true（激活）
+	err := db.Where("bound_phone_number = ? AND enabled = ? AND is_active = ?", phoneNumber, true, true).First(&sipUser).Error
 	if err != nil {
 		return nil, err
 	}

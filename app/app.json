@@ -43,9 +43,9 @@
       "eas": {
         "projectId": "3b3f91a3-48e2-4370-83bd-e6e5863e795d"
       },
-      "apiBaseURL": "http://192.168.121.120:7072/api",
-      "wsBaseURL": "ws://192.168.121.120:7072",
-      "uploadsBaseURL": "http://192.168.121.120:7072/uploads"
+      "apiBaseURL": "http://172.16.176.157:7072/api",
+      "wsBaseURL": "ws://172.16.176.157:7072",
+      "uploadsBaseURL": "http://172.16.176.157:7072/uploads"
     }
   }
 }

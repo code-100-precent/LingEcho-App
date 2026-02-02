@@ -29,6 +29,8 @@ import AlertRulesScreen from '../screens/AlertRulesScreen';
 import AlertRuleFormScreen from '../screens/AlertRuleFormScreen';
 import KnowledgeBaseScreen from '../screens/KnowledgeBaseScreen';
 import CallCenterScreen from '../screens/CallCenterScreen';
+import CallHistoryDetailScreen from '../screens/CallHistoryDetailScreen';
+import VoiceCloneScreen from '../screens/VoiceCloneScreen';
 
 const Stack = createNativeStackNavigator();
 const Tab = createBottomTabNavigator();
@@ -146,6 +148,8 @@ export type RootStackParamList = {
   AlertRuleForm: { mode: 'create' | 'edit'; ruleId?: number };
   KnowledgeBase: undefined;
   CallCenter: undefined;
+  CallHistoryDetail: { callId: string };
+  VoiceClone: undefined;
 };
 
 // 加载屏幕组件
@@ -275,6 +279,16 @@ export default function AppNavigator() {
               component={CallCenterScreen}
               options={{ headerShown: false }}
             />
+            <Stack.Screen
+              name="CallHistoryDetail"
+              component={CallHistoryDetailScreen}
+              options={{ headerShown: false }}
+            />
+            <Stack.Screen
+              name="VoiceClone"
+              component={VoiceCloneScreen}
+              options={{ headerShown: false }}
+            />
           </>
         ) : (
           // 未登录，显示登录页
@@ -346,6 +360,16 @@ export default function AppNavigator() {
             <Stack.Screen
               name="CallCenter"
               component={CallCenterScreen}
+              options={{ headerShown: false }}
+            />
+            <Stack.Screen
+              name="CallHistoryDetail"
+              component={CallHistoryDetailScreen}
+              options={{ headerShown: false }}
+            />
+            <Stack.Screen
+              name="VoiceClone"
+              component={VoiceCloneScreen}
               options={{ headerShown: false }}
             />
           </>

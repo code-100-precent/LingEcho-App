@@ -808,7 +808,7 @@ func (as *SipServer) saveRecordingURL(callID string, recordingFile string) {
 	}
 
 	// 生成录音URL（相对路径，前端可以通过API访问）
-	recordURL := fmt.Sprintf("/api/files/audio/%s", strings.TrimPrefix(recordingFile, "uploads/audio/"))
+	recordURL := fmt.Sprintf("/api/uploads/audio/%s", strings.TrimPrefix(recordingFile, "uploads/audio/"))
 
 	// 更新数据库记录
 	var sipCall models.SipCall

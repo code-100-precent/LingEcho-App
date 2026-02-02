@@ -1,12 +1,17 @@
 package handlers
 
 import (
+	"fmt"
+	"os"
 	"reflect"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/code-100-precent/LingEcho/internal/models"
+	"github.com/code-100-precent/LingEcho/pkg/recognizer"
 	"github.com/code-100-precent/LingEcho/pkg/response"
+	"github.com/code-100-precent/LingEcho/pkg/sip/codec"
 	"github.com/gin-gonic/gin"
 	"github.com/sirupsen/logrus"
 	"gorm.io/gorm"
@@ -478,4 +483,349 @@ func (h *SipHandler) GetSipUsers(c *gin.Context) {
 	}
 
 	response.Success(c, "Success", sipUsers)
+}
+
+// TranscribeCallRequest 转录请求
+type TranscribeCallRequest struct {
+	AudioURL string `json:"audioUrl" binding:"required"` // 音频文件URL
+	Language string `json:"language"`                    // 语言，默认zh-CN
+}
+
+// RequestTranscription 请求通话录音转录
+// @Summary 请求通话录音转录
+// @Description 使用ASR服务转录通话录音
+// @Tags SIP
+// @Accept json
+// @Produce json
+// @Param callId path string true "通话ID"
+// @Param request body TranscribeCallRequest true "转录请求"
+// @Success 200 {object} response.Response
+// @Failure 400 {object} response.Response
+// @Failure 404 {object} response.Response
+// @Router /api/sip/calls/{callId}/transcribe [post]
+func (h *SipHandler) RequestTranscription(c *gin.Context) {
+	callID := c.Param("callId")
+	if callID == "" {
+		response.Fail(c, "callId is required", nil)
+		return
+	}
+
+	var req TranscribeCallRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		response.Fail(c, "Invalid request: "+err.Error(), nil)
+		return
+	}
+
+	// 获取通话记录
+	sipCall, err := models.GetSipCallByCallID(h.db, callID)
+	if err != nil {
+		response.Fail(c, "Call not found", nil)
+		return
+	}
+
+	// 检查权限
+	user := models.CurrentUser(c)
+	if user != nil && sipCall.UserID != nil && *sipCall.UserID != user.ID {
+		response.Fail(c, "无权访问此通话记录", nil)
+		return
+	}
+
+	// 检查是否有录音
+	if sipCall.RecordURL == "" {
+		response.Fail(c, "此通话没有录音文件", nil)
+		return
+	}
+
+	// 检查是否已经转录过
+	if sipCall.Transcription != "" && sipCall.TranscriptionStatus == "completed" {
+		response.Success(c, "转录已完成", gin.H{
+			"transcription": sipCall.Transcription,
+			"status":        "completed",
+		})
+		return
+	}
+
+	// 更新转录状态为处理中
+	if err := h.db.Model(&models.SipCall{}).
+		Where("call_id = ?", callID).
+		Updates(map[string]interface{}{
+			"transcription_status": "processing",
+		}).Error; err != nil {
+		logrus.WithError(err).Error("Failed to update transcription status")
+	}
+
+	// 异步处理转录
+	go h.processTranscription(callID, sipCall, req)
+
+	response.Success(c, "转录任务已提交", gin.H{
+		"status":  "processing",
+		"message": "转录正在进行中，请稍后查看结果",
+		"callId":  callID,
+	})
+}
+
+// processTranscription 处理转录任务
+func (h *SipHandler) processTranscription(callID string, sipCall *models.SipCall, req TranscribeCallRequest) {
+	logrus.WithFields(logrus.Fields{
+		"call_id":   callID,
+		"audio_url": sipCall.RecordURL,
+	}).Info("开始处理转录任务")
+
+	// 1. 读取录音文件
+	audioPath := sipCall.RecordURL
+	// 如果是相对路径，转换为绝对路径
+	if !strings.HasPrefix(audioPath, "http") {
+		// 移除 /api/uploads/ 或 /api/files/ 前缀
+		audioPath = strings.TrimPrefix(audioPath, "/api/uploads/")
+		audioPath = strings.TrimPrefix(audioPath, "/api/files/")
+		audioPath = "uploads/" + audioPath
+	}
+
+	logrus.WithField("audio_path", audioPath).Info("读取录音文件")
+
+	// 读取WAV文件
+	audioData, err := os.ReadFile(audioPath)
+	if err != nil {
+		logrus.WithError(err).Error("读取录音文件失败")
+		h.updateTranscriptionError(callID, "读取录音文件失败: "+err.Error())
+		return
+	}
+
+	// 2. 解析WAV文件，提取PCM数据
+	pcmData, sampleRate, err := h.parseWAVFile(audioData)
+	if err != nil {
+		logrus.WithError(err).Error("解析WAV文件失败")
+		h.updateTranscriptionError(callID, "解析WAV文件失败: "+err.Error())
+		return
+	}
+
+	logrus.WithFields(logrus.Fields{
+		"pcm_size":    len(pcmData),
+		"sample_rate": sampleRate,
+		"duration_sec": float64(len(pcmData)) / float64(sampleRate) / 2.0, // PCM16 = 2 bytes per sample
+	}).Info("WAV文件解析成功")
+	
+	// 检查音频长度
+	if len(pcmData) < sampleRate*2 { // 少于1秒
+		logrus.Warn("音频时长太短，可能无法正确转录")
+	}
+
+	// 3. 如果采样率不是16kHz，需要重采样
+	if sampleRate != 16000 {
+		logrus.WithFields(logrus.Fields{
+			"from_rate": sampleRate,
+			"to_rate":   16000,
+		}).Info("重采样音频")
+		
+		// 使用codec包进行重采样
+		pcmData = codec.ResampleAudio(pcmData, sampleRate, 16000)
+		sampleRate = 16000
+		
+		logrus.WithFields(logrus.Fields{
+			"new_size":    len(pcmData),
+			"sample_rate": sampleRate,
+		}).Info("重采样完成")
+	}
+
+	// 4. 获取用户凭证（用于ASR服务）
+	var credential *models.UserCredential
+	if sipCall.UserID != nil {
+		var cred models.UserCredential
+		if err := h.db.Where("user_id = ?", *sipCall.UserID).First(&cred).Error; err == nil {
+			credential = &cred
+		}
+	}
+
+	if credential == nil {
+		// 使用第一个可用凭证
+		var cred models.UserCredential
+		if err := h.db.First(&cred).Error; err != nil {
+			logrus.WithError(err).Error("未找到可用凭证")
+			h.updateTranscriptionError(callID, "未找到可用凭证")
+			return
+		}
+		credential = &cred
+	}
+
+	// 5. 创建ASR服务
+	transcriberFactory := recognizer.GetGlobalFactory()
+	language := req.Language
+	if language == "" {
+		language = "zh-CN"
+	}
+
+	// 从凭证中获取ASR配置
+	provider := credential.GetASRProvider()
+	if provider == "" {
+		logrus.Error("ASR provider未配置")
+		h.updateTranscriptionError(callID, "ASR provider未配置")
+		return
+	}
+
+	// 创建ASR配置对象
+	asrConfig, err := recognizer.NewTranscriberConfigFromMap(provider, credential.AsrConfig, language)
+	if err != nil {
+		logrus.WithError(err).Error("创建ASR配置失败")
+		h.updateTranscriptionError(callID, "创建ASR配置失败: "+err.Error())
+		return
+	}
+
+	asrTranscriber, err := transcriberFactory.CreateTranscriber(asrConfig)
+	if err != nil {
+		logrus.WithError(err).Error("创建ASR服务失败")
+		h.updateTranscriptionError(callID, "创建ASR服务失败: "+err.Error())
+		return
+	}
+
+	// 6. 执行转录
+	var transcriptionText string
+	done := make(chan bool, 1)
+	var asrErr error
+
+	asrTranscriber.Init(
+		func(text string, isLast bool, duration time.Duration, uuid string) {
+			if text != "" {
+				transcriptionText = text
+			}
+			if isLast || text != "" {
+				select {
+				case done <- true:
+				default:
+				}
+			}
+		},
+		func(err error, isFatal bool) {
+			asrErr = err
+			select {
+			case done <- true:
+			default:
+			}
+		},
+	)
+
+	// 连接并发送音频
+	if err := asrTranscriber.ConnAndReceive(callID); err != nil {
+		logrus.WithError(err).Error("ASR连接失败")
+		h.updateTranscriptionError(callID, "ASR连接失败: "+err.Error())
+		return
+	}
+
+	// 发送音频数据 - 分块发送以避免速率限制
+	// 火山引擎要求：1秒内最多发送3秒音频数据
+	// 16000 Hz, 16-bit PCM = 32000 bytes/秒
+	// 3秒音频 = 96000 bytes，所以每秒最多发送 96000 bytes
+	const chunkSize = 9600 // 每次发送0.3秒的音频（9600字节）
+	const sendInterval = 100 * time.Millisecond // 每100ms发送一次
+	
+	for offset := 0; offset < len(pcmData); offset += chunkSize {
+		end := offset + chunkSize
+		if end > len(pcmData) {
+			end = len(pcmData)
+		}
+		
+		chunk := pcmData[offset:end]
+		if err := asrTranscriber.SendAudioBytes(chunk); err != nil {
+			logrus.WithError(err).Error("ASR发送音频失败")
+			h.updateTranscriptionError(callID, "ASR发送音频失败: "+err.Error())
+			return
+		}
+		
+		// 控制发送速率，避免触发速率限制
+		if offset+chunkSize < len(pcmData) {
+			time.Sleep(sendInterval)
+		}
+	}
+
+	// 发送结束标记
+	if err := asrTranscriber.SendEnd(); err != nil {
+		logrus.WithError(err).Error("ASR发送结束标记失败")
+		h.updateTranscriptionError(callID, "ASR发送结束标记失败: "+err.Error())
+		return
+	}
+
+	// 等待识别结果（带超时）
+	select {
+	case <-done:
+		if asrErr != nil {
+			logrus.WithError(asrErr).Error("ASR识别失败")
+			h.updateTranscriptionError(callID, "ASR识别失败: "+asrErr.Error())
+			return
+		}
+	case <-time.After(60 * time.Second):
+		logrus.Error("ASR识别超时")
+		h.updateTranscriptionError(callID, "ASR识别超时")
+		return
+	}
+
+	// 7. 保存转录结果
+	if transcriptionText == "" {
+		transcriptionText = "（未识别到内容）"
+	}
+
+	if err := h.db.Model(&models.SipCall{}).
+		Where("call_id = ?", callID).
+		Updates(map[string]interface{}{
+			"transcription":        transcriptionText,
+			"transcription_status": "completed",
+			"transcription_error":  "",
+		}).Error; err != nil {
+		logrus.WithError(err).Error("保存转录结果失败")
+		return
+	}
+
+	logrus.WithFields(logrus.Fields{
+		"call_id": callID,
+		"text":    transcriptionText,
+	}).Info("✅ 转录完成")
+}
+
+// updateTranscriptionError 更新转录错误信息
+func (h *SipHandler) updateTranscriptionError(callID string, errorMsg string) {
+	h.db.Model(&models.SipCall{}).
+		Where("call_id = ?", callID).
+		Updates(map[string]interface{}{
+			"transcription_status": "failed",
+			"transcription_error":  errorMsg,
+		})
+}
+
+// parseWAVFile 解析WAV文件，提取PCM数据和采样率
+func (h *SipHandler) parseWAVFile(wavData []byte) ([]byte, int, error) {
+	if len(wavData) < 44 {
+		return nil, 0, fmt.Errorf("WAV文件太小")
+	}
+
+	// 检查RIFF头
+	if string(wavData[0:4]) != "RIFF" {
+		return nil, 0, fmt.Errorf("不是有效的WAV文件")
+	}
+
+	// 检查WAVE标识
+	if string(wavData[8:12]) != "WAVE" {
+		return nil, 0, fmt.Errorf("不是有效的WAVE格式")
+	}
+
+	// 读取采样率（字节24-27）
+	sampleRate := int(wavData[24]) | int(wavData[25])<<8 | int(wavData[26])<<16 | int(wavData[27])<<24
+
+	// 查找data chunk
+	offset := 12
+	for offset < len(wavData)-8 {
+		chunkID := string(wavData[offset : offset+4])
+		chunkSize := int(wavData[offset+4]) | int(wavData[offset+5])<<8 | int(wavData[offset+6])<<16 | int(wavData[offset+7])<<24
+
+		if chunkID == "data" {
+			// 找到data chunk，提取PCM数据
+			dataStart := offset + 8
+			dataEnd := dataStart + chunkSize
+			if dataEnd > len(wavData) {
+				dataEnd = len(wavData)
+			}
+			return wavData[dataStart:dataEnd], sampleRate, nil
+		}
+
+		offset += 8 + chunkSize
+	}
+
+	return nil, 0, fmt.Errorf("未找到data chunk")
 }

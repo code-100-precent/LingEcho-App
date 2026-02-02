@@ -506,8 +506,8 @@ func (h *VoiceConversationHandler) processBufferedAudio() {
 			"call_id": h.callID,
 			"reply":   aiResponse,
 		}).Info("🎯 使用关键词回复")
-	} else {
-		// 4. LLM 对话 - 使用独立的 context
+	} else if h.sipUser != nil && h.sipUser.AIFreeResponse {
+		// 4. 启用了AI自由回答，使用 LLM 对话
 		var err error
 		aiResponse, err = h.llmProvider.Query(text, "")
 		if err != nil {
@@ -530,7 +530,19 @@ func (h *VoiceConversationHandler) processBufferedAudio() {
 			logrus.WithFields(logrus.Fields{
 				"call_id":  h.callID,
 				"response": aiResponse,
-			}).Info("🤖 LLM 回复")
+			}).Info("🤖 LLM 自由回复")
+		}
+	} else {
+		// 5. 未启用AI自由回答，使用兜底回复或跳过
+		if h.sipUser != nil && h.sipUser.FallbackMessage != "" {
+			aiResponse = h.sipUser.FallbackMessage
+			logrus.WithFields(logrus.Fields{
+				"call_id": h.callID,
+				"reply":   aiResponse,
+			}).Info("🔄 使用兜底回复（AI自由回答已禁用）")
+		} else {
+			logrus.WithField("call_id", h.callID).Info("⚠️  AI自由回答已禁用且无兜底回复，跳过")
+			return
 		}
 	}
 	
@@ -703,17 +715,31 @@ func (h *VoiceConversationHandler) sendAudioToClient(audioData []byte) {
 		"bytes":   len(audioData),
 	}).Info("📤 准备发送音频")
 	
-	// 假设 TTS 返回的是 PCM16 16kHz 单声道
-	// 需要转换为 PCMU 8kHz
-	
-	// 1. 重采样到 8kHz
-	pcm8k := codec.ResampleAudio(audioData, 16000, 8000)
+	// 获取 TTS 服务的实际采样率
+	ttsFormat := h.ttsService.Format()
+	ttsSampleRate := ttsFormat.SampleRate
 	
 	logrus.WithFields(logrus.Fields{
-		"call_id":   h.callID,
-		"pcm16_len": len(audioData),
-		"pcm8k_len": len(pcm8k),
-	}).Info("🔄 重采样: 16kHz -> 8kHz")
+		"call_id":         h.callID,
+		"tts_sample_rate": ttsSampleRate,
+		"target_rate":     8000,
+	}).Info("🔄 TTS 采样率信息")
+	
+	// 1. 重采样到 8kHz（如果需要）
+	var pcm8k []byte
+	if ttsSampleRate != 8000 {
+		pcm8k = codec.ResampleAudio(audioData, ttsSampleRate, 8000)
+		logrus.WithFields(logrus.Fields{
+			"call_id":   h.callID,
+			"pcm_in":    len(audioData),
+			"pcm_out":   len(pcm8k),
+			"from_rate": ttsSampleRate,
+			"to_rate":   8000,
+		}).Info("🔄 重采样完成")
+	} else {
+		pcm8k = audioData
+		logrus.WithField("call_id", h.callID).Info("🔄 采样率已是 8kHz，跳过重采样")
+	}
 	
 	// 2. 转换为 PCMU
 	pcmuData := codec.PCM16ToPCMU(pcm8k)
@@ -723,7 +749,20 @@ func (h *VoiceConversationHandler) sendAudioToClient(audioData []byte) {
 		"pcmu_len": len(pcmuData),
 	}).Info("🔄 PCM -> PCMU 转换完成")
 	
-	// 3. 分包发送
+	// 3. 如果启用了录音，将AI的音频也添加到录音缓冲区
+	if h.isRecording {
+		h.recordingMutex.Lock()
+		h.recordingBuffer = append(h.recordingBuffer, pcmuData...)
+		h.recordingMutex.Unlock()
+		
+		logrus.WithFields(logrus.Fields{
+			"call_id":        h.callID,
+			"ai_audio_size":  len(pcmuData),
+			"total_recorded": len(h.recordingBuffer),
+		}).Info("📼 AI音频已添加到录音缓冲区")
+	}
+	
+	// 4. 分包发送
 	h.sendPCMUPackets(pcmuData)
 }
 

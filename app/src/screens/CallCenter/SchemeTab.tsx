@@ -42,6 +42,7 @@ const SchemeTab: React.FC = () => {
     autoAnswerDelay: 0,
     openingMessage: '',
     fallbackMessage: '',
+    aiFreeResponse: true,
     recordingEnabled: true,
     recordingMode: 'full' as 'full' | 'message',
     messageEnabled: true,
@@ -63,10 +64,17 @@ const SchemeTab: React.FC = () => {
       if (response.code === 200) {
         setSchemes(response.data || []);
       } else {
-        Alert.alert('错误', response.msg || '获取方案列表失败');
+        // 只在非空数据错误时显示提示
+        if (response.code !== 404) {
+          Alert.alert('错误', response.msg || '获取方案列表失败');
+        } else {
+          setSchemes([]);
+        }
       }
     } catch (error: any) {
-      Alert.alert('错误', error.message || '获取方案列表失败');
+      // 网络错误或其他异常才显示错误
+      console.error('获取方案列表失败', error);
+      setSchemes([]);
     } finally {
       setIsLoading(false);
     }
@@ -99,6 +107,7 @@ const SchemeTab: React.FC = () => {
       autoAnswerDelay: 0,
       openingMessage: '',
       fallbackMessage: '',
+      aiFreeResponse: true,
       recordingEnabled: true,
       recordingMode: 'full',
       messageEnabled: true,
@@ -119,6 +128,7 @@ const SchemeTab: React.FC = () => {
       autoAnswerDelay: scheme.autoAnswerDelay ?? 0,
       openingMessage: scheme.openingMessage || '',
       fallbackMessage: scheme.fallbackMessage || '',
+      aiFreeResponse: scheme.aiFreeResponse ?? true,
       recordingEnabled: scheme.recordingEnabled ?? true,
       recordingMode: scheme.recordingMode || 'full',
       messageEnabled: scheme.messageEnabled ?? true,
@@ -150,6 +160,7 @@ const SchemeTab: React.FC = () => {
         autoAnswerDelay: formData.autoAnswerDelay,
         openingMessage: formData.openingMessage,
         fallbackMessage: formData.fallbackMessage,
+        aiFreeResponse: formData.aiFreeResponse,
         recordingEnabled: formData.recordingEnabled,
         recordingMode: formData.recordingMode,
         messageEnabled: formData.messageEnabled,
@@ -450,6 +461,25 @@ const SchemeTab: React.FC = () => {
                   placeholderTextColor="#94a3b8"
                 />
               </View>
+
+              <TouchableOpacity
+                style={styles.checkboxContainer}
+                onPress={() =>
+                  setFormData({ ...formData, aiFreeResponse: !formData.aiFreeResponse })
+                }
+              >
+                <View
+                  style={[styles.checkbox, formData.aiFreeResponse && styles.checkboxChecked]}
+                >
+                  {formData.aiFreeResponse && <Feather name="check" size={14} color="#ffffff" />}
+                </View>
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.checkboxLabel}>启用AI自由回答</Text>
+                  <Text style={styles.hint}>
+                    启用后，AI除了完成预设任务外，还会对拨号者的对话进行自由回答
+                  </Text>
+                </View>
+              </TouchableOpacity>
 
               {/* 录音设置 */}
               <Text style={styles.sectionTitle}>录音设置</Text>

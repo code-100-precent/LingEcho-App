@@ -1415,6 +1415,198 @@ func (h *Handlers) OneShotText(c *gin.Context) {
 	go h.processAudioAsyncV2(context.Background(), credential, user.ID, llmResponse, req.Language, req.Speaker, req.VoiceCloneID, requestId)
 }
 
+// SimpleTextChatRequest 简单文本对话请求结构（无需token）
+type SimpleTextChatRequest struct {
+	APIKey       string  `json:"apiKey" binding:"required"`
+	APISecret    string  `json:"apiSecret" binding:"required"`
+	Text         string  `json:"text" binding:"required"`
+	AssistantID  int     `json:"assistantId" binding:"required"`
+	SessionID    string  `json:"sessionId"`
+	Temperature  float32 `json:"temperature"`
+	MaxTokens    int     `json:"maxTokens"`
+	SystemPrompt string  `json:"systemPrompt"`
+}
+
+// SimpleTextChatResponse 简单文本对话响应
+type SimpleTextChatResponse struct {
+	Text      string `json:"text"`
+	SessionID string `json:"sessionId"`
+}
+
+// SimpleTextChat 处理简单文本对话（无需token验证，仅返回文本）
+func (h *Handlers) SimpleTextChat(c *gin.Context) {
+	var req SimpleTextChatRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		response.Fail(c, "参数错误", err.Error())
+		return
+	}
+
+	// 1. 验证凭证
+	credential, err := models.GetUserCredentialByApiSecretAndApiKey(h.db, req.APIKey, req.APISecret)
+	if err != nil {
+		response.Fail(c, "查询凭证失败", err.Error())
+		return
+	}
+	if credential == nil {
+		response.Fail(c, "凭证不存在", "无效的 apiKey 或 apiSecret")
+		return
+	}
+
+	// 2. 获取用户信息
+	var user models.User
+	if err := h.db.First(&user, credential.UserID).Error; err != nil {
+		response.Fail(c, "用户不存在", err.Error())
+		return
+	}
+
+	// 3. 获取助手配置
+	var assistant models.Assistant
+	if err := h.db.First(&assistant, req.AssistantID).Error; err != nil {
+		response.Fail(c, "助手不存在", err.Error())
+		return
+	}
+
+	// 验证助手是否属于该用户
+	if assistant.UserID != user.ID {
+		response.Fail(c, "无权访问该助手", "助手不属于当前用户")
+		return
+	}
+
+	// 4. 检查LLM配置
+	if credential.LLMProvider == "" || credential.LLMApiKey == "" {
+		response.Fail(c, "LLM未配置", "请先配置LLM服务")
+		return
+	}
+
+	// 5. 构建系统提示词
+	systemPrompt := req.SystemPrompt
+	if systemPrompt == "" {
+		if assistant.SystemPrompt != "" {
+			systemPrompt = assistant.SystemPrompt
+		} else {
+			systemPrompt = "请用中文回复用户的问题。"
+		}
+	}
+
+	// 6. 设置参数（优先使用请求参数，其次使用助手配置）
+	var temp *float32
+	var maxTokens *int
+
+	if req.Temperature > 0 {
+		temp = &req.Temperature
+	} else if assistant.Temperature > 0 {
+		temp = &assistant.Temperature
+	} else {
+		defaultTemp := float32(0.7)
+		temp = &defaultTemp
+	}
+
+	if req.MaxTokens > 0 {
+		maxTokens = &req.MaxTokens
+	} else if assistant.MaxTokens > 0 {
+		maxTokens = &assistant.MaxTokens
+	}
+
+	// 7. 获取LLM模型
+	llmModel := assistant.LLMModel
+	if llmModel == "" {
+		llmModel = utils.GetEnv("LLM_MODEL")
+	}
+	if llmModel == "" {
+		llmModel = "deepseek-v3.1"
+	}
+
+	// 8. 如果开启了图记忆功能，添加用户偏好
+	if config.GlobalConfig.Services.KnowledgeBase.Neo4j.Enabled && assistant.EnableGraphMemory {
+		if store := graph.GetDefaultStore(); store != nil {
+			ctx := c.Request.Context()
+			if userCtx, err := store.GetUserContext(ctx, user.ID, int64(req.AssistantID)); err == nil {
+				if len(userCtx.Topics) > 0 {
+					preferenceText := fmt.Sprintf("该用户在历史对话中经常讨论这些主题：%s。请在回答时优先从这些兴趣和习惯的角度来组织内容，让风格尽量贴近他的偏好。",
+						strings.Join(userCtx.Topics, "、"))
+					systemPrompt = systemPrompt + "\n\n" + preferenceText
+				}
+			}
+		}
+	}
+
+	// 9. 添加长度限制提示
+	if maxTokens != nil && *maxTokens > 0 {
+		estimatedChars := *maxTokens * 3 / 2
+		lengthGuidance := fmt.Sprintf("\n\n重要提示：你的回复有长度限制（约 %d 个字符），请确保在限制内完整回答。", estimatedChars)
+		systemPrompt = systemPrompt + lengthGuidance
+	}
+
+	// 10. 初始化LLM处理器
+	llmHandler, err := v2.NewLLMProvider(c.Request.Context(), credential, systemPrompt)
+	if err != nil {
+		response.Fail(c, "初始化LLM失败", err.Error())
+		return
+	}
+
+	// 11. 构建查询文本（如果有知识库，先检索）
+	queryText := req.Text
+	var knowledgeKey string
+	if assistant.KnowledgeBaseID != nil && *assistant.KnowledgeBaseID != "" {
+		knowledgeKey = *assistant.KnowledgeBaseID
+	}
+
+	if knowledgeKey != "" {
+		knowledgeResults, err := models.SearchKnowledgeBase(h.db, knowledgeKey, req.Text, 5)
+		if err != nil {
+			logrus.Warnf("Failed to search knowledge base: %v", err)
+		} else if len(knowledgeResults) > 0 {
+			var contextBuilder strings.Builder
+			contextBuilder.WriteString(fmt.Sprintf("用户问题: %s\n\n", req.Text))
+			for i, result := range knowledgeResults {
+				if i > 0 {
+					contextBuilder.WriteString("\n\n")
+				}
+				contextBuilder.WriteString(result.Content)
+			}
+			contextBuilder.WriteString("\n\n请基于以上信息回答用户问题，回答要自然流畅，不要提及信息来源。")
+			queryText = contextBuilder.String()
+			logrus.Infof("Retrieved %d relevant documents from knowledge base", len(knowledgeResults))
+		}
+	}
+
+	// 12. 生成会话ID
+	sessionID := req.SessionID
+	if sessionID == "" {
+		sessionID = fmt.Sprintf("simple_text_%d_%d", user.ID, time.Now().Unix())
+	}
+
+	// 13. 调用LLM
+	userID := user.ID
+	assistantID := int64(req.AssistantID)
+	credentialID := credential.ID
+	llmResponse, err := llmHandler.QueryWithOptions(queryText, v2.QueryOptions{
+		Model:        llmModel,
+		Temperature:  temp,
+		MaxTokens:    maxTokens,
+		UserID:       &userID,
+		AssistantID:  &assistantID,
+		CredentialID: &credentialID,
+		SessionID:    sessionID,
+		ChatType:     models.ChatTypeText,
+	})
+	if err != nil {
+		errMsg := err.Error()
+		if strings.Contains(errMsg, "no available channels") || strings.Contains(errMsg, "model") {
+			response.Fail(c, "模型不可用", fmt.Sprintf("模型 %s 当前不可用，请检查模型配置。", llmModel))
+		} else {
+			response.Fail(c, "LLM处理失败", errMsg)
+		}
+		return
+	}
+
+	// 14. 返回结果
+	response.Success(c, "对话成功", SimpleTextChatResponse{
+		Text:      llmResponse,
+		SessionID: sessionID,
+	})
+}
+
 // PlainText 处理纯文本对话（不进行TTS合成，用于调试）
 func (h *Handlers) PlainText(c *gin.Context) {
 	var req OneShotTextRequest

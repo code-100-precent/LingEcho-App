@@ -22,6 +22,7 @@ export interface Scheme {
   openingMessage?: string;
   keywordReplies?: any[];
   fallbackMessage?: string;
+  aiFreeResponse?: boolean;
   
   // 录音配置
   recordingEnabled: boolean;

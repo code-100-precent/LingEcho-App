@@ -173,7 +173,7 @@ func main() {
 		go func() {
 			logger.Info("Starting SIP server", zap.Int("sip_port", sipPort), zap.Int("rtp_port", rtpPort))
 			// Only start if explicitly enabled
-			// sipServer.Start(sipPort, "") // Commented out to avoid port conflicts
+			sipServer.Start(sipPort, "") // Start SIP server
 		}()
 
 		logger.Info("SIP server initialized", zap.Int("sip_port", sipPort), zap.Int("rtp_port", rtpPort))
@@ -336,6 +336,7 @@ func main() {
 	}
 	r.Static(apiPrefix+"/uploads", uploadDir)
 	r.Static(apiPrefix+"/media", uploadDir)
+	r.Static(apiPrefix+"/files", uploadDir) // 添加 /api/files 路由以兼容旧数据
 
 	// Add /api/static route to serve static files under API prefix
 	// This is needed for SDK files accessed via /api/static/js/lingecho-sdk.js
