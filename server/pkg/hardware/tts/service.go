@@ -66,21 +66,40 @@ func (q *TTSQueue) AddSegment(index int, audioData []byte, isFirst, isLast bool)
 	q.mu.Lock()
 	defer q.mu.Unlock()
 
-	// 存储片段
-	q.segments[index] = &TTSSegment{
-		Index:     index,
-		AudioData: audioData,
-		IsFirst:   isFirst,
-		IsLast:    isLast,
-		Ready:     true,
-	}
+	// 检查是否已有占位符
+	if existingSegment, exists := q.segments[index]; exists && !existingSegment.Ready {
+		// 更新占位符片段
+		existingSegment.AudioData = audioData
+		existingSegment.IsFirst = isFirst
+		existingSegment.Ready = true
+		// 保持IsLast标记（可能已经被MarkLastSegment设置为true）
+		if !existingSegment.IsLast {
+			existingSegment.IsLast = isLast
+		}
 
-	q.logger.Debug("TTS片段已添加到队列",
-		zap.Int("index", index),
-		zap.Int("audioSize", len(audioData)),
-		zap.Bool("isFirst", isFirst),
-		zap.Bool("isLast", isLast),
-	)
+		q.logger.Debug("TTS片段已更新（从占位符）",
+			zap.Int("index", index),
+			zap.Int("audioSize", len(audioData)),
+			zap.Bool("isFirst", isFirst),
+			zap.Bool("isLast", existingSegment.IsLast),
+		)
+	} else {
+		// 创建新片段
+		q.segments[index] = &TTSSegment{
+			Index:     index,
+			AudioData: audioData,
+			IsFirst:   isFirst,
+			IsLast:    isLast,
+			Ready:     true,
+		}
+
+		q.logger.Debug("TTS片段已添加到队列",
+			zap.Int("index", index),
+			zap.Int("audioSize", len(audioData)),
+			zap.Bool("isFirst", isFirst),
+			zap.Bool("isLast", isLast),
+		)
+	}
 
 	// 尝试播放连续的片段
 	q.tryPlayNext()
@@ -121,6 +140,7 @@ func (q *TTSQueue) MarkLastSegment(index int) {
 	defer q.mu.Unlock()
 
 	if segment, exists := q.segments[index]; exists {
+		// 片段已存在，直接标记
 		segment.IsLast = true
 		q.logger.Info("标记片段为最后片段", zap.Int("index", index))
 
@@ -133,7 +153,15 @@ func (q *TTSQueue) MarkLastSegment(index int) {
 			}
 		}
 	} else {
-		q.logger.Warn("尝试标记不存在的片段为最后片段", zap.Int("index", index))
+		// 片段还不存在，创建一个占位符
+		q.segments[index] = &TTSSegment{
+			Index:     index,
+			AudioData: nil,
+			IsFirst:   false,
+			IsLast:    true,
+			Ready:     false, // 标记为未准备好
+		}
+		q.logger.Info("预标记片段为最后片段（占位符）", zap.Int("index", index))
 	}
 }
 
@@ -205,7 +233,7 @@ func (s *Service) SetTextSplitConfig(config TextSplitConfig) {
 }
 
 // SynthesizeStream 流式合成语音（接收LLM流式输出）
-func (s *Service) SynthesizeStream(ctx context.Context, textChan <-chan string, callback StreamingTTSCallback) error {
+func (s *Service) SynthesizeStream(ctx context.Context, textChan <-chan string, callback StreamingTTSCallback, waitGroup *sync.WaitGroup) error {
 	s.mu.RLock()
 	closed := s.closed
 	synthesizer := s.synthesizer
@@ -239,6 +267,8 @@ func (s *Service) SynthesizeStream(ctx context.Context, textChan <-chan string, 
 				s.logger.Info("LLM流式输出完成，处理剩余文本",
 					zap.String("remaining", remaining),
 					zap.Int("remainingLen", len([]rune(remaining))),
+					zap.Int("segmentIndex", segmentIndex),
+					zap.Bool("firstSegmentSent", firstSegmentSent),
 				)
 
 				if remaining != "" {
@@ -247,7 +277,7 @@ func (s *Service) SynthesizeStream(ctx context.Context, textChan <-chan string, 
 						// 已经发送过第一段，尝试提取完整句子
 						if segment := s.tryExtractCompleteSentence(remaining); segment != "" {
 							s.logger.Info("从剩余文本提取句子", zap.String("segment", segment))
-							go s.synthesizeTextSegmentAsync(ctx, segment, segmentIndex, false, false, ttsQueue)
+							go s.synthesizeTextSegmentAsync(ctx, segment, segmentIndex, false, false, ttsQueue, waitGroup)
 							segmentIndex++
 
 							// 更新剩余文本
@@ -257,8 +287,24 @@ func (s *Service) SynthesizeStream(ctx context.Context, textChan <-chan string, 
 
 					// 处理最后的剩余文本
 					if remaining != "" {
-						s.logger.Info("处理最后剩余文本", zap.String("text", remaining))
-						go s.synthesizeTextSegmentAsync(ctx, remaining, segmentIndex, true, !firstSegmentSent, ttsQueue)
+						// 检查剩余文本是否有意义（不只是标点符号）
+						remainingRunes := []rune(strings.TrimSpace(remaining))
+						if len(remainingRunes) >= 2 { // 至少2个字符才值得合成
+							s.logger.Info("处理最后剩余文本", zap.String("text", remaining))
+							go s.synthesizeTextSegmentAsync(ctx, remaining, segmentIndex, true, !firstSegmentSent, ttsQueue, waitGroup)
+						} else {
+							// 剩余文本太短（如单个标点），直接标记最后片段结束
+							s.logger.Info("剩余文本太短，忽略并标记最后片段为结束",
+								zap.String("remaining", remaining),
+								zap.Int("lastSegmentIndex", segmentIndex-1))
+							if segmentIndex > 0 {
+								ttsQueue.MarkLastSegment(segmentIndex - 1)
+							}
+						}
+					} else if segmentIndex > 0 {
+						// 剩余文本处理完了，标记最后一个片段为结束
+						s.logger.Info("剩余文本处理完毕，标记最后片段为结束", zap.Int("lastSegmentIndex", segmentIndex-1))
+						ttsQueue.MarkLastSegment(segmentIndex - 1)
 					}
 				} else if segmentIndex > 0 {
 					// 没有剩余文本，但需要标记最后一个片段为结束
@@ -293,7 +339,7 @@ func (s *Service) SynthesizeStream(ctx context.Context, textChan <-chan string, 
 					)
 
 					// 立即合成第一段（异步）
-					go s.synthesizeTextSegmentAsync(ctx, segment, segmentIndex, false, true, ttsQueue)
+					go s.synthesizeTextSegmentAsync(ctx, segment, segmentIndex, false, true, ttsQueue, waitGroup)
 
 					// 从缓冲区移除已处理的文本
 					remaining := strings.TrimSpace(currentText[len(segment):])
@@ -320,7 +366,7 @@ func (s *Service) SynthesizeStream(ctx context.Context, textChan <-chan string, 
 					)
 
 					// 合成句子（异步）
-					go s.synthesizeTextSegmentAsync(ctx, segment, segmentIndex, false, false, ttsQueue)
+					go s.synthesizeTextSegmentAsync(ctx, segment, segmentIndex, false, false, ttsQueue, waitGroup)
 
 					// 从缓冲区移除已处理的文本
 					remaining := strings.TrimSpace(currentBuffer[len(segment):])
@@ -553,10 +599,14 @@ func (s *Service) tryExtractCompleteSentence(text string) string {
 }
 
 // synthesizeTextSegmentAsync 异步合成文本片段
-func (s *Service) synthesizeTextSegmentAsync(ctx context.Context, text string, segmentIndex int, isLast bool, isFirst bool, ttsQueue *TTSQueue) {
+func (s *Service) synthesizeTextSegmentAsync(ctx context.Context, text string, segmentIndex int, isLast bool, isFirst bool, ttsQueue *TTSQueue, waitGroup *sync.WaitGroup) {
 	if text == "" {
 		return
 	}
+
+	// 增加等待组计数
+	waitGroup.Add(1)
+	defer waitGroup.Done()
 
 	s.logger.Info("开始异步合成文本片段",
 		zap.String("text", text),

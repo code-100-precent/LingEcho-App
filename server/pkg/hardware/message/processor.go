@@ -432,8 +432,18 @@ func (p *Processor) processTextWithStreaming(ctx context.Context, text string) {
 
 		// 创建TTS上下文
 		ttsCtx, ttsCancel := context.WithCancel(ctx)
-		defer ttsCancel()
 		p.stateManager.SetTTSCtx(ttsCtx, ttsCancel)
+
+		// 创建等待组来跟踪异步TTS操作
+		var ttsWaitGroup sync.WaitGroup
+
+		// 延迟取消TTS上下文，但要等待所有异步操作完成
+		defer func() {
+			p.logger.Info("等待所有异步TTS操作完成...")
+			ttsWaitGroup.Wait()
+			p.logger.Info("所有异步TTS操作已完成，取消TTS上下文")
+			ttsCancel()
+		}()
 
 		// 流式TTS回调函数
 		callback := func(audioData []byte, isFirst bool, isLast bool, segmentIndex int) error {
@@ -472,7 +482,7 @@ func (p *Processor) processTextWithStreaming(ctx context.Context, text string) {
 		}
 
 		// 启动流式TTS合成
-		err := p.ttsService.SynthesizeStream(ttsCtx, textChan, callback)
+		err := p.ttsService.SynthesizeStream(ttsCtx, textChan, callback, &ttsWaitGroup)
 		if err != nil {
 			p.logger.Error("流式TTS合成失败", zap.Error(err))
 		}
@@ -520,6 +530,7 @@ func (p *Processor) processTextWithStreaming(ctx context.Context, text string) {
 
 		if chunk.IsEnd {
 			close(textChan) // 关闭通道，通知TTS处理完成
+			p.logger.Info("LLM流式输出结束，已关闭textChan通道")
 
 			// 记录完整的LLM响应
 			fullResponse := llmResponse.String()
@@ -554,6 +565,17 @@ func (p *Processor) processTextWithStreaming(ctx context.Context, text string) {
 		close(textChan)
 		p.handleServiceError(err, "LLM")
 		return
+	}
+
+	// 确保textChan被关闭（防止LLM provider没有发送IsEnd=true的chunk）
+	select {
+	case <-textChan:
+		// 通道已经关闭
+		p.logger.Debug("textChan通道已经关闭")
+	default:
+		// 通道还没关闭，手动关闭
+		p.logger.Info("LLM流式查询完成，手动关闭textChan通道")
+		close(textChan)
 	}
 }
 
