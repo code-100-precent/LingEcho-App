@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"strings"
 	"sync"
 	"time"
 
@@ -332,8 +333,8 @@ func (p *Processor) ProcessASRResult(ctx context.Context, text string) {
 		p.stateManager.SetProcessing(false)
 	}
 
-	// 异步处理文本（调用LLM和TTS），不阻塞ASR结果返回
-	go p.processText(ctx, text)
+	// 异步处理文本（使用流式LLM+TTS），不阻塞ASR结果返回
+	go p.processTextWithStreaming(ctx, text)
 }
 
 // ProcessUserInput 处理用户输入（用于录音）
@@ -351,7 +352,260 @@ func (p *Processor) ProcessUserInput(text string) {
 	}
 }
 
-// processText 处理文本（调用LLM和TTS）
+// processTextWithStreaming 使用流式LLM+TTS处理文本（最快响应）
+func (p *Processor) processTextWithStreaming(ctx context.Context, text string) {
+	// 设置处理状态
+	p.stateManager.SetProcessing(true)
+	defer p.stateManager.SetProcessing(false)
+
+	// 再次检查状态
+	if p.stateManager.IsFatalError() {
+		p.logger.Debug("致命错误状态，取消处理")
+		return
+	}
+
+	// 添加用户消息
+	userMsg := llm.Message{
+		Role:    "user",
+		Content: text,
+	}
+	p.mu.Lock()
+	p.messages = append(p.messages, userMsg)
+	// 限制消息历史大小
+	const maxMessageHistory = 100
+	if len(p.messages) > maxMessageHistory {
+		keepCount := maxMessageHistory / 2
+		p.messages = p.messages[len(p.messages)-keepCount:]
+	}
+	p.mu.Unlock()
+
+	// 创建AI轮次，用于时间记录
+	p.recordAITurnStart()
+
+	// 检查LLM服务是否支持流式（直接使用，因为已经是正确类型）
+	streamingLLM := p.llmService
+	if streamingLLM == nil {
+		p.logger.Warn("LLM服务未初始化，降级到普通处理")
+		p.processText(ctx, text)
+		return
+	}
+
+	p.logger.Info("开始流式LLM+TTS处理", zap.String("text", text))
+
+	// 创建文本通道用于LLM到TTS的流式传输
+	textChan := make(chan string, 10)
+	var llmResponse strings.Builder
+
+	// 启动TTS流式合成
+	go func() {
+		defer func() {
+			if r := recover(); r != nil {
+				p.logger.Error("流式TTS处理发生panic", zap.Any("panic", r))
+			}
+		}()
+
+		// 设置TTS播放状态
+		p.stateManager.SetTTSPlaying(true)
+		var ttsEndSent bool // 标志：是否已发送TTS结束消息
+		defer func() {
+			p.stateManager.SetTTSPlaying(false)
+			p.logger.Info("流式TTS播放结束")
+			// 只有在回调中没有发送过TTS结束消息时才发送
+			if !ttsEndSent {
+				if err := p.writer.SendTTSEnd(); err != nil {
+					p.logger.Error("发送TTS结束消息失败", zap.Error(err))
+				}
+			}
+		}()
+
+		// 获取音频格式并发送TTS开始消息
+		if p.synthesizer != nil {
+			format := p.synthesizer.Format()
+			if err := p.writer.SendTTSStart(format); err != nil {
+				p.logger.Error("发送TTS开始消息失败", zap.Error(err))
+				return
+			}
+		}
+
+		// 重置TTS流控状态
+		p.writer.ResetTTSFlowControl()
+
+		// 创建TTS上下文
+		ttsCtx, ttsCancel := context.WithCancel(ctx)
+		defer ttsCancel()
+		p.stateManager.SetTTSCtx(ttsCtx, ttsCancel)
+
+		// 流式TTS回调函数
+		callback := func(audioData []byte, isFirst bool, isLast bool, segmentIndex int) error {
+			// 检查context状态
+			select {
+			case <-ttsCtx.Done():
+				return ttsCtx.Err()
+			default:
+			}
+
+			// 处理音频数据
+			if len(audioData) > 0 {
+				// 记录TTS输出到音频管理器（用于回声消除）
+				if p.audioManager != nil {
+					p.audioManager.RecordTTSOutput(audioData)
+				}
+
+				// 处理音频编码和发送
+				err := p.processStreamingTTSAudio(ttsCtx, audioData, isFirst)
+				if err != nil {
+					return err
+				}
+			}
+
+			// 如果是最后一个片段，发送TTS结束信号
+			if isLast {
+				p.logger.Info("收到TTS最后片段信号，发送TTS结束消息", zap.Int("segmentIndex", segmentIndex))
+				ttsEndSent = true // 标记已发送
+				// 发送TTS结束消息
+				if err := p.writer.SendTTSEnd(); err != nil {
+					p.logger.Error("发送TTS结束消息失败", zap.Error(err))
+				}
+			}
+
+			return nil
+		}
+
+		// 启动流式TTS合成
+		err := p.ttsService.SynthesizeStream(ttsCtx, textChan, callback)
+		if err != nil {
+			p.logger.Error("流式TTS合成失败", zap.Error(err))
+		}
+	}()
+
+	// 流式LLM查询
+	llmStartTime := time.Now()
+	err := streamingLLM.QueryStream(ctx, text, func(chunk llmv2.LLMStreamResponse) {
+		if chunk.Error != nil {
+			p.logger.Error("流式LLM响应错误", zap.Error(chunk.Error))
+			close(textChan)
+			return
+		}
+
+		if chunk.Text != "" {
+			llmResponse.WriteString(chunk.Text)
+
+			// 发送文本到TTS流式合成
+			select {
+			case textChan <- chunk.Text:
+				p.logger.Debug("发送文本片段到TTS", zap.String("text", chunk.Text))
+			case <-ctx.Done():
+				p.logger.Info("流式处理被取消")
+				return
+			default:
+				p.logger.Warn("TTS文本通道满，丢弃文本片段", zap.String("text", chunk.Text))
+			}
+
+			// 如果是第一个响应，发送给前端
+			if chunk.IsStart {
+				llmEndTime := time.Now()
+				p.recordLLMTiming(llmStartTime, llmEndTime)
+
+				if err := p.writer.SendLLMResponse(chunk.Text); err != nil {
+					p.logger.Error("发送LLM响应失败", zap.Error(err))
+				}
+			}
+		}
+
+		// 处理工具调用
+		if len(chunk.ToolCalls) > 0 {
+			p.logger.Info("收到工具调用", zap.Int("count", len(chunk.ToolCalls)))
+			// 工具调用处理逻辑...
+		}
+
+		if chunk.IsEnd {
+			close(textChan) // 关闭通道，通知TTS处理完成
+
+			// 记录完整的LLM响应
+			fullResponse := llmResponse.String()
+			if fullResponse != "" {
+				// 添加助手回复到消息历史
+				assistantMsg := llm.Message{
+					Role:    "assistant",
+					Content: fullResponse,
+				}
+				p.mu.Lock()
+				p.messages = append(p.messages, assistantMsg)
+				p.mu.Unlock()
+
+				// 调用AI回复回调函数（用于录音）
+				p.mu.RLock()
+				callback := p.aiResponseCallback
+				p.mu.RUnlock()
+				if callback != nil {
+					callback(fullResponse)
+				}
+
+				p.logger.Info("流式LLM处理完成",
+					zap.String("fullResponse", fullResponse),
+					zap.Int("responseLen", len([]rune(fullResponse))),
+				)
+			}
+		}
+	})
+
+	if err != nil {
+		p.logger.Error("流式LLM查询失败", zap.Error(err))
+		close(textChan)
+		p.handleServiceError(err, "LLM")
+		return
+	}
+}
+
+// processStreamingTTSAudio 处理流式TTS音频数据
+func (p *Processor) processStreamingTTSAudio(ctx context.Context, audioData []byte, isFirst bool) error {
+	// 获取音频配置
+	p.mu.RLock()
+	audioFormat := p.audioFormat
+	opusEncoder := p.opusEncoder
+	p.mu.RUnlock()
+
+	// 如果是OPUS格式，需要编码
+	if audioFormat == "opus" && opusEncoder != nil {
+		// 使用编码器线程池进行异步编码
+		p.mu.RLock()
+		encoderPool := p.encoderPool
+		p.mu.RUnlock()
+
+		var encodedData []byte
+		var encodeErr error
+
+		if encoderPool != nil {
+			// 使用线程池编码
+			encodedData, encodeErr = encoderPool.Encode(ctx, audioData)
+		} else {
+			// 回退到同步编码
+			audioFrame := &media.AudioPacket{Payload: audioData}
+			frames, err := opusEncoder(audioFrame)
+			if err != nil {
+				encodeErr = err
+			} else if len(frames) > 0 {
+				if af, ok := frames[0].(*media.AudioPacket); ok {
+					encodedData = af.Payload
+				}
+			}
+		}
+
+		if encodeErr != nil {
+			return fmt.Errorf("OPUS编码失败: %w", encodeErr)
+		}
+
+		if len(encodedData) > 0 {
+			return p.safeSendTTSAudio(encodedData, ctx)
+		}
+	} else {
+		// PCM格式，直接发送
+		return p.safeSendTTSAudio(audioData, ctx)
+	}
+
+	return nil
+}
+
 // 注意：此方法在goroutine中异步执行，减少锁持有时间
 func (p *Processor) processText(ctx context.Context, text string) {
 	// 设置处理状态
@@ -990,9 +1244,10 @@ func (p *Processor) switchSpeaker(speakerID string) error {
 
 	// 重新配置TTS文本分割（重要：切换发音人后需要重新配置）
 	config := tts.TextSplitConfig{
-		Enable:         true, // 启用文本分割
-		SplitRatio:     0.5,  // 一半一半分割
-		MinSplitLength: 15,   // 最小15个字符才分割（适合中文）
+		Enable:             true, // 启用文本分割
+		FirstSegmentMinLen: 3,    // 第一段最小3个字符
+		FirstSegmentMaxLen: 5,    // 第一段最大5个字符（真正的5字策略）
+		MinSplitLength:     6,    // 总体最小6个字符才分割（降低门槛）
 	}
 	p.ttsService.SetTextSplitConfig(config)
 
@@ -1008,7 +1263,8 @@ func (p *Processor) switchSpeaker(speakerID string) error {
 	p.logger.Info("发音人切换完成，已重新配置TTS文本分割",
 		zap.String("speakerID", speakerID),
 		zap.Bool("textSplitEnabled", config.Enable),
-		zap.Float64("splitRatio", config.SplitRatio),
+		zap.Int("firstSegmentMinLen", config.FirstSegmentMinLen),
+		zap.Int("firstSegmentMaxLen", config.FirstSegmentMaxLen),
 		zap.Int("minSplitLength", config.MinSplitLength),
 	)
 
@@ -1212,18 +1468,20 @@ func (p *Processor) configureTTSTextSplit() {
 		return
 	}
 
-	// 默认启用文本分割配置
+	// 超激进的5个字策略
 	config := tts.TextSplitConfig{
-		Enable:         true, // 启用文本分割
-		SplitRatio:     0.5,  // 一半一半分割
-		MinSplitLength: 15,   // 最小15个字符才分割（适合中文）
+		Enable:             true, // 启用文本分割
+		FirstSegmentMinLen: 3,    // 第一段最小3个字符
+		FirstSegmentMaxLen: 5,    // 第一段最大5个字符（真正的5字策略）
+		MinSplitLength:     6,    // 总体最小6个字符才分割（降低门槛）
 	}
 
 	p.ttsService.SetTextSplitConfig(config)
 
-	p.logger.Info("TTS文本分割配置已设置",
+	p.logger.Info("TTS文本分割配置已设置（超激进5个字策略）",
 		zap.Bool("enable", config.Enable),
-		zap.Float64("splitRatio", config.SplitRatio),
+		zap.Int("firstSegmentMinLen", config.FirstSegmentMinLen),
+		zap.Int("firstSegmentMaxLen", config.FirstSegmentMaxLen),
 		zap.Int("minSplitLength", config.MinSplitLength),
 	)
 }

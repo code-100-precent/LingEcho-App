@@ -125,6 +125,7 @@ func (f *ServiceFactory) CreateTTS(credential *models.UserCredential, speaker st
 	if sampleRate > 0 {
 		ttsConfig["sampleRate"] = sampleRate
 		ttsConfig["sample_rate"] = sampleRate
+		ttsConfig["rate"] = sampleRate // Volcengine/VoiceEngine uses "rate" parameter
 	}
 	if channels > 0 {
 		ttsConfig["channels"] = channels

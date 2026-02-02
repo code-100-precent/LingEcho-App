@@ -78,6 +78,191 @@ func (s *Service) SetSpeakerManager(manager *speaker.Manager, switchCallback fun
 	s.registerSpeakerSwitchTool()
 }
 
+// LLMStreamResponse 流式响应结构
+type LLMStreamResponse struct {
+	Text      string     `json:"text"`
+	IsStart   bool       `json:"is_start"`
+	IsEnd     bool       `json:"is_end"`
+	ToolCalls []ToolCall `json:"tool_calls,omitempty"`
+	Error     error      `json:"error,omitempty"`
+}
+
+// ToolCall 工具调用结构
+type ToolCall struct {
+	ID       string           `json:"id"`
+	Function ToolCallFunction `json:"function"`
+	Type     string           `json:"type"`
+}
+
+type ToolCallFunction struct {
+	Name      string                 `json:"name"`
+	Arguments map[string]interface{} `json:"arguments"`
+}
+
+// QueryStream 流式查询
+func (s *Service) QueryStream(ctx context.Context, text string, onChunk func(chunk LLMStreamResponse)) error {
+	s.mu.RLock()
+	closed := s.closed
+	provider := s.provider
+	s.mu.RUnlock()
+
+	if closed || provider == nil {
+		return errhandler.NewRecoverableError("LLM", "服务已关闭", nil)
+	}
+
+	if text == "" {
+		return errhandler.NewRecoverableError("LLM", "消息为空", nil)
+	}
+
+	// 设置系统提示
+	enhancedSystemPrompt := s.buildEnhancedSystemPrompt()
+	if enhancedSystemPrompt != "" {
+		provider.SetSystemPrompt(enhancedSystemPrompt)
+	}
+
+	// 构建流式查询选项
+	options := llm.QueryOptions{
+		Model:       s.model,
+		MaxTokens:   intPtr(s.maxTokens),
+		Temperature: float32Ptr(s.temperature),
+		Stream:      true, // 关键：启用流式
+	}
+
+	// 创建带超时的上下文
+	queryCtx, cancel := context.WithTimeout(ctx, 30*time.Second)
+	defer cancel()
+
+	s.logger.Info("开始流式LLM查询",
+		zap.String("text", text),
+		zap.String("model", s.model),
+	)
+
+	isFirst := true
+	startTime := time.Now()
+
+	// 使用LLMProvider的QueryStream方法
+	_, err := provider.QueryStream(text, options, func(segment string, isComplete bool) error {
+		// 检查context状态
+		select {
+		case <-queryCtx.Done():
+			return queryCtx.Err()
+		default:
+		}
+
+		if segment != "" {
+			if isFirst {
+				s.logger.Info("LLM首个流式响应",
+					zap.String("segment", segment),
+					zap.Duration("firstResponseTime", time.Since(startTime)),
+				)
+			}
+
+			onChunk(LLMStreamResponse{
+				Text:    segment,
+				IsStart: isFirst,
+				IsEnd:   isComplete,
+			})
+
+			isFirst = false
+		}
+
+		if isComplete {
+			s.logger.Info("流式LLM查询完成",
+				zap.Duration("duration", time.Since(startTime)),
+			)
+		}
+
+		return nil
+	})
+
+	if err != nil {
+		classified := s.errorHandler.Classify(err, "LLM")
+		s.logger.Error("流式LLM查询失败", zap.Error(classified))
+		onChunk(LLMStreamResponse{
+			Error: classified,
+			IsEnd: true,
+		})
+		return classified
+	}
+
+	return nil
+}
+
+// handleNonStreamResponse 处理非流式响应（降级方案）
+func (s *Service) handleNonStreamResponse(
+	ctx context.Context,
+	provider llm.LLMProvider,
+	text string,
+	options llm.QueryOptions,
+	onChunk func(chunk LLMStreamResponse),
+) error {
+	// 修改为非流式
+	options.Stream = false
+
+	response, err := provider.QueryWithOptions(text, options)
+	if err != nil {
+		classified := s.errorHandler.Classify(err, "LLM")
+		s.logger.Error("LLM查询失败", zap.Error(classified))
+		onChunk(LLMStreamResponse{
+			Error: classified,
+			IsEnd: true,
+		})
+		return classified
+	}
+
+	// 模拟流式响应，按句子分割
+	sentences := s.splitIntoSentences(response)
+	for i, sentence := range sentences {
+		if sentence != "" {
+			onChunk(LLMStreamResponse{
+				Text:    sentence,
+				IsStart: i == 0,
+				IsEnd:   i == len(sentences)-1,
+			})
+		}
+	}
+
+	return nil
+}
+
+// splitIntoSentences 将文本分割为句子（降级方案）
+func (s *Service) splitIntoSentences(text string) []string {
+	if text == "" {
+		return nil
+	}
+
+	separators := []string{"。", "！", "？", ".", "!", "?", "\n"}
+	sentences := []string{text}
+
+	for _, sep := range separators {
+		var newSentences []string
+		for _, sentence := range sentences {
+			parts := strings.Split(sentence, sep)
+			for i, part := range parts {
+				part = strings.TrimSpace(part)
+				if part != "" {
+					if i < len(parts)-1 {
+						newSentences = append(newSentences, part+sep)
+					} else {
+						newSentences = append(newSentences, part)
+					}
+				}
+			}
+		}
+		sentences = newSentences
+	}
+
+	// 过滤空句子
+	var result []string
+	for _, sentence := range sentences {
+		if strings.TrimSpace(sentence) != "" {
+			result = append(result, strings.TrimSpace(sentence))
+		}
+	}
+
+	return result
+}
+
 // Query 查询（使用最后一条消息）
 func (s *Service) Query(ctx context.Context, text string) (string, error) {
 	s.mu.RLock()
@@ -194,7 +379,7 @@ func (s *Service) buildEnhancedSystemPrompt() string {
 
 	// 如果设置了最大token，追加限制提示
 	if s.maxTokens > 0 {
-		tokenLimitPrompt := fmt.Sprintf("\n\n重要提示：你的回复必须控制在%d个token以内。请确保回复简洁、完整，避免因超出限制而被截断。如果内容较长，请优先表达核心要点，保持回复的完整性和可理解性。", s.maxTokens)
+		tokenLimitPrompt := fmt.Sprintf("\n\n重要提示：你的回复必须控制在%d个token以内。请确保回复简洁、完整，避免因超出限制而被截断。如果内容较长，请优先表达核心要点，保持回复的完整性和可理解性。请不要输出emoji或Markdown", s.maxTokens)
 		enhancedPrompt += tokenLimitPrompt
 	}
 

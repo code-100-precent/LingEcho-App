@@ -884,7 +884,13 @@ func NewSynthesisServiceFromCredential(config TTSCredentialConfig) (SynthesisSer
 		language := config.getString("language")
 		rate := config.getInt64("rate")
 		if rate == 0 {
-			rate = 8000 // 默认采样率
+			rate = config.getInt64("sampleRate") // 尝试 sampleRate 字段
+		}
+		if rate == 0 {
+			rate = config.getInt64("sample_rate") // 尝试 sample_rate 字段
+		}
+		if rate == 0 {
+			rate = 16000 // 默认采样率改为16000（Volcengine标准）
 		}
 		encoding := config.getString("encoding")
 		if encoding == "" {
