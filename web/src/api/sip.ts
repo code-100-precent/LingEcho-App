@@ -68,10 +68,19 @@ export interface SipCall {
   errorCode?: number
   errorMessage?: string
   recordUrl?: string
+  transcription?: string
+  transcriptionStatus?: 'pending' | 'processing' | 'completed' | 'failed'
+  transcriptionError?: string
   metadata?: string
   notes?: string
   createdAt: string
   updatedAt: string
+}
+
+// 转录请求
+export interface TranscribeCallRequest {
+  provider?: string
+  language?: string
 }
 
 // 获取SIP用户列表
@@ -99,12 +108,34 @@ export const hangupOutgoingCall = async (callId: string): Promise<ApiResponse<vo
   return post(`/sip/calls/outgoing/${callId}/hangup`)
 }
 
+// 通话历史响应
+export interface CallHistoryResponse {
+  list: SipCall[]
+  total: number
+  page: number
+  limit: number
+}
+
 // 获取通话历史
 export const getCallHistory = async (params?: {
   userId?: number
   status?: string
   limit?: number
-}): Promise<ApiResponse<SipCall[]>> => {
+  page?: number
+}): Promise<ApiResponse<CallHistoryResponse>> => {
   return get('/sip/calls', params)
+}
+
+// 获取通话详情
+export const getCallDetail = async (callId: string): Promise<ApiResponse<SipCall>> => {
+  return get(`/sip/calls/${callId}/detail`)
+}
+
+// 请求转录
+export const requestTranscription = async (
+  callId: string,
+  data: TranscribeCallRequest
+): Promise<ApiResponse<{ status: string; message: string; transcription?: string }>> => {
+  return post(`/sip/calls/${callId}/transcribe`, data)
 }
 

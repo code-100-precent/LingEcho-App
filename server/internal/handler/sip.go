@@ -388,6 +388,13 @@ func (h *SipHandler) GetCallHistory(c *gin.Context) {
 	
 	offset := (page - 1) * limit
 
+	logrus.WithFields(logrus.Fields{
+		"page":   page,
+		"limit":  limit,
+		"offset": offset,
+		"status": status,
+	}).Info("GetCallHistory - 分页参数")
+
 	var calls []models.SipCall
 	var total int64
 	query := h.db.Model(&models.SipCall{})
@@ -413,6 +420,14 @@ func (h *SipHandler) GetCallHistory(c *gin.Context) {
 		response.Fail(c, "Failed to get call history: "+err.Error(), nil)
 		return
 	}
+
+	logrus.WithFields(logrus.Fields{
+		"total":        total,
+		"returned":     len(calls),
+		"page":         page,
+		"limit":        limit,
+		"offset":       offset,
+	}).Info("GetCallHistory - 返回结果")
 
 	response.Success(c, "Success", gin.H{
 		"list":  calls,

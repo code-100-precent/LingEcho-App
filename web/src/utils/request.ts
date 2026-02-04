@@ -71,8 +71,12 @@ const request = async <T = any>(
 }
 
 // GET 请求
-export const get = <T = any>(url: string, config?: Partial<InternalAxiosRequestConfig>): Promise<ApiResponse<T>> => {
-  return request<T>(url, { ...config, method: 'GET' })
+export const get = <T = any>(url: string, params?: any, config?: Partial<InternalAxiosRequestConfig>): Promise<ApiResponse<T>> => {
+  return request<T>(url, { 
+    ...config, 
+    method: 'GET',
+    params // 将 params 添加到请求配置中
+  })
 }
 
 // POST 请求
