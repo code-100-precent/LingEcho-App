@@ -1,4 +1,5 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { 
   Phone, 
   PhoneCall, 
@@ -11,9 +12,13 @@ import {
   AlertCircle,
   Settings,
   Mail,
-  Smartphone
+  Smartphone,
+  Filter,
+  ChevronLeft,
+  ChevronRight,
+  Mic
 } from 'lucide-react'
-import { getSipUsers, makeOutgoingCall, getOutgoingCallStatus, cancelOutgoingCall, hangupOutgoingCall, getCallHistory, type SipUser, type SipCall } from '@/api/sip'
+import { getSipUsers, makeOutgoingCall, getOutgoingCallStatus, cancelOutgoingCall, hangupOutgoingCall, getCallHistory, type SipUser, type SipCall, type CallHistoryResponse } from '@/api/sip'
 import { useI18nStore } from '@/stores/i18nStore'
 import Button from '@/components/UI/Button'
 import { showAlert } from '@/utils/notification'
@@ -22,9 +27,11 @@ import PhoneNumberManager from './PhoneNumberManager'
 import VoicemailBox from './VoicemailBox'
 
 type TabType = 'call' | 'schemes' | 'numbers' | 'voicemail'
+type CallFilterType = 'all' | 'answered' | 'failed'
 
 const CallCenter = () => {
   const { t } = useI18nStore()
+  const navigate = useNavigate()
   const [activeTab, setActiveTab] = useState<TabType>('call')
   const [sipUsers, setSipUsers] = useState<SipUser[]>([])
   const [selectedUser, setSelectedUser] = useState<SipUser | null>(null)
@@ -35,6 +42,10 @@ const CallCenter = () => {
   const [callStatus, setCallStatus] = useState<string>('')
   const [callHistory, setCallHistory] = useState<SipCall[]>([])
   const [showHistory, setShowHistory] = useState(false)
+  const [callFilter, setCallFilter] = useState<CallFilterType>('all')
+  const [currentPage, setCurrentPage] = useState(1)
+  const [totalCalls, setTotalCalls] = useState(0)
+  const [pageSize] = useState(20)
 
   // Tab 配置
   const tabs = [
@@ -47,19 +58,7 @@ const CallCenter = () => {
   // 加载SIP用户列表
   useEffect(() => {
     loadSipUsers()
-    loadCallHistory()
   }, [])
-
-  // 轮询呼出状态
-  useEffect(() => {
-    if (currentCallId && calling) {
-      const interval = setInterval(() => {
-        checkCallStatus(currentCallId)
-      }, 2000) // 每2秒检查一次
-
-      return () => clearInterval(interval)
-    }
-  }, [currentCallId, calling])
 
   const loadSipUsers = async () => {
     try {
@@ -76,16 +75,53 @@ const CallCenter = () => {
     }
   }
 
-  const loadCallHistory = async () => {
+  const loadCallHistory = useCallback(async () => {
     try {
-      const res = await getCallHistory({ limit: 20 })
+      const params: any = { 
+        limit: pageSize,
+        page: currentPage
+      }
+      
+      if (callFilter !== 'all') {
+        params.status = callFilter
+      }
+
+      console.log('Loading call history with params:', params) // 调试日志
+
+      const res = await getCallHistory(params)
       if (res.code === 200 && res.data) {
-        setCallHistory(res.data)
+        console.log('Call history loaded:', res.data) // 调试日志
+        setCallHistory(res.data.list || [])
+        setTotalCalls(res.data.total || 0)
       }
     } catch (error) {
       console.error('加载通话历史失败:', error)
     }
-  }
+  }, [pageSize, currentPage, callFilter])
+
+  // 当筛选条件改变时，重置到第一页
+  useEffect(() => {
+    setCurrentPage(1)
+  }, [callFilter])
+
+  // 加载通话历史
+  useEffect(() => {
+    if (showHistory) {
+      console.log('useEffect triggered - loading call history, page:', currentPage) // 调试日志
+      loadCallHistory()
+    }
+  }, [showHistory, loadCallHistory, currentPage])
+
+  // 轮询呼出状态
+  useEffect(() => {
+    if (currentCallId && calling) {
+      const interval = setInterval(() => {
+        checkCallStatus(currentCallId)
+      }, 2000) // 每2秒检查一次
+
+      return () => clearInterval(interval)
+    }
+  }, [currentCallId, calling])
 
   const checkCallStatus = async (callId: string) => {
     try {
@@ -255,10 +291,17 @@ const CallCenter = () => {
             callHistory={callHistory}
             showHistory={showHistory}
             setShowHistory={setShowHistory}
+            callFilter={callFilter}
+            setCallFilter={setCallFilter}
+            currentPage={currentPage}
+            setCurrentPage={setCurrentPage}
+            totalCalls={totalCalls}
+            pageSize={pageSize}
             handleMakeCall={handleMakeCall}
             handleCancelCall={handleCancelCall}
             filteredUsers={filteredUsers}
             getStatusBadge={getStatusBadge}
+            navigate={navigate}
             t={t}
           />
         )}
@@ -284,12 +327,21 @@ const CallControlTab = ({
   callHistory,
   showHistory,
   setShowHistory,
+  callFilter,
+  setCallFilter,
+  currentPage,
+  setCurrentPage,
+  totalCalls,
+  pageSize,
   handleMakeCall,
   handleCancelCall,
   filteredUsers,
   getStatusBadge,
+  navigate,
   t
 }: any) => {
+  const totalPages = Math.ceil(totalCalls / pageSize)
+
   return (
     <>
       {/* 主操作区域 */}
@@ -442,41 +494,111 @@ const CallControlTab = ({
 
         {showHistory && (
           <div className="p-6">
+            {/* 筛选器 */}
+            <div className="flex items-center gap-2 mb-4">
+              <Filter className="w-4 h-4 text-gray-500" />
+              <div className="flex gap-2">
+                <button
+                  onClick={() => setCallFilter('all')}
+                  className={`px-3 py-1 rounded-lg text-sm font-medium transition-colors ${
+                    callFilter === 'all'
+                      ? 'bg-blue-100 text-blue-700 dark:bg-blue-900 dark:text-blue-300'
+                      : 'bg-gray-100 text-gray-600 dark:bg-gray-700 dark:text-gray-400 hover:bg-gray-200 dark:hover:bg-gray-600'
+                  }`}
+                >
+                  全部
+                </button>
+                <button
+                  onClick={() => setCallFilter('answered')}
+                  className={`px-3 py-1 rounded-lg text-sm font-medium transition-colors ${
+                    callFilter === 'answered'
+                      ? 'bg-green-100 text-green-700 dark:bg-green-900 dark:text-green-300'
+                      : 'bg-gray-100 text-gray-600 dark:bg-gray-700 dark:text-gray-400 hover:bg-gray-200 dark:hover:bg-gray-600'
+                  }`}
+                >
+                  已接通
+                </button>
+                <button
+                  onClick={() => setCallFilter('failed')}
+                  className={`px-3 py-1 rounded-lg text-sm font-medium transition-colors ${
+                    callFilter === 'failed'
+                      ? 'bg-red-100 text-red-700 dark:bg-red-900 dark:text-red-300'
+                      : 'bg-gray-100 text-gray-600 dark:bg-gray-700 dark:text-gray-400 hover:bg-gray-200 dark:hover:bg-gray-600'
+                  }`}
+                >
+                  未接通
+                </button>
+              </div>
+            </div>
+
             {callHistory.length === 0 ? (
               <div className="text-center py-8 text-gray-500">暂无通话记录</div>
             ) : (
-              <div className="space-y-2">
-                {callHistory.map((call) => (
-                  <div
-                    key={call.id}
-                    className="p-4 border border-gray-200 dark:border-gray-700 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700/50 transition-colors"
-                  >
-                    <div className="flex items-center justify-between">
-                      <div className="flex items-center gap-4">
-                        <div>
-                          <div className="font-medium text-gray-900 dark:text-gray-100">
-                            {call.direction === 'outbound' ? '呼出' : '呼入'}
+              <>
+                <div className="space-y-2">
+                  {callHistory.map((call) => (
+                    <div
+                      key={call.id}
+                      onClick={() => navigate(`/call-history/${call.callId}`)}
+                      className="p-4 border border-gray-200 dark:border-gray-700 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700/50 transition-colors cursor-pointer"
+                    >
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-4 flex-1">
+                          <div>
+                            <div className="font-medium text-gray-900 dark:text-gray-100 flex items-center gap-2">
+                              {call.direction === 'outbound' ? '呼出' : '呼入'}
+                              {call.recordUrl && (
+                                <Mic className="w-3 h-3 text-blue-500" />
+                              )}
+                            </div>
+                            <div className="text-sm text-gray-500 dark:text-gray-400">
+                              {call.toUri || call.fromUri}
+                            </div>
                           </div>
-                          <div className="text-sm text-gray-500 dark:text-gray-400">
-                            {call.toUri || call.fromUri}
-                          </div>
+                          {getStatusBadge(call.status)}
                         </div>
-                        {getStatusBadge(call.status)}
-                      </div>
-                      <div className="text-right">
-                        <div className="text-sm text-gray-600 dark:text-gray-400">
-                          {new Date(call.startTime).toLocaleString()}
-                        </div>
-                        {call.duration > 0 && (
-                          <div className="text-xs text-gray-500 dark:text-gray-400">
-                            时长: {Math.floor(call.duration / 60)}分{call.duration % 60}秒
+                        <div className="text-right">
+                          <div className="text-sm text-gray-600 dark:text-gray-400">
+                            {new Date(call.startTime).toLocaleString()}
                           </div>
-                        )}
+                          {call.duration > 0 && (
+                            <div className="text-xs text-gray-500 dark:text-gray-400">
+                              时长: {Math.floor(call.duration / 60)}分{call.duration % 60}秒
+                            </div>
+                          )}
+                        </div>
                       </div>
                     </div>
+                  ))}
+                </div>
+
+                {/* 分页 */}
+                {totalPages > 1 && (
+                  <div className="flex items-center justify-between mt-4 pt-4 border-t border-gray-200 dark:border-gray-700">
+                    <div className="text-sm text-gray-600 dark:text-gray-400">
+                      共 {totalCalls} 条记录，第 {currentPage} / {totalPages} 页
+                    </div>
+                    <div className="flex gap-2">
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => setCurrentPage(Math.max(1, currentPage - 1))}
+                        disabled={currentPage === 1}
+                      >
+                        <ChevronLeft className="w-4 h-4" />
+                      </Button>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => setCurrentPage(Math.min(totalPages, currentPage + 1))}
+                        disabled={currentPage === totalPages}
+                      >
+                        <ChevronRight className="w-4 h-4" />
+                      </Button>
+                    </div>
                   </div>
-                ))}
-              </div>
+                )}
+              </>
             )}
           </div>
         )}

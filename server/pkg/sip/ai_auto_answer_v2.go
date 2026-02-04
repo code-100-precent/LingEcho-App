@@ -83,48 +83,9 @@ func (as *SipServer) handleAIAutoAnswerV2(req *sip.Request, tx sip.ServerTransac
 		logrus.WithError(err).Error("Failed to create AI call session")
 	}
 
-	// 7. 更新数据库中的通话状态
-	if as.db != nil {
-		now := time.Now()
-		from := req.From()
-		to := req.To()
-
-		var fromUsername, fromURI, fromIP string
-		var toUsername, toURI string
-
-		if from != nil {
-			fromUsername = from.Address.User
-			fromURI = from.Address.String()
-			if via := req.Via(); via != nil {
-				fromIP = via.Host
-			}
-		}
-
-		if to != nil {
-			toUsername = to.Address.User
-			toURI = to.Address.String()
-		}
-
-		localRTPAddr := fmt.Sprintf("%s:%d", serverIP, as.RPTPort)
-
-		sipCall := &models.SipCall{
-			CallID:        callID,
-			Direction:     models.SipCallDirectionInbound,
-			Status:        models.SipCallStatusRinging,
-			FromUsername:  fromUsername,
-			FromURI:       fromURI,
-			FromIP:        fromIP,
-			ToUsername:    toUsername,
-			ToURI:         toURI,
-			LocalRTPAddr:  localRTPAddr,
-			RemoteRTPAddr: clientRTPAddr,
-			StartTime:     now,
-		}
-
-		if err := as.db.Create(sipCall).Error; err != nil {
-			logrus.WithError(err).WithField("call_id", callID).Error("Failed to create inbound call record")
-		}
-	}
+	// 7. 不需要在这里创建数据库记录，因为 handleInvite 已经创建了
+	// 这里只需要等待 ACK 后更新状态即可
+	logrus.WithField("call_id", callID).Info("AI auto-answer record will be created by handleInvite")
 
 	logrus.WithField("call_id", callID).Info("Waiting for ACK to start AI session")
 }

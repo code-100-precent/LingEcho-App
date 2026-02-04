@@ -1074,6 +1074,23 @@ func (as *SipServer) RegisterFunc() {
 func (as *SipServer) handleInvite(req *sip.Request, tx sip.ServerTransaction) {
 	logrus.WithField("start_line", req.StartLine()).Info("Received INVITE request")
 
+	// 安全检查：验证 Via 头
+	var fromIP string
+	if via := req.Via(); via != nil {
+		fromIP = via.Host
+	}
+	
+	// 拒绝无效 IP 的请求（防止测试或恶意请求）
+	if fromIP == "" || fromIP == "0.0.0.0" {
+		logrus.WithFields(logrus.Fields{
+			"from_ip": fromIP,
+			"from":    req.From(),
+		}).Warn("Rejected INVITE with invalid source IP (missing or 0.0.0.0)")
+		res := sip.NewResponseFromRequest(req, sip.StatusForbidden, "Forbidden - Invalid Source", nil)
+		tx.Respond(res)
+		return
+	}
+
 	// Parse SDP to get client RTP address
 	sdpBody := string(req.Body())
 	clientRTPAddr, err := parseSDPForRTPAddress(sdpBody)

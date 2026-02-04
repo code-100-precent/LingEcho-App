@@ -42,6 +42,7 @@ import RedirectToDevices from '@/components/RedirectToDevices.tsx';
 import WorkflowManager from '@/pages/WorkflowManager.tsx';
 import Overview from '@/pages/Overview.tsx';
 import CallCenter from '@/pages/CallCenter.tsx';
+import CallHistoryDetail from '@/pages/CallHistoryDetail.tsx';
 import NodePluginMarket from '@/pages/NodePluginMarket.tsx';
 import SchemeManager from '@/pages/SchemeManager.tsx';
 import PhoneNumberManager from '@/pages/PhoneNumberManager.tsx';
@@ -290,6 +291,13 @@ function App() {
                             <ProtectedRoute>
                                 <Layout>
                                     <CallCenter />
+                                </Layout>
+                            </ProtectedRoute>
+                        } />
+                        <Route path="/call-history/:callId" element={
+                            <ProtectedRoute>
+                                <Layout>
+                                    <CallHistoryDetail />
                                 </Layout>
                             </ProtectedRoute>
                         } />

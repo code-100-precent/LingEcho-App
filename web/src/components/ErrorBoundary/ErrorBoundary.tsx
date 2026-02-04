@@ -82,21 +82,13 @@ class ErrorBoundary extends Component<Props, State> {
   }
 
   private sendToMonitoringService = (errorContext: any) => {
-    // 示例实现，实际项目中应该发送到真实的监控服务
+    // 只存储到本地，不发送到服务器
+    // 如果需要发送到监控服务，可以在这里集成 Sentry 等第三方服务
     try {
-      // 使用 fetch 发送错误信息
-      fetch('/api/errors', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(errorContext)
-      }).catch(() => {
-        // 如果发送失败，可以存储到本地存储
-        this.storeErrorLocally(errorContext)
-      })
-    } catch (e) {
       this.storeErrorLocally(errorContext)
+      console.log('Error logged locally:', errorContext)
+    } catch (e) {
+      console.warn('Failed to log error:', e)
     }
   }
 
