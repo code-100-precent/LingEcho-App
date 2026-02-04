@@ -54,16 +54,24 @@ export default function CallAudioPlayer({
         setIsLoading(true);
         setError(null);
 
+        // 验证音频URL
+        if (!audioUrl || audioUrl.trim() === '') {
+          throw new Error('音频URL为空');
+        }
+
+        console.log('正在加载音频:', audioUrl);
+
+        // 设置音频模式
+        await Audio.setAudioModeAsync({
+          playsInSilentModeIOS: true,
+          staysActiveInBackground: false,
+          shouldDuckAndroid: true,
+        });
+
         const { sound: audioSound } = await Audio.Sound.createAsync(
           { uri: audioUrl },
-          { shouldPlay: false }
-        );
-
-        if (isMounted) {
-          setSound(audioSound);
-
-          // 监听播放状态
-          audioSound.setOnPlaybackStatusUpdate((playbackStatus) => {
+          { shouldPlay: false },
+          (playbackStatus) => {
             if (playbackStatus.isLoaded) {
               setStatus(playbackStatus);
               setCurrentTime(playbackStatus.positionMillis / 1000);
@@ -73,13 +81,39 @@ export default function CallAudioPlayer({
                 setIsPlaying(false);
                 setCurrentTime(0);
               }
+            } else if (playbackStatus.error) {
+              console.error('播放状态错误:', playbackStatus.error);
+              setError(`播放错误: ${playbackStatus.error}`);
             }
-          });
-        }
-      } catch (err) {
-        console.error('音频加载失败:', err);
+          }
+        );
+
         if (isMounted) {
-          setError('音频加载失败');
+          setSound(audioSound);
+          console.log('音频加载成功');
+        }
+      } catch (err: any) {
+        console.error('音频加载失败:', err);
+        console.error('错误详情:', {
+          message: err.message,
+          code: err.code,
+          audioUrl,
+        });
+        
+        if (isMounted) {
+          let errorMessage = '音频加载失败';
+          
+          if (err.message?.includes('404') || err.message?.includes('Not Found')) {
+            errorMessage = '音频文件不存在';
+          } else if (err.message?.includes('no supported source')) {
+            errorMessage = '不支持的音频格式';
+          } else if (err.message?.includes('network')) {
+            errorMessage = '网络连接失败';
+          } else if (err.message) {
+            errorMessage = `加载失败: ${err.message}`;
+          }
+          
+          setError(errorMessage);
         }
       } finally {
         if (isMounted) {
@@ -95,7 +129,9 @@ export default function CallAudioPlayer({
     return () => {
       isMounted = false;
       if (sound) {
-        sound.unloadAsync();
+        sound.unloadAsync().catch(err => {
+          console.error('卸载音频失败:', err);
+        });
       }
     };
   }, [audioUrl, hasAudio]);
@@ -148,82 +184,93 @@ export default function CallAudioPlayer({
 
   return (
     <View style={[styles.container, style]}>
-      <View style={styles.header}>
-        <Text style={styles.title}>通话录音</Text>
-        <Text style={styles.timeText}>
-          {formatTime(currentTime)} / {formatTime(duration)}
-        </Text>
-      </View>
-
       {error && (
         <View style={styles.errorContainer}>
           <Text style={styles.errorText}>{error}</Text>
         </View>
       )}
 
-      <View style={styles.controls}>
+      <View style={styles.playerContent}>
         {/* 播放/暂停按钮 */}
         <TouchableOpacity
           onPress={togglePlayPause}
           disabled={isLoading}
           style={[styles.playButton, isLoading && styles.disabled]}
+          activeOpacity={0.8}
         >
           {isLoading ? (
             <ActivityIndicator size="small" color="#ffffff" />
-          ) : isPlaying ? (
-            <Text style={styles.iconText}>⏸</Text>
           ) : (
-            <Text style={styles.iconText}>▶</Text>
-          )}
-        </TouchableOpacity>
-
-        {/* 进度条 */}
-        <TouchableOpacity
-          style={styles.progressContainer}
-          onPress={handleSeek}
-          activeOpacity={1}
-        >
-          {/* 消息分段背景 */}
-          {duration > 0 && messages.length > 0 && (
-            <View style={styles.messageSegments}>
-              {messages.map((msg, idx) => {
-                const nextMsg = messages[idx + 1];
-                const startPercent = (msg.timeInCallSecs / duration) * 100;
-                const endTime = nextMsg ? nextMsg.timeInCallSecs : duration;
-                const widthPercent = ((endTime - msg.timeInCallSecs) / duration) * 100;
-
-                const bgColor =
-                  msg.role === 'user'
-                    ? '#dbeafe'
-                    : msg.role === 'agent'
-                    ? '#d1fae5'
-                    : '#f3f4f6';
-
-                return (
-                  <View
-                    key={idx}
-                    style={[
-                      styles.segment,
-                      {
-                        left: `${startPercent}%`,
-                        width: `${widthPercent}%`,
-                        backgroundColor: bgColor,
-                      },
-                    ]}
-                  />
-                );
-              })}
+            <View style={styles.playIconContainer}>
+              {isPlaying ? (
+                <View style={styles.pauseIcon}>
+                  <View style={styles.pauseBar} />
+                  <View style={styles.pauseBar} />
+                </View>
+              ) : (
+                <View style={styles.playIcon} />
+              )}
             </View>
           )}
+        </TouchableOpacity>
 
-          {/* 进度条 */}
-          <View style={styles.progressBar}>
-            <View style={[styles.progressFill, { width: `${progress}%` }]} />
+        {/* 进度条和时间 */}
+        <View style={styles.progressSection}>
+          {/* 时间显示 */}
+          <View style={styles.timeRow}>
+            <Text style={styles.timeText}>{formatTime(currentTime)}</Text>
+            <Text style={styles.timeSeparator}>•</Text>
+            <Text style={styles.durationText}>{formatTime(duration)}</Text>
           </View>
 
-          {/* 进度指示器 */}
-          <View style={[styles.progressIndicator, { left: `${progress}%` }]} />
-        </TouchableOpacity>
+          {/* 进度条 */}
+          <TouchableOpacity
+            style={styles.progressContainer}
+            onPress={handleSeek}
+            activeOpacity={1}
+          >
+            {/* 消息分段背景 */}
+            {duration > 0 && messages.length > 0 && (
+              <View style={styles.messageSegments}>
+                {messages.map((msg, idx) => {
+                  const nextMsg = messages[idx + 1];
+                  const startPercent = (msg.timeInCallSecs / duration) * 100;
+                  const endTime = nextMsg ? nextMsg.timeInCallSecs : duration;
+                  const widthPercent = ((endTime - msg.timeInCallSecs) / duration) * 100;
+
+                  const bgColor =
+                    msg.role === 'user'
+                      ? '#dbeafe'
+                      : msg.role === 'agent'
+                      ? '#d1fae5'
+                      : '#f3f4f6';
+
+                  return (
+                    <View
+                      key={idx}
+                      style={[
+                        styles.segment,
+                        {
+                          left: `${startPercent}%`,
+                          width: `${widthPercent}%`,
+                          backgroundColor: bgColor,
+                        },
+                      ]}
+                    />
+                  );
+                })}
+              </View>
+            )}
+
+            {/* 进度条背景 */}
+            <View style={styles.progressTrack}>
+              {/* 已播放进度 */}
+              <View style={[styles.progressFill, { width: `${progress}%` }]} />
+              {/* 进度指示器 */}
+              <View style={[styles.progressThumb, { left: `${progress}%` }]} />
+            </View>
+          </TouchableOpacity>
+        </View>
       </View>
     </View>
   );
@@ -232,69 +279,112 @@ export default function CallAudioPlayer({
 const styles = StyleSheet.create({
   container: {
     backgroundColor: '#ffffff',
-    borderRadius: 12,
+    borderRadius: 16,
     padding: 16,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
+    shadowOpacity: 0.08,
+    shadowRadius: 8,
     elevation: 3,
-  },
-  header: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 12,
-  },
-  title: {
-    fontSize: 18,
-    fontWeight: '600',
-    color: '#1f2937',
-  },
-  timeText: {
-    fontSize: 14,
-    color: '#6b7280',
-    fontFamily: 'monospace',
   },
   errorContainer: {
     backgroundColor: '#fee2e2',
     borderWidth: 1,
     borderColor: '#fecaca',
-    borderRadius: 8,
+    borderRadius: 12,
     padding: 12,
     marginBottom: 12,
-  },
-  errorText: {
-    fontSize: 14,
-    color: '#991b1b',
-  },
-  controls: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 12,
+    gap: 8,
+  },
+  errorText: {
+    fontSize: 13,
+    color: '#991b1b',
+    flex: 1,
+  },
+  playerContent: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 16,
   },
   playButton: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    backgroundColor: '#000000',
+    width: 56,
+    height: 56,
+    borderRadius: 28,
+    backgroundColor: '#a855f7',
+    justifyContent: 'center',
+    alignItems: 'center',
+    shadowColor: '#a855f7',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+    elevation: 6,
+  },
+  disabled: {
+    backgroundColor: '#cbd5e1',
+    shadowColor: '#64748b',
+    shadowOpacity: 0.2,
+  },
+  playIconContainer: {
+    width: 24,
+    height: 24,
     justifyContent: 'center',
     alignItems: 'center',
   },
-  disabled: {
-    backgroundColor: '#9ca3af',
+  playIcon: {
+    width: 0,
+    height: 0,
+    marginLeft: 3,
+    borderLeftWidth: 16,
+    borderTopWidth: 10,
+    borderBottomWidth: 10,
+    borderLeftColor: '#ffffff',
+    borderTopColor: 'transparent',
+    borderBottomColor: 'transparent',
   },
-  iconText: {
-    color: '#ffffff',
-    fontSize: 16,
+  pauseIcon: {
+    flexDirection: 'row',
+    gap: 4,
+    alignItems: 'center',
+  },
+  pauseBar: {
+    width: 4,
+    height: 18,
+    backgroundColor: '#ffffff',
+    borderRadius: 2,
+  },
+  progressSection: {
+    flex: 1,
+    gap: 8,
+  },
+  timeRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
+  timeText: {
+    fontSize: 15,
+    fontWeight: '600',
+    color: '#1e293b',
+    fontVariant: ['tabular-nums'],
+    letterSpacing: 0.5,
+  },
+  timeSeparator: {
+    fontSize: 12,
+    color: '#cbd5e1',
+    fontWeight: '600',
+  },
+  durationText: {
+    fontSize: 13,
+    color: '#94a3b8',
+    fontVariant: ['tabular-nums'],
+    letterSpacing: 0.5,
   },
   progressContainer: {
-    flex: 1,
-    height: 64,
-    backgroundColor: '#f3f4f6',
-    borderRadius: 8,
+    height: 48,
+    justifyContent: 'center',
     position: 'relative',
-    overflow: 'hidden',
   },
   messageSegments: {
     position: 'absolute',
@@ -302,30 +392,42 @@ const styles = StyleSheet.create({
     left: 0,
     right: 0,
     bottom: 0,
+    borderRadius: 24,
+    overflow: 'hidden',
   },
   segment: {
     position: 'absolute',
     top: 0,
     bottom: 0,
+    opacity: 0.4,
   },
-  progressBar: {
-    position: 'absolute',
-    top: 0,
-    left: 0,
-    right: 0,
-    bottom: 0,
-    justifyContent: 'center',
+  progressTrack: {
+    height: 6,
+    backgroundColor: '#e2e8f0',
+    borderRadius: 3,
+    position: 'relative',
+    overflow: 'visible',
   },
   progressFill: {
-    height: 4,
-    backgroundColor: '#3b82f6',
-    borderRadius: 2,
+    height: '100%',
+    backgroundColor: '#a855f7',
+    borderRadius: 3,
+    position: 'relative',
   },
-  progressIndicator: {
+  progressThumb: {
     position: 'absolute',
-    top: 0,
-    bottom: 0,
-    width: 2,
-    backgroundColor: '#ef4444',
+    top: -5,
+    width: 16,
+    height: 16,
+    borderRadius: 8,
+    backgroundColor: '#a855f7',
+    marginLeft: -8,
+    shadowColor: '#a855f7',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.4,
+    shadowRadius: 4,
+    elevation: 4,
+    borderWidth: 3,
+    borderColor: '#ffffff',
   },
 });

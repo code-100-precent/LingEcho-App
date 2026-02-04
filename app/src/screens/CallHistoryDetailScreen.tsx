@@ -219,6 +219,8 @@ const CallHistoryDetailScreen: React.FC = () => {
   
   // 处理录音 URL
   let audioUrl = '';
+  let hasValidAudio = false;
+  
   if (call.recordUrl) {
     if (call.recordUrl.startsWith('http')) {
       // 已经是完整URL
@@ -240,10 +242,19 @@ const CallHistoryDetailScreen: React.FC = () => {
       // 其他相对路径，直接拼接到 uploads
       audioUrl = `${uploadsBaseURL}/${call.recordUrl}`;
     }
+    
+    // 验证URL格式
+    hasValidAudio = audioUrl.trim() !== '' && (audioUrl.startsWith('http://') || audioUrl.startsWith('https://'));
+    
     console.log('=== 录音信息 ===');
     console.log('原始 recordUrl:', call.recordUrl);
     console.log('处理后 audioUrl:', audioUrl);
     console.log('uploadsBaseURL:', uploadsBaseURL);
+    console.log('hasValidAudio:', hasValidAudio);
+    
+    if (!hasValidAudio) {
+      console.warn('⚠️ 音频URL格式无效');
+    }
   } else {
     console.log('=== 无录音 ===');
     console.log('call.recordUrl 为空');
@@ -333,13 +344,23 @@ const CallHistoryDetailScreen: React.FC = () => {
               <Feather name="mic" size={18} color="#1e293b" />
               <Text style={styles.sectionTitle}>通话录音</Text>
             </View>
-            <CallAudioPlayer
-              callId={call.callId}
-              audioUrl={audioUrl}
-              hasAudio={true}
-              durationSeconds={call.duration}
-              style={styles.audioPlayer}
-            />
+            {hasValidAudio ? (
+              <CallAudioPlayer
+                callId={call.callId}
+                audioUrl={audioUrl}
+                hasAudio={true}
+                durationSeconds={call.duration}
+                style={styles.audioPlayer}
+              />
+            ) : (
+              <View style={styles.audioErrorContainer}>
+                <Feather name="alert-circle" size={32} color="#ef4444" />
+                <Text style={styles.audioErrorText}>音频文件无法访问</Text>
+                <Text style={styles.audioErrorDetail}>
+                  录音路径: {call.recordUrl}
+                </Text>
+              </View>
+            )}
           </Card>
         )}
 
@@ -574,6 +595,27 @@ const styles = StyleSheet.create({
     fontSize: 14,
     lineHeight: 22,
     color: '#475569',
+  },
+  audioErrorContainer: {
+    alignItems: 'center',
+    paddingVertical: 40,
+    backgroundColor: '#fef2f2',
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#fecaca',
+  },
+  audioErrorText: {
+    marginTop: 12,
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#ef4444',
+  },
+  audioErrorDetail: {
+    marginTop: 8,
+    fontSize: 12,
+    color: '#991b1b',
+    textAlign: 'center',
+    paddingHorizontal: 20,
   },
 });
 
