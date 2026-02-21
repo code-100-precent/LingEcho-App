@@ -105,6 +105,12 @@ func NewSipServer(rptPort int) *SipServer {
 		logrus.WithError(err).Fatal("Failed to create RTP UDP connection")
 	}
 
+	logrus.WithFields(logrus.Fields{
+		"rtp_port":      rptPort,
+		"listen_addr":   rtpAddr.String(),
+		"local_addr":    rtpConn.LocalAddr().String(),
+	}).Info("🎵 RTP UDP 连接已创建并监听")
+
 	client, err := sipgo.NewClient(ua)
 	if err != nil {
 		logrus.WithError(err).Fatal("Create SIP Client Failed")
@@ -1109,9 +1115,6 @@ func (as *SipServer) handleInvite(req *sip.Request, tx sip.ServerTransaction) {
 	sdp := generateSDP(serverIP, as.RPTPort)
 	sdpBytes := []byte(sdp)
 
-	// Log SDP content for debugging
-	logrus.WithField("sdp", sdp).Debug("Generated SDP")
-
 	// Create 200 OK response
 	// 先检查是否需要启动 AI 代接（在发送 200 OK 之前）
 	callID := req.CallID().Value()
@@ -1141,17 +1144,13 @@ func (as *SipServer) handleInvite(req *sip.Request, tx sip.ServerTransaction) {
 			"call_id":   callID,
 			"sip_user":  sipUser.Username,
 			"assistant": assistant.Name,
-		}).Info("🤖 标记为 AI 代接会话")
+		}).Info("🤖 AI 代接会话")
 	}
 
 	// Save session information BEFORE sending 200 OK
 	as.sessionsMutex.Lock()
 	as.pendingSessions[callID] = rtpAddrToSave
 	as.sessionsMutex.Unlock()
-	logrus.WithFields(logrus.Fields{
-		"call_id":     callID,
-		"rtp_address": rtpAddrToSave,
-	}).Info("Session information saved")
 
 	res := sip.NewResponseFromRequest(req, sip.StatusOK, "OK", sdpBytes)
 	cl := sip.ContentLengthHeader(len(sdpBytes))
@@ -1171,7 +1170,6 @@ func (as *SipServer) handleInvite(req *sip.Request, tx sip.ServerTransaction) {
 		Address: contactURI,
 	}
 	res.AppendHeader(contact)
-	logrus.WithField("contact", contact.String()).Debug("Contact header")
 
 	// Send 200 OK response
 	if err := tx.Respond(res); err != nil {
@@ -1179,8 +1177,7 @@ func (as *SipServer) handleInvite(req *sip.Request, tx sip.ServerTransaction) {
 		return
 	}
 
-	logrus.Info("200 OK response sent with SDP and Contact header")
-	logrus.Info("200 OK response sent, waiting for ACK...")
+	logrus.WithField("call_id", callID).Info("200 OK sent, waiting for ACK")
 
 	// 创建呼入通话的数据库记录
 	if as.db != nil {
@@ -1493,19 +1490,39 @@ func (as *SipServer) handleRegister(req *sip.Request, tx sip.ServerTransaction) 
 		err := as.db.Where("username = ?", username).First(&sipUser).Error
 		if err != nil {
 			if err == gorm.ErrRecordNotFound {
-				logrus.WithField("username", username).Warn("SIP user not found in database")
-				res := sip.NewResponseFromRequest(req, sip.StatusUnauthorized, "Unauthorized", nil)
+				// Auto-create new SIP user if not found
+				logrus.WithField("username", username).Info("SIP user not found, auto-creating new user")
+				
+				sipUser = models.SipUser{
+					Username:    username,
+					SchemeName:  "Auto-registered: " + username,
+					Description: "Automatically created during REGISTER",
+					Enabled:     true,
+					IsActive:    false,
+					Status:      models.SipUserStatusUnregistered,
+				}
+				
+				if err := as.db.Create(&sipUser).Error; err != nil {
+					logrus.WithError(err).Error("Failed to auto-create SIP user")
+					res := sip.NewResponseFromRequest(req, sip.StatusInternalServerError, "Internal Server Error", nil)
+					if err := tx.Respond(res); err != nil {
+						logrus.WithError(err).Error("Failed to send 500 response")
+					}
+					return
+				}
+				
+				logrus.WithFields(logrus.Fields{
+					"username": username,
+					"id":       sipUser.ID,
+				}).Info("SIP user auto-created successfully")
+			} else {
+				logrus.WithError(err).Error("Database query failed")
+				res := sip.NewResponseFromRequest(req, sip.StatusInternalServerError, "Internal Server Error", nil)
 				if err := tx.Respond(res); err != nil {
-					logrus.WithError(err).Error("Failed to send 401 response")
+					logrus.WithError(err).Error("Failed to send 500 response")
 				}
 				return
 			}
-			logrus.WithError(err).Error("Database query failed")
-			res := sip.NewResponseFromRequest(req, sip.StatusInternalServerError, "Internal Server Error", nil)
-			if err := tx.Respond(res); err != nil {
-				logrus.WithError(err).Error("Failed to send 500 response")
-			}
-			return
 		}
 
 		// Check if user is enabled
@@ -1659,10 +1676,10 @@ func (as *SipServer) handleOptions(req *sip.Request, tx sip.ServerTransaction) {
 
 func (as *SipServer) handleAck(req *sip.Request, tx sip.ServerTransaction) {
 	callID := req.CallID().Value()
+	
 	logrus.WithFields(logrus.Fields{
-		"start_line": req.StartLine(),
-		"call_id":    callID,
-	}).Info("Received ACK request")
+		"call_id": callID,
+	}).Info("Received ACK")
 
 	// ACK request doesn't need a response, but receiving ACK means session is established, can start sending audio
 	// Find corresponding session information
@@ -1671,23 +1688,8 @@ func (as *SipServer) handleAck(req *sip.Request, tx sip.ServerTransaction) {
 	// 不要立即删除，先检查是否是 AI 会话
 	as.sessionsMutex.Unlock()
 
-	logrus.WithFields(logrus.Fields{
-		"call_id":       callID,
-		"exists":        exists,
-		"clientRTPAddr": clientRTPAddr,
-	}).Debug("Pending session info")
-
 	if !exists {
-		logrus.WithField("call_id", callID).Warn("Received ACK but could not find corresponding session")
-		logrus.Debug("Current pending sessions list:")
-		as.sessionsMutex.RLock()
-		for id, addr := range as.pendingSessions {
-			logrus.WithFields(logrus.Fields{
-				"call_id":     id,
-				"rtp_address": addr,
-			}).Debug("Pending session")
-		}
-		as.sessionsMutex.RUnlock()
+		logrus.WithField("call_id", callID).Warn("ACK received but session not found")
 		return
 	}
 
