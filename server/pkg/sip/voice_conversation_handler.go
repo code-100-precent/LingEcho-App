@@ -138,6 +138,15 @@ func (h *VoiceConversationHandler) Start() {
 	}
 }
 
+// UpdateClientAddress 更新客户端 RTP 地址（用于 NAT 穿透）
+func (h *VoiceConversationHandler) UpdateClientAddress(newAddr *net.UDPAddr) {
+	h.clientRTPAddr = newAddr
+	logrus.WithFields(logrus.Fields{
+		"call_id":  h.callID,
+		"new_addr": newAddr.String(),
+	}).Debug("Client RTP address updated for NAT")
+}
+
 // Stop 停止语音对话处理
 func (h *VoiceConversationHandler) Stop() {
 	logrus.WithField("call_id", h.callID).Info("🛑 停止智能语音对话处理器")

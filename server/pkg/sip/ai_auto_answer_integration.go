@@ -262,16 +262,24 @@ func (as *SipServer) startAIVoiceSession(
 func (as *SipServer) receiveRTPForAI(callID string, clientAddr *net.UDPAddr, handler *VoiceConversationHandler) {
 	buffer := make([]byte, 1500)
 	
-	logrus.WithFields(logrus.Fields{
-		"call_id":     callID,
-		"client_addr": clientAddr.String(),
-	}).Info("📡 开始接收 RTP 包")
+	logrus.WithField("call_id", callID).Debug("Starting RTP receiver for AI session")
+	
+	// 添加计数器用于调试
+	packetCount := 0
+	lastLogTime := time.Now()
+	
+	// 学习真实的客户端地址（处理 NAT 穿透）
+	var realClientAddr *net.UDPAddr
+	learnedAddress := false
 	
 	for {
 		// 检查 handler 是否还在运行
 		select {
 		case <-handler.ctx.Done():
-			logrus.WithField("call_id", callID).Info("AI handler 已停止，退出 RTP 接收")
+			logrus.WithFields(logrus.Fields{
+				"call_id":      callID,
+				"packets_recv": packetCount,
+			}).Info("AI handler 已停止，退出 RTP 接收")
 			return
 		default:
 		}
@@ -288,23 +296,75 @@ func (as *SipServer) receiveRTPForAI(callID string, clientAddr *net.UDPAddr, han
 			logrus.WithFields(logrus.Fields{
 				"call_id": callID,
 				"error":   err,
-			}).Error("Failed to read RTP data")
+			}).Error("❌ 读取 RTP 数据失败")
 			continue
 		}
 		
-		// 检查是否来自目标客户端
-		if !receivedAddr.IP.Equal(clientAddr.IP) {
+		packetCount++
+		
+		// 学习真实的客户端地址（从第一个有效的 RTP 包）
+		if !learnedAddress {
+			// 尝试解析 RTP 包以验证这是一个有效的包
+			packet := &rtp.Packet{}
+			if err := packet.Unmarshal(buffer[:n]); err == nil && packet.PayloadType == 0 {
+				realClientAddr = receivedAddr
+				learnedAddress = true
+				logrus.WithFields(logrus.Fields{
+					"call_id":   callID,
+					"real_addr": receivedAddr.String(),
+				}).Info("NAT address learned")
+				
+				// 更新 handler 的客户端地址，以便发送音频到正确的地址
+				handler.UpdateClientAddress(realClientAddr)
+			}
+		}
+		
+		// 每10秒记录一次日志
+		if packetCount == 1 || time.Since(lastLogTime) > 10*time.Second {
+			logrus.WithFields(logrus.Fields{
+				"call_id":      callID,
+				"packet_count": packetCount,
+			}).Debug("RTP packets received")
+			lastLogTime = time.Now()
+		}
+		
+		// 检查是否来自目标客户端（使用学习到的地址或原始地址）
+		targetAddr := clientAddr
+		if learnedAddress && realClientAddr != nil {
+			targetAddr = realClientAddr
+		}
+		
+		if !receivedAddr.IP.Equal(targetAddr.IP) {
+			if packetCount <= 10 {
+				logrus.WithFields(logrus.Fields{
+					"call_id":       callID,
+					"from_addr":     receivedAddr.String(),
+					"expected_addr": targetAddr.String(),
+				}).Debug("收到来自其他地址的 RTP 包，已忽略")
+			}
 			continue
 		}
 		
 		// 解析 RTP 包
 		packet := &rtp.Packet{}
 		if err := packet.Unmarshal(buffer[:n]); err != nil {
+			if packetCount <= 10 {
+				logrus.WithFields(logrus.Fields{
+					"call_id": callID,
+					"error":   err,
+				}).Warn("⚠️ RTP 包解析失败")
+			}
 			continue
 		}
 		
 		// 只处理 PCMU (payload type 0)
 		if packet.PayloadType != 0 {
+			if packetCount <= 10 {
+				logrus.WithFields(logrus.Fields{
+					"call_id":      callID,
+					"payload_type": packet.PayloadType,
+				}).Warn("⚠️ 不支持的 payload type，已忽略")
+			}
 			continue
 		}
 		

@@ -3,6 +3,7 @@ package sip
 import (
 	"fmt"
 	"net"
+	"os"
 	"strings"
 	"time"
 
@@ -128,25 +129,29 @@ func parseSDPForRTPAddress(sdpBody string) (string, error) {
 }
 
 func getServerIPFromRequest(req *sip.Request) string {
-	// Try to get server IP from Via header's received parameter
+	// First priority: PUBLIC_IP environment variable (for NAT scenarios)
+	if publicIP := os.Getenv("PUBLIC_IP"); publicIP != "" {
+		if net.ParseIP(publicIP) != nil {
+			return publicIP
+		}
+		logrus.WithField("PUBLIC_IP", publicIP).Warn("Invalid PUBLIC_IP environment variable")
+	}
+
+	// Second priority: Via header's received parameter
 	if via := req.Via(); via != nil {
 		if received, exists := via.Params.Get("received"); exists && received != "" {
 			ip := received
 			if net.ParseIP(ip) != nil {
-				logrus.WithField("ip", ip).Info("Using IP from Via header received parameter")
 				return ip
 			}
 		}
 	}
 
-	// If no received parameter in Via header, use local IP address
-	// This is the fallback when the SIP proxy/server doesn't add the received parameter
+	// Last resort: local IP address
 	localIP := getLocalIP()
 	if localIP == "" {
-		logrus.Warn("Failed to get local IP, using 127.0.0.1 as fallback")
+		logrus.Warn("Failed to get local IP, using 127.0.0.1")
 		localIP = "127.0.0.1"
-	} else {
-		logrus.WithField("ip", localIP).Info("Using local IP address (Via received parameter not available)")
 	}
 
 	return localIP
@@ -211,10 +216,20 @@ func generateSDP(serverIP string, rtpPort int) string {
 }
 
 func getLocalIP() string {
+	// First, check if PUBLIC_IP environment variable is set
+	if publicIP := os.Getenv("PUBLIC_IP"); publicIP != "" {
+		if net.ParseIP(publicIP) != nil {
+			return publicIP
+		}
+		logrus.WithField("PUBLIC_IP", publicIP).Warn("Invalid PUBLIC_IP environment variable")
+	}
+
 	addrs, err := net.InterfaceAddrs()
 	if err != nil {
+		logrus.WithError(err).Error("Failed to get network interfaces")
 		return ""
 	}
+	
 	for _, addr := range addrs {
 		if ipNet, ok := addr.(*net.IPNet); ok && !ipNet.IP.IsLoopback() {
 			if ipNet.IP.To4() != nil {
@@ -222,5 +237,6 @@ func getLocalIP() string {
 			}
 		}
 	}
+	
 	return ""
 }
