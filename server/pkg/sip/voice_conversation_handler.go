@@ -719,6 +719,14 @@ func (h *VoiceConversationHandler) playOpeningMessage() {
 
 // sendAudioToClient 发送音频到客户端
 func (h *VoiceConversationHandler) sendAudioToClient(audioData []byte) {
+	// 检查会话是否已终止
+	select {
+	case <-h.ctx.Done():
+		logrus.WithField("call_id", h.callID).Warn("⚠️  会话已终止，取消发送音频")
+		return
+	default:
+	}
+	
 	logrus.WithFields(logrus.Fields{
 		"call_id": h.callID,
 		"bytes":   len(audioData),
@@ -777,6 +785,14 @@ func (h *VoiceConversationHandler) sendAudioToClient(audioData []byte) {
 
 // sendPCMUPackets 发送 PCMU 数据包
 func (h *VoiceConversationHandler) sendPCMUPackets(pcmuData []byte) {
+	// 检查会话是否已终止
+	select {
+	case <-h.ctx.Done():
+		logrus.WithField("call_id", h.callID).Warn("⚠️  会话已终止，取消发送 RTP 包")
+		return
+	default:
+	}
+	
 	packetSize := 160 // 20ms @ 8kHz
 	packetsCount := (len(pcmuData) + packetSize - 1) / packetSize
 	
@@ -828,6 +844,14 @@ func (h *VoiceConversationHandler) sendPCMUPackets(pcmuData []byte) {
 				"error":   err,
 			}).Error("❌ 序列化 RTP 包失败")
 			continue
+		}
+		
+		// 在每次发送前检查会话状态
+		select {
+		case <-h.ctx.Done():
+			logrus.WithField("call_id", h.callID).Warn("⚠️  会话已终止，停止发送 RTP 包")
+			return
+		default:
 		}
 		
 		_, err = h.rtpConn.WriteToUDP(packetBytes, h.clientRTPAddr)

@@ -1096,6 +1096,31 @@ func (as *SipServer) handleInvite(req *sip.Request, tx sip.ServerTransaction) {
 		tx.Respond(res)
 		return
 	}
+	
+	// IP 白名单检查（从环境变量读取）
+	allowedIPs := os.Getenv("SIP_ALLOWED_IPS")
+	if allowedIPs != "" {
+		// 解析允许的 IP 列表（逗号分隔）
+		allowed := false
+		ipList := strings.Split(allowedIPs, ",")
+		for _, ip := range ipList {
+			if strings.TrimSpace(ip) == fromIP {
+				allowed = true
+				break
+			}
+		}
+		
+		if !allowed {
+			logrus.WithFields(logrus.Fields{
+				"from_ip": fromIP,
+				"from":    req.From(),
+				"to":      req.To(),
+			}).Warn(" Rejected INVITE from IP not in whitelist")
+			res := sip.NewResponseFromRequest(req, sip.StatusForbidden, "Forbidden", nil)
+			tx.Respond(res)
+			return
+		}
+	}
 
 	// Parse SDP to get client RTP address
 	sdpBody := string(req.Body())
