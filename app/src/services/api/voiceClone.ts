@@ -144,36 +144,46 @@ export const submitTrainingAudio = (data: {
 };
 
 /**
- * 查询训练任务状态（讯飞星火）
+ * 查询训练任务状态（朗读克隆）
  */
 export const queryTrainingTask = (taskId: string): Promise<ApiResponse<TrainingTask>> => {
   return post('/voice/training/query', { taskId });
 };
 
 /**
- * 提交训练音频（火山引擎）
+ * 创建训练任务（音频克隆）- 自动生成 Speaker ID
+ */
+export const createVolcengineTask = (data: {
+  taskName: string;
+  language: string;
+}): Promise<ApiResponse<{ taskId: string; speakerId: string }>> => {
+  return post('/voice/volcengine/create', data);
+};
+
+/**
+ * 提交训练音频（音频克隆）
  */
 export const submitVolcengineAudio = (data: {
   audio: any; // FormData
-  speakerId: string;
-  language?: string;
-}): Promise<ApiResponse<null>> => {
-  return post('/volcengine/task/submit-audio', data);
+  taskId: string;
+  language: string;
+}): Promise<ApiResponse<void>> => {
+  return post('/voice/volcengine/submit', data.audio);
 };
 
 /**
- * 查询训练任务状态（火山引擎）
+ * 查询训练任务状态（音频克隆）
  */
 export const queryVolcengineTask = (speakerId: string): Promise<ApiResponse<{
   speakerId: string;
-  status: number; // 0=未找到, 1=训练中, 2=成功, 3=失败, 4=可用
+  status: number;
   failedDesc?: string;
 }>> => {
-  return post('/volcengine/task/query', { speakerId });
+  return post('/voice/volcengine/query', { speakerId });
 };
 
 /**
- * 火山引擎语音合成
+ * 音频克隆语音合成
  */
 export const synthesizeVolcengineVoice = (data: {
   assetId: string; // speaker_id

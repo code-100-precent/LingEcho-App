@@ -27,6 +27,7 @@ import {
   createTrainingTask,
   submitTrainingAudio,
   queryTrainingTask,
+  createVolcengineTask,
   submitVolcengineAudio,
   queryVolcengineTask,
   synthesizeVolcengineVoice,
@@ -70,7 +71,7 @@ const VoiceCloneScreen: React.FC = () => {
   const [trainingTexts, setTrainingTexts] = useState<TrainingText[]>([]);
   const [loadingTexts, setLoadingTexts] = useState(false);
   
-  // 讯飞星火训练状态
+  // 朗读克隆训练状态
   const [taskName, setTaskName] = useState('');
   const [sex, setSex] = useState<number>(1); // 1: female, 2: male
   const [ageGroup, setAgeGroup] = useState<number>(2); // 1: child, 2: youth, 3: middle, 4: old
@@ -80,9 +81,11 @@ const VoiceCloneScreen: React.FC = () => {
   const [selectedTextSegment, setSelectedTextSegment] = useState<TrainingTextSegment | null>(null);
   const [uploading, setUploading] = useState(false);
   
-  // 火山引擎训练状态
-  const [speakerId, setSpeakerId] = useState('');
+  // 音频克隆训练状态
+  const [volcengineTaskName, setVolcengineTaskName] = useState('');
+  const [volcengineCurrentTask, setVolcengineCurrentTask] = useState<{ taskId: string; speakerId: string } | null>(null);
   const [volcengineTaskStatus, setVolcengineTaskStatus] = useState<any>(null);
+  const [volcengineCreating, setVolcengineCreating] = useState(false);
   const [querying, setQuerying] = useState(false);
 
   // 配置检查状态
@@ -91,7 +94,7 @@ const VoiceCloneScreen: React.FC = () => {
   const [volcengineConfigured, setVolcengineConfigured] = useState(false);
   const [showConfigModal, setShowConfigModal] = useState(false);
   
-  // 火山引擎配置表单
+  // 音频克隆配置表单
   const [volcengineConfig, setVolcengineConfig] = useState({
     app_id: '',
     token: '',
@@ -602,7 +605,7 @@ const VoiceCloneScreen: React.FC = () => {
       setSynthesizing(true);
       
       if (selectedProvider === 'volcengine') {
-        // 火山引擎使用 assetId
+        // 音频克隆使用 assetId
         const assetId = (selectedClone as any).assetId || selectedClone.voiceName;
         if (!assetId) {
           Alert.alert('错误', '音色ID不存在');
@@ -621,7 +624,7 @@ const VoiceCloneScreen: React.FC = () => {
           Alert.alert('错误', response.msg || '合成失败');
         }
       } else {
-        // 讯飞星火
+        // 朗读克隆
         const response = await synthesizeVoice({
           voiceCloneId: selectedClone.id,
           text: synthesisText,
@@ -642,10 +645,45 @@ const VoiceCloneScreen: React.FC = () => {
     }
   };
 
-  // 火山引擎：提交音频
+  // 音频克隆：创建训练任务
+  const handleVolcengineCreateTask = async () => {
+    if (!volcengineTaskName.trim()) {
+      Alert.alert('提示', '请输入任务名称');
+      return;
+    }
+
+    try {
+      setVolcengineCreating(true);
+      console.log('=== 创建音频克隆训练任务 ===');
+      console.log('参数:', { taskName: volcengineTaskName, language: 'zh-CN' });
+      
+      const response = await createVolcengineTask({
+        taskName: volcengineTaskName,
+        language: 'zh-CN',
+      });
+      
+      console.log('响应:', JSON.stringify(response, null, 2));
+
+      if (response.code === 200 && response.data) {
+        const { taskId, speakerId } = response.data;
+        setVolcengineCurrentTask({ taskId, speakerId });
+        console.log('任务创建成功，taskId:', taskId, 'speakerId:', speakerId);
+        Alert.alert('成功', '任务创建成功！请上传音频文件进行训练\n\n任务ID已自动保存，无需手动输入');
+      } else {
+        Alert.alert('错误', response.msg || '创建任务失败');
+      }
+    } catch (error: any) {
+      console.error('创建任务失败:', error);
+      Alert.alert('错误', error.message || '创建任务失败');
+    } finally {
+      setVolcengineCreating(false);
+    }
+  };
+
+  // 音频克隆：提交音频
   const handleVolcengineUploadAudio = async () => {
-    if (!speakerId.trim()) {
-      Alert.alert('提示', '请输入音色ID（Speaker ID）');
+    if (!volcengineCurrentTask) {
+      Alert.alert('提示', '请先创建训练任务');
       return;
     }
 
@@ -661,7 +699,7 @@ const VoiceCloneScreen: React.FC = () => {
 
       setUploading(true);
       const formData = new FormData();
-      formData.append('speakerId', speakerId);
+      formData.append('taskId', volcengineCurrentTask.taskId);
       formData.append('language', 'zh-CN');
       formData.append('audio', {
         uri: result.assets[0].uri,
@@ -671,12 +709,12 @@ const VoiceCloneScreen: React.FC = () => {
 
       const response = await submitVolcengineAudio({
         audio: formData,
-        speakerId,
+        taskId: volcengineCurrentTask.taskId,
         language: 'zh-CN',
       });
 
       if (response.code === 200) {
-        Alert.alert('成功', '音频提交成功');
+        Alert.alert('成功', '音频提交成功！\n\n可以继续上传更多音频（最多10次）或查询训练状态');
       } else {
         Alert.alert('错误', response.msg || '提交失败');
       }
@@ -687,25 +725,35 @@ const VoiceCloneScreen: React.FC = () => {
     }
   };
 
-  // 火山引擎：查询状态
+  // 音频克隆：查询状态
   const handleVolcengineQueryStatus = async () => {
-    if (!speakerId.trim()) {
-      Alert.alert('提示', '请输入音色ID（Speaker ID）');
+    if (!volcengineCurrentTask) {
+      Alert.alert('提示', '请先创建训练任务');
       return;
     }
 
     try {
       setQuerying(true);
-      const response = await queryVolcengineTask(speakerId);
+      const response = await queryVolcengineTask(volcengineCurrentTask.speakerId);
       if (response.code === 200 && response.data) {
-        // 处理字段名兼容
         const statusData = {
-          speakerId: response.data.speakerId || response.data.speaker_id || speakerId,
+          speakerId: response.data.speakerId,
           status: response.data.status ?? 0,
-          failedDesc: response.data.failedDesc || response.data.failed_desc || '',
+          failedDesc: response.data.failedDesc || '',
         };
         setVolcengineTaskStatus(statusData);
-        Alert.alert('查询成功', `状态: ${getVolcengineStatusText(statusData.status)}`);
+        
+        const statusText = getVolcengineStatusText(statusData.status);
+        let message = `状态: ${statusText}`;
+        if (statusData.status === 2 || statusData.status === 4) {
+          message += '\n\n训练已完成，可以在"我的音色"中使用该音色进行合成';
+        }
+        Alert.alert('查询成功', message);
+        
+        // 如果训练成功，刷新音色列表
+        if (statusData.status === 2 || statusData.status === 4) {
+          loadVoiceClones();
+        }
       } else {
         Alert.alert('错误', response.msg || '查询失败');
       }
@@ -820,7 +868,7 @@ const VoiceCloneScreen: React.FC = () => {
                   selectedProvider === 'xunfei' && styles.providerNameActive,
                 ]}
               >
-                讯飞星火
+                朗读克隆
               </Text>
               <Text style={styles.providerDesc}>高质量中文音色</Text>
             </View>
@@ -850,7 +898,7 @@ const VoiceCloneScreen: React.FC = () => {
                   selectedProvider === 'volcengine' && styles.providerNameActive,
                 ]}
               >
-                火山引擎
+                音频克隆
               </Text>
               <Text style={styles.providerDesc}>多语言支持</Text>
             </View>
@@ -918,7 +966,7 @@ const VoiceCloneScreen: React.FC = () => {
           {activeTab === 'training' ? (
             <View style={styles.tabContent}>
               {selectedProvider === 'xunfei' ? (
-                // 讯飞星火训练界面
+                // 朗读克隆训练界面
                 <>
                   {/* 创建训练任务 */}
                   <Card variant="elevated" padding="md" style={styles.trainingCard}>
@@ -1246,12 +1294,12 @@ const VoiceCloneScreen: React.FC = () => {
               </Card>
             </>
           ) : (
-            // 火山引擎训练界面
+            // 音频克隆训练界面
             <>
                   {!volcengineConfigured ? (
                     // 配置表单
                     <Card variant="elevated" padding="md" style={styles.trainingCard}>
-                      <Text style={styles.cardTitle}>配置火山引擎音色克隆服务</Text>
+                      <Text style={styles.cardTitle}>配置音频克隆音色训练服务</Text>
                       <Text style={styles.cardDescription}>请填写以下配置信息以使用音色克隆功能</Text>
 
                       <View style={styles.formGroup}>
@@ -1338,87 +1386,113 @@ const VoiceCloneScreen: React.FC = () => {
                       </Button>
                     </Card>
                   ) : (
-                    <Card variant="elevated" padding="md" style={styles.trainingCard}>
-                    <Text style={styles.cardTitle}>提交训练音频</Text>
-                    <Text style={styles.cardDescription}>输入音色ID并上传音频文件</Text>
+                    <>
+                      {/* 创建训练任务 */}
+                      <Card variant="elevated" padding="md" style={styles.trainingCard}>
+                        <Text style={styles.cardTitle}>步骤 1: 创建训练任务</Text>
+                        <Text style={styles.cardDescription}>系统将自动生成唯一的音色ID，无需手动输入</Text>
 
-                    <View style={styles.formGroup}>
-                      <Text style={styles.label}>音色ID (Speaker ID) *</Text>
-                      <TextInput
-                        style={styles.input}
-                        placeholder="请输入音色ID"
-                        value={speakerId}
-                        onChangeText={setSpeakerId}
-                        placeholderTextColor="#94a3b8"
-                      />
-                    </View>
-
-                    <Button
-                      variant="primary"
-                      onPress={handleVolcengineUploadAudio}
-                      disabled={uploading || !speakerId.trim()}
-                      style={styles.createButton}
-                    >
-                      {uploading ? (
-                        <ActivityIndicator size="small" color="#ffffff" />
-                      ) : (
-                        <View style={styles.uploadButtonContent}>
-                          <Feather name="upload" size={16} color="#ffffff" />
-                          <Text style={styles.buttonText}>上传音频</Text>
+                        <View style={styles.formGroup}>
+                          <Text style={styles.label}>任务名称 *</Text>
+                          <TextInput
+                            style={styles.input}
+                            placeholder="例如：我的声音"
+                            value={volcengineTaskName}
+                            onChangeText={setVolcengineTaskName}
+                            placeholderTextColor="#94a3b8"
+                            editable={!volcengineCurrentTask}
+                          />
                         </View>
-                      )}
-                    </Button>
 
-                    <Button
-                      variant="outline"
-                      onPress={handleVolcengineQueryStatus}
-                      disabled={querying || !speakerId.trim()}
-                      style={styles.queryButton}
-                    >
-                      {querying ? (
-                        <ActivityIndicator size="small" color="#64748b" />
-                      ) : (
-                        <Text style={styles.queryButtonText}>查询训练状态</Text>
-                      )}
-                    </Button>
-
-                    {/* 火山引擎任务状态 */}
-                    {volcengineTaskStatus && (
-                      <View style={styles.taskStatus}>
-                        <View style={styles.taskStatusHeader}>
-                          <Feather name="info" size={16} color="#f97316" />
-                          <Text style={styles.taskStatusTitle}>训练状态</Text>
-                        </View>
-                        <View style={styles.taskStatusItem}>
-                          <Text style={styles.taskStatusLabel}>音色ID:</Text>
-                          <Text style={styles.taskStatusValue}>{volcengineTaskStatus.speakerId}</Text>
-                        </View>
-                        <View style={styles.taskStatusItem}>
-                          <Text style={styles.taskStatusLabel}>状态:</Text>
-                          <View
-                            style={[
-                              styles.statusBadge,
-                              { backgroundColor: getVolcengineStatusColor(volcengineTaskStatus.status) + '20' },
-                            ]}
-                          >
-                            <Text
-                              style={[
-                                styles.statusBadgeText,
-                                { color: getVolcengineStatusColor(volcengineTaskStatus.status) },
-                              ]}
-                            >
-                              {getVolcengineStatusText(volcengineTaskStatus.status)}
+                        {volcengineCurrentTask && (
+                          <View style={styles.infoBox}>
+                            <Feather name="check-circle" size={16} color="#10b981" />
+                            <Text style={styles.infoText}>
+                              任务已创建: {volcengineCurrentTask.taskId.substring(0, 20)}...
                             </Text>
                           </View>
-                        </View>
-                        {volcengineTaskStatus.failedDesc && (
-                          <View style={styles.taskMessage}>
-                            <Text style={styles.taskMessageText}>{volcengineTaskStatus.failedDesc}</Text>
+                        )}
+
+                        <Button
+                          variant="primary"
+                          onPress={handleVolcengineCreateTask}
+                          disabled={volcengineCreating || !volcengineTaskName.trim() || !!volcengineCurrentTask}
+                          style={styles.createButton}
+                        >
+                          {volcengineCreating ? (
+                            <ActivityIndicator size="small" color="#ffffff" />
+                          ) : (
+                            <View style={styles.uploadButtonContent}>
+                              <Feather name="plus" size={16} color="#ffffff" />
+                              <Text style={styles.buttonText}>
+                                {volcengineCurrentTask ? '任务已创建' : '创建任务'}
+                              </Text>
+                            </View>
+                          )}
+                        </Button>
+                      </Card>
+
+                      {/* 上传音频 */}
+                      <Card variant="elevated" padding="md" style={styles.trainingCard}>
+                        <Text style={styles.cardTitle}>步骤 2: 上传训练音频</Text>
+                        <Text style={styles.cardDescription}>
+                          可以上传多个音频样本（最多10次）
+                        </Text>
+
+                        <Button
+                          variant="primary"
+                          onPress={handleVolcengineUploadAudio}
+                          disabled={uploading || !volcengineCurrentTask}
+                          style={styles.createButton}
+                        >
+                          {uploading ? (
+                            <ActivityIndicator size="small" color="#ffffff" />
+                          ) : (
+                            <View style={styles.uploadButtonContent}>
+                              <Feather name="upload" size={16} color="#ffffff" />
+                              <Text style={styles.buttonText}>上传音频</Text>
+                            </View>
+                          )}
+                        </Button>
+                      </Card>
+
+                      {/* 查询状态 */}
+                      <Card variant="elevated" padding="md" style={styles.trainingCard}>
+                        <Text style={styles.cardTitle}>步骤 3: 查询训练状态</Text>
+                        <Text style={styles.cardDescription}>查询音色训练进度</Text>
+
+                        <Button
+                          variant="primary"
+                          onPress={handleVolcengineQueryStatus}
+                          disabled={querying || !volcengineCurrentTask}
+                          style={styles.createButton}
+                        >
+                          {querying ? (
+                            <ActivityIndicator size="small" color="#ffffff" />
+                          ) : (
+                            <View style={styles.uploadButtonContent}>
+                              <Feather name="search" size={16} color="#ffffff" />
+                              <Text style={styles.buttonText}>查询训练状态</Text>
+                            </View>
+                          )}
+                        </Button>
+
+                        {volcengineTaskStatus && (
+                          <View style={styles.statusCard}>
+                            <Text style={styles.statusLabel}>状态:</Text>
+                            <Text style={styles.statusValue}>
+                              {getVolcengineStatusText(volcengineTaskStatus.status)}
+                            </Text>
+                            {volcengineTaskStatus.failedDesc && (
+                              <>
+                                <Text style={styles.statusLabel}>失败原因:</Text>
+                                <Text style={styles.statusValue}>{volcengineTaskStatus.failedDesc}</Text>
+                              </>
+                            )}
                           </View>
                         )}
-                      </View>
-                    )}
-                  </Card>
+                      </Card>
+                    </>
                   )}
                 </>
               )}

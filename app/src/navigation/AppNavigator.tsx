@@ -31,6 +31,8 @@ import KnowledgeBaseScreen from '../screens/KnowledgeBaseScreen';
 import CallCenterScreen from '../screens/CallCenterScreen';
 import CallHistoryDetailScreen from '../screens/CallHistoryDetailScreen';
 import VoiceCloneScreen from '../screens/VoiceCloneScreen';
+import EmergencyCallScreen from '../screens/EmergencyCallScreen';
+import CreateEmergencyPlanScreen from '../screens/CreateEmergencyPlanScreen';
 
 const Stack = createNativeStackNavigator();
 const Tab = createBottomTabNavigator();
@@ -150,6 +152,9 @@ export type RootStackParamList = {
   CallCenter: undefined;
   CallHistoryDetail: { callId: string };
   VoiceClone: undefined;
+  EmergencyCall: undefined;
+  CreateEmergencyPlan: undefined;
+  EditEmergencyPlan: { planId: number };
 };
 
 // 加载屏幕组件
@@ -289,6 +294,21 @@ export default function AppNavigator() {
               component={VoiceCloneScreen}
               options={{ headerShown: false }}
             />
+            <Stack.Screen
+              name="EmergencyCall"
+              component={EmergencyCallScreen}
+              options={{ headerShown: false }}
+            />
+            <Stack.Screen
+              name="CreateEmergencyPlan"
+              component={CreateEmergencyPlanScreen}
+              options={{ headerShown: false }}
+            />
+            <Stack.Screen
+              name="EditEmergencyPlan"
+              component={CreateEmergencyPlanScreen}
+              options={{ headerShown: false }}
+            />
           </>
         ) : (
           // 未登录，显示登录页
@@ -370,6 +390,21 @@ export default function AppNavigator() {
             <Stack.Screen
               name="VoiceClone"
               component={VoiceCloneScreen}
+              options={{ headerShown: false }}
+            />
+            <Stack.Screen
+              name="EmergencyCall"
+              component={EmergencyCallScreen}
+              options={{ headerShown: false }}
+            />
+            <Stack.Screen
+              name="CreateEmergencyPlan"
+              component={CreateEmergencyPlanScreen}
+              options={{ headerShown: false }}
+            />
+            <Stack.Screen
+              name="EditEmergencyPlan"
+              component={CreateEmergencyPlanScreen}
               options={{ headerShown: false }}
             />
           </>

@@ -400,6 +400,14 @@ const ProfileScreen: React.FC = () => {
       },
     },
     {
+      id: 'emergency',
+      label: '紧急呼叫',
+      icon: 'alert-circle',
+      onPress: () => {
+        navigation.navigate('EmergencyCall' as never);
+      },
+    },
+    {
       id: 'help',
       label: '帮助与反馈',
       icon: 'help-circle',

@@ -3,6 +3,19 @@
  */
 import { get, post, put, del, ApiResponse } from '../../utils/request';
 
+// 日期类型
+export type DayType = 'weekday' | 'weekend' | 'all';
+
+// 激活模式
+export type ActivationMode = 'manual' | 'auto';
+
+// 时间段配置
+export interface TimeSlot {
+  dayType: DayType;
+  startTime: string; // 格式 HH:MM，如 "09:00"
+  endTime: string;   // 格式 HH:MM，如 "18:00"
+}
+
 // 代接方案接口（与后端SipUser模型对应）
 export interface Scheme {
   id: number;
@@ -35,6 +48,14 @@ export interface Scheme {
   
   // 绑定号码
   boundPhoneNumber?: string;
+  
+  // 时间调度配置
+  activationMode: ActivationMode;
+  timeSlots?: TimeSlot[];
+  priority?: number;
+  
+  // 接通前方案选择
+  enablePreSelection?: boolean;
   
   // 统计信息
   callCount?: number;
@@ -84,4 +105,11 @@ export const activateScheme = (id: number): Promise<ApiResponse<null>> => {
  */
 export const deactivateScheme = (id: number): Promise<ApiResponse<null>> => {
   return post(`/schemes/${id}/deactivate`);
+};
+
+/**
+ * 初始化默认代接方案（工作模式、休闲模式、休息模式）
+ */
+export const initDefaultSchemes = (): Promise<ApiResponse<Scheme[]>> => {
+  return post('/schemes/init-defaults');
 };

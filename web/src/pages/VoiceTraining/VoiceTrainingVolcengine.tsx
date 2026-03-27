@@ -366,7 +366,7 @@ const VoiceTrainingVolcengine: React.FC = () => {
                     <CardHeader>
                         <CardTitle className="flex items-center gap-2">
                             <Settings className="w-5 h-5" />
-                            配置火山引擎音色克隆服务
+                            配置音频克隆音色训练服务
                         </CardTitle>
                         <CardDescription>
                             请填写以下配置信息以使用音色克隆功能

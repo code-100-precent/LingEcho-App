@@ -32,7 +32,7 @@ const VoiceTrainingIndex: React.FC = () => {
                 </div>
 
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-8 max-w-4xl mx-auto">
-                    {/* 讯飞星火 */}
+                    {/* 朗读克隆 */}
                     <Card
                         variant="elevated"
                         padding="lg"
@@ -86,7 +86,7 @@ const VoiceTrainingIndex: React.FC = () => {
                         </CardContent>
                     </Card>
 
-                    {/* 火山引擎 */}
+                    {/* 音频克隆 */}
                     <Card
                         variant="elevated"
                         padding="lg"

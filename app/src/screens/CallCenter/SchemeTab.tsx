@@ -49,6 +49,10 @@ const SchemeTab: React.FC = () => {
     messageDuration: 20,
     messagePrompt: '',
     boundPhoneNumber: '',
+    activationMode: 'manual' as 'manual' | 'auto',
+    timeSlots: [] as any[],
+    priority: 0,
+    enablePreSelection: false,
   });
   const [assistants, setAssistants] = useState<AssistantListItem[]>([]);
 
@@ -114,6 +118,10 @@ const SchemeTab: React.FC = () => {
       messageDuration: 20,
       messagePrompt: '',
       boundPhoneNumber: '',
+      activationMode: 'manual',
+      timeSlots: [],
+      priority: 0,
+      enablePreSelection: false,
     });
     setShowForm(true);
   };
@@ -135,6 +143,10 @@ const SchemeTab: React.FC = () => {
       messageDuration: scheme.messageDuration ?? 20,
       messagePrompt: scheme.messagePrompt || '',
       boundPhoneNumber: scheme.boundPhoneNumber || '',
+      activationMode: scheme.activationMode || 'manual',
+      timeSlots: scheme.timeSlots || [],
+      priority: scheme.priority ?? 0,
+      enablePreSelection: scheme.enablePreSelection ?? false,
     });
     setShowForm(true);
   };
@@ -167,6 +179,10 @@ const SchemeTab: React.FC = () => {
         messageDuration: formData.messageDuration,
         messagePrompt: formData.messagePrompt,
         boundPhoneNumber: formData.boundPhoneNumber,
+        activationMode: formData.activationMode,
+        timeSlots: formData.timeSlots,
+        priority: formData.priority,
+        enablePreSelection: formData.enablePreSelection,
       };
 
       const response = editingScheme
@@ -306,6 +322,28 @@ const SchemeTab: React.FC = () => {
               {scheme.description && (
                 <Text style={styles.schemeDescription}>{scheme.description}</Text>
               )}
+
+              {/* 激活模式和时间段信息 */}
+              <View style={styles.schemeInfo}>
+                <View style={styles.infoRow}>
+                  <Feather 
+                    name={scheme.activationMode === 'auto' ? 'clock' : 'toggle-right'} 
+                    size={14} 
+                    color="#64748b" 
+                  />
+                  <Text style={styles.infoText}>
+                    {scheme.activationMode === 'auto' ? '自动激活' : '手动激活'}
+                  </Text>
+                </View>
+                {scheme.activationMode === 'auto' && scheme.timeSlots && scheme.timeSlots.length > 0 && (
+                  <View style={styles.infoRow}>
+                    <Feather name="calendar" size={14} color="#64748b" />
+                    <Text style={styles.infoText}>
+                      {scheme.timeSlots.length}个时间段 · 优先级{scheme.priority || 0}
+                    </Text>
+                  </View>
+                )}
+              </View>
 
               <View style={styles.schemeActions}>
                 <TouchableOpacity
@@ -584,6 +622,219 @@ const SchemeTab: React.FC = () => {
                 </>
               )}
 
+              {/* 时间调度 */}
+              <Text style={styles.sectionTitle}>时间调度</Text>
+              
+              <View style={styles.formGroup}>
+                <Text style={styles.label}>激活模式</Text>
+                <View style={styles.radioGroup}>
+                  <TouchableOpacity
+                    style={[
+                      styles.radioOption,
+                      formData.activationMode === 'manual' && styles.radioOptionSelected,
+                    ]}
+                    onPress={() => setFormData({ ...formData, activationMode: 'manual' })}
+                  >
+                    <View style={styles.radioButton}>
+                      {formData.activationMode === 'manual' && (
+                        <View style={styles.radioButtonInner} />
+                      )}
+                    </View>
+                    <View style={styles.radioContent}>
+                      <Text style={styles.radioLabel}>手动激活</Text>
+                      <Text style={styles.radioDesc}>需要手动开启/关闭方案</Text>
+                    </View>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    style={[
+                      styles.radioOption,
+                      formData.activationMode === 'auto' && styles.radioOptionSelected,
+                    ]}
+                    onPress={() => setFormData({ ...formData, activationMode: 'auto' })}
+                  >
+                    <View style={styles.radioButton}>
+                      {formData.activationMode === 'auto' && (
+                        <View style={styles.radioButtonInner} />
+                      )}
+                    </View>
+                    <View style={styles.radioContent}>
+                      <Text style={styles.radioLabel}>自动激活</Text>
+                      <Text style={styles.radioDesc}>根据时间段自动切换</Text>
+                    </View>
+                  </TouchableOpacity>
+                </View>
+              </View>
+
+              {formData.activationMode === 'auto' && (
+                <>
+                  <View style={styles.formGroup}>
+                    <Text style={styles.label}>优先级</Text>
+                    <TextInput
+                      style={styles.input}
+                      placeholder="0"
+                      value={String(formData.priority)}
+                      onChangeText={(text) =>
+                        setFormData({ ...formData, priority: parseInt(text) || 0 })
+                      }
+                      keyboardType="numeric"
+                      placeholderTextColor="#94a3b8"
+                    />
+                    <Text style={styles.hint}>
+                      当多个方案时间重叠时，数字越大优先级越高
+                    </Text>
+                  </View>
+
+                  <View style={styles.formGroup}>
+                    <View style={styles.labelRow}>
+                      <Text style={styles.label}>时间段配置（最多3个）</Text>
+                      {formData.timeSlots.length < 3 && (
+                        <TouchableOpacity
+                          style={styles.addTimeSlotButton}
+                          onPress={() => {
+                            setFormData({
+                              ...formData,
+                              timeSlots: [
+                                ...formData.timeSlots,
+                                { dayType: 'weekday', startTime: '09:00', endTime: '18:00' },
+                              ],
+                            });
+                          }}
+                        >
+                          <Feather name="plus" size={14} color="#a855f7" />
+                          <Text style={styles.addTimeSlotText}>添加时间段</Text>
+                        </TouchableOpacity>
+                      )}
+                    </View>
+
+                    {formData.timeSlots.length === 0 ? (
+                      <Text style={styles.hint}>点击"添加时间段"开始配置</Text>
+                    ) : (
+                      <View style={styles.timeSlotsContainer}>
+                        {formData.timeSlots.map((slot: any, index: number) => (
+                          <View key={index} style={styles.timeSlotCard}>
+                            <View style={styles.timeSlotHeader}>
+                              <Text style={styles.timeSlotTitle}>时间段 {index + 1}</Text>
+                              <TouchableOpacity
+                                onPress={() => {
+                                  const newSlots = formData.timeSlots.filter(
+                                    (_: any, i: number) => i !== index
+                                  );
+                                  setFormData({ ...formData, timeSlots: newSlots });
+                                }}
+                              >
+                                <Feather name="trash-2" size={16} color="#ef4444" />
+                              </TouchableOpacity>
+                            </View>
+
+                            <View style={styles.timeSlotContent}>
+                              <View style={styles.timeSlotField}>
+                                <Text style={styles.timeSlotLabel}>日期类型</Text>
+                                <View style={styles.dayTypeButtons}>
+                                  <TouchableOpacity
+                                    style={[
+                                      styles.dayTypeButton,
+                                      slot.dayType === 'weekday' && styles.dayTypeButtonActive,
+                                    ]}
+                                    onPress={() => {
+                                      const newSlots = [...formData.timeSlots];
+                                      newSlots[index] = { ...slot, dayType: 'weekday' };
+                                      setFormData({ ...formData, timeSlots: newSlots });
+                                    }}
+                                  >
+                                    <Text
+                                      style={[
+                                        styles.dayTypeButtonText,
+                                        slot.dayType === 'weekday' &&
+                                          styles.dayTypeButtonTextActive,
+                                      ]}
+                                    >
+                                      工作日
+                                    </Text>
+                                  </TouchableOpacity>
+                                  <TouchableOpacity
+                                    style={[
+                                      styles.dayTypeButton,
+                                      slot.dayType === 'weekend' && styles.dayTypeButtonActive,
+                                    ]}
+                                    onPress={() => {
+                                      const newSlots = [...formData.timeSlots];
+                                      newSlots[index] = { ...slot, dayType: 'weekend' };
+                                      setFormData({ ...formData, timeSlots: newSlots });
+                                    }}
+                                  >
+                                    <Text
+                                      style={[
+                                        styles.dayTypeButtonText,
+                                        slot.dayType === 'weekend' &&
+                                          styles.dayTypeButtonTextActive,
+                                      ]}
+                                    >
+                                      休息日
+                                    </Text>
+                                  </TouchableOpacity>
+                                  <TouchableOpacity
+                                    style={[
+                                      styles.dayTypeButton,
+                                      slot.dayType === 'all' && styles.dayTypeButtonActive,
+                                    ]}
+                                    onPress={() => {
+                                      const newSlots = [...formData.timeSlots];
+                                      newSlots[index] = { ...slot, dayType: 'all' };
+                                      setFormData({ ...formData, timeSlots: newSlots });
+                                    }}
+                                  >
+                                    <Text
+                                      style={[
+                                        styles.dayTypeButtonText,
+                                        slot.dayType === 'all' && styles.dayTypeButtonTextActive,
+                                      ]}
+                                    >
+                                      所有天
+                                    </Text>
+                                  </TouchableOpacity>
+                                </View>
+                              </View>
+
+                              <View style={styles.timeRangeRow}>
+                                <View style={styles.timeField}>
+                                  <Text style={styles.timeSlotLabel}>开始时间</Text>
+                                  <TextInput
+                                    style={styles.timeInput}
+                                    placeholder="09:00"
+                                    value={slot.startTime}
+                                    onChangeText={(text) => {
+                                      const newSlots = [...formData.timeSlots];
+                                      newSlots[index] = { ...slot, startTime: text };
+                                      setFormData({ ...formData, timeSlots: newSlots });
+                                    }}
+                                    placeholderTextColor="#94a3b8"
+                                  />
+                                </View>
+                                <Text style={styles.timeSeparator}>-</Text>
+                                <View style={styles.timeField}>
+                                  <Text style={styles.timeSlotLabel}>结束时间</Text>
+                                  <TextInput
+                                    style={styles.timeInput}
+                                    placeholder="18:00"
+                                    value={slot.endTime}
+                                    onChangeText={(text) => {
+                                      const newSlots = [...formData.timeSlots];
+                                      newSlots[index] = { ...slot, endTime: text };
+                                      setFormData({ ...formData, timeSlots: newSlots });
+                                    }}
+                                    placeholderTextColor="#94a3b8"
+                                  />
+                                </View>
+                              </View>
+                            </View>
+                          </View>
+                        ))}
+                      </View>
+                    )}
+                  </View>
+                </>
+              )}
+
               {/* 绑定号码 */}
               <Text style={styles.sectionTitle}>绑定号码</Text>
               
@@ -806,6 +1057,21 @@ const styles = StyleSheet.create({
     fontSize: 13,
     color: '#64748b',
     marginBottom: 12,
+  },
+  schemeInfo: {
+    flexDirection: 'row',
+    gap: 12,
+    marginBottom: 12,
+    flexWrap: 'wrap',
+  },
+  infoRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+  },
+  infoText: {
+    fontSize: 12,
+    color: '#64748b',
   },
   schemeActions: {
     flexDirection: 'row',
@@ -1078,6 +1344,109 @@ const styles = StyleSheet.create({
     fontSize: 13,
     color: '#64748b',
     lineHeight: 18,
+  },
+  labelRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 8,
+  },
+  addTimeSlotButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 6,
+    backgroundColor: '#f3e8ff',
+  },
+  addTimeSlotText: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: '#a855f7',
+  },
+  timeSlotsContainer: {
+    gap: 12,
+  },
+  timeSlotCard: {
+    backgroundColor: '#f8fafc',
+    borderRadius: 8,
+    padding: 12,
+    borderWidth: 1,
+    borderColor: '#e2e8f0',
+  },
+  timeSlotHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 12,
+  },
+  timeSlotTitle: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#1e293b',
+  },
+  timeSlotContent: {
+    gap: 12,
+  },
+  timeSlotField: {
+    gap: 8,
+  },
+  timeSlotLabel: {
+    fontSize: 13,
+    color: '#64748b',
+    fontWeight: '500',
+  },
+  dayTypeButtons: {
+    flexDirection: 'row',
+    gap: 8,
+  },
+  dayTypeButton: {
+    flex: 1,
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+    borderRadius: 6,
+    borderWidth: 1,
+    borderColor: '#e2e8f0',
+    backgroundColor: '#ffffff',
+    alignItems: 'center',
+  },
+  dayTypeButtonActive: {
+    borderColor: '#a855f7',
+    backgroundColor: '#f3e8ff',
+  },
+  dayTypeButtonText: {
+    fontSize: 12,
+    color: '#64748b',
+    fontWeight: '500',
+  },
+  dayTypeButtonTextActive: {
+    color: '#a855f7',
+    fontWeight: '600',
+  },
+  timeRangeRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-end',
+    gap: 8,
+  },
+  timeField: {
+    flex: 1,
+    gap: 8,
+  },
+  timeInput: {
+    height: 40,
+    borderWidth: 1,
+    borderColor: '#e2e8f0',
+    borderRadius: 8,
+    paddingHorizontal: 12,
+    fontSize: 14,
+    color: '#1e293b',
+    backgroundColor: '#ffffff',
+  },
+  timeSeparator: {
+    fontSize: 16,
+    color: '#64748b',
+    marginBottom: 8,
   },
 });
 
