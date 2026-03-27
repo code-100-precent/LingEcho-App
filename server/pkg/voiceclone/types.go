@@ -10,8 +10,8 @@ import (
 type Provider string
 
 const (
-	ProviderXunfei     Provider = "xunfei"     // 讯飞星火
-	ProviderVolcengine Provider = "volcengine" // 火山引擎
+	ProviderXunfei     Provider = "xunfei"     // 朗读克隆
+	ProviderVolcengine Provider = "volcengine" // 音频克隆
 )
 
 // TrainingStatus 训练状态

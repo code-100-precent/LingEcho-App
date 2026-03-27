@@ -133,17 +133,17 @@ func (s *VolcengineService) GetTrainingTexts(ctx context.Context, textID int64) 
 }
 
 // CreateTask 创建训练任务
-// 注意：火山引擎的训练需要先在控制台创建 speaker_id，然后通过 SubmitAudio 上传音频
-// 这里返回一个占位任务ID，实际训练通过 SubmitAudio 完成
+// 自动生成唯一的 speaker_id，无需用户手动输入
 func (s *VolcengineService) CreateTask(ctx context.Context, req *CreateTaskRequest) (*CreateTaskResponse, error) {
-	// 火山引擎的训练流程：
-	// 1. 在控制台创建 speaker_id（或使用已有的）
-	// 2. 通过 SubmitAudio 上传音频进行训练
-	// 3. 通过 QueryTaskStatus 查询训练状态
-	//
-	// 为了兼容接口，这里返回一个基于 speaker_id 的任务ID
-	// 实际使用时，speaker_id 应该从控制台获取或作为参数传入
-	return nil, fmt.Errorf("volcengine training requires speaker_id from console, please use SubmitAudio directly with speaker_id")
+	// 自动生成唯一的 speaker_id
+	// 格式：volcengine_<uuid>
+	speakerID := fmt.Sprintf("volcengine_%s", uuid.New().String())
+	
+	// 火山引擎不需要预先创建任务，speaker_id 会在第一次上传音频时自动创建
+	// 这里直接返回生成的 speaker_id 作为 task_id
+	return &CreateTaskResponse{
+		TaskID: speakerID,
+	}, nil
 }
 
 // SubmitAudio 提交音频文件进行训练

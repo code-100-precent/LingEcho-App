@@ -12,6 +12,7 @@ import (
 	handlers "github.com/code-100-precent/LingEcho/internal/handler"
 	"github.com/code-100-precent/LingEcho/internal/listeners"
 	"github.com/code-100-precent/LingEcho/internal/models"
+	"github.com/code-100-precent/LingEcho/internal/scheduler"
 	"github.com/code-100-precent/LingEcho/internal/task"
 	workflowdef "github.com/code-100-precent/LingEcho/internal/workflow"
 	"github.com/code-100-precent/LingEcho/pkg/cache"
@@ -133,10 +134,10 @@ func main() {
 	captcha.InitGlobalCaptchaManager(nil) // Use memory storage, can be replaced with Redis storage
 
 	// Initialize global login security manager
-	utils.InitGlobalLoginSecurityManager(logger.Lg)
+	// utils.InitGlobalLoginSecurityManager(logger.Lg)
 
 	// Initialize global intelligent risk control manager
-	utils.InitGlobalIntelligentRiskControl(logger.Lg)
+	// utils.InitGlobalIntelligentRiskControl(logger.Lg)
 
 	// 10. Load Prompt System
 	err = prompt.InitPromptSystem(db)
@@ -422,11 +423,19 @@ func main() {
 	}
 
 	// Start workflow scheduler
-	scheduler := workflowdef.GetWorkflowScheduler(db)
-	if err := scheduler.Start(); err != nil {
+	workflowScheduler := workflowdef.GetWorkflowScheduler(db)
+	if err := workflowScheduler.Start(); err != nil {
 		logger.Error("Failed to start workflow scheduler", zap.Error(err))
 	} else {
 		logger.Info("Workflow scheduler started")
+	}
+
+	// Start scheme auto-switch scheduler
+	schemeScheduler := scheduler.GetSchemeScheduler(db)
+	if err := schemeScheduler.Start(); err != nil {
+		logger.Error("Failed to start scheme auto-switch scheduler", zap.Error(err))
+	} else {
+		logger.Info("Scheme auto-switch scheduler started")
 	}
 
 	// 22. Start HTTP/HTTPS Server

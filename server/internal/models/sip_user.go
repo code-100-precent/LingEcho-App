@@ -26,6 +26,58 @@ const (
 	RecordingModeMessage  RecordingMode = "message"  // 仅留言阶段录音
 )
 
+// ActivationMode 方案激活模式
+type ActivationMode string
+
+const (
+	ActivationModeManual ActivationMode = "manual" // 手动激活
+	ActivationModeAuto   ActivationMode = "auto"   // 自动根据时间激活
+)
+
+// DayType 日期类型
+type DayType string
+
+const (
+	DayTypeWeekday DayType = "weekday" // 工作日（周一到周五）
+	DayTypeWeekend DayType = "weekend" // 休息日（周六周日）
+	DayTypeAll     DayType = "all"     // 所有天
+)
+
+// TimeSlot 时间段配置
+type TimeSlot struct {
+	DayType   DayType `json:"dayType"`   // 日期类型：weekday/weekend/all
+	StartTime string  `json:"startTime"` // 开始时间，格式 HH:MM，如 "09:00"
+	EndTime   string  `json:"endTime"`   // 结束时间，格式 HH:MM，如 "18:00"
+}
+
+// TimeSlots 时间段列表（用于 JSON 存储）
+type TimeSlots []TimeSlot
+
+// Value 实现 driver.Valuer 接口
+func (ts TimeSlots) Value() (driver.Value, error) {
+	if ts == nil || len(ts) == 0 {
+		return nil, nil
+	}
+	return json.Marshal(ts)
+}
+
+// Scan 实现 sql.Scanner 接口
+func (ts *TimeSlots) Scan(value interface{}) error {
+	if value == nil {
+		*ts = make(TimeSlots, 0)
+		return nil
+	}
+	bytes, ok := value.([]byte)
+	if !ok {
+		return nil
+	}
+	if len(bytes) == 0 {
+		*ts = make(TimeSlots, 0)
+		return nil
+	}
+	return json.Unmarshal(bytes, ts)
+}
+
 // KeywordReply 关键词回复配置
 type KeywordReply struct {
 	Keyword string `json:"keyword"` // 关键词
@@ -136,6 +188,14 @@ type SipUser struct {
 	Enabled   bool   `json:"enabled" gorm:"default:true"`      // 是否启用
 	IsActive  bool   `json:"isActive" gorm:"default:false"`    // 是否为当前激活方案（同一用户只能有一个激活方案）
 	Notes     string `json:"notes,omitempty" gorm:"type:text"` // 备注
+
+	// ========== 时间调度配置 ==========
+	ActivationMode ActivationMode `json:"activationMode" gorm:"size:20;default:'manual'"` // 激活模式：manual(手动) / auto(自动)
+	TimeSlots      TimeSlots      `json:"timeSlots,omitempty" gorm:"type:json"`           // 时间段配置（最多3个）
+	Priority       int            `json:"priority" gorm:"default:0"`                      // 优先级（当多个方案时间重叠时使用，数字越大优先级越高）
+
+	// ========== 接通前方案选择 ==========
+	EnablePreSelection bool `json:"enablePreSelection" gorm:"default:false"` // 是否启用接通前方案选择（启用后来电时弹窗选择方案，8秒内选择）
 }
 
 // TableName 指定表名
@@ -162,6 +222,52 @@ func (su *SipUser) UpdateExpiresAt() {
 		expiresAt := time.Now().Add(time.Duration(su.Expires) * time.Second)
 		su.ExpiresAt = &expiresAt
 	}
+}
+
+// IsInTimeSlot 检查当前时间是否在方案的时间段内
+func (su *SipUser) IsInTimeSlot(now time.Time) bool {
+	if su.ActivationMode != ActivationModeAuto {
+		return false
+	}
+
+	if len(su.TimeSlots) == 0 {
+		return false
+	}
+
+	weekday := now.Weekday()
+	isWeekday := weekday >= time.Monday && weekday <= time.Friday
+	currentTime := now.Format("15:04")
+
+	for _, slot := range su.TimeSlots {
+		// 检查日期类型是否匹配
+		dayMatch := false
+		switch slot.DayType {
+		case DayTypeAll:
+			dayMatch = true
+		case DayTypeWeekday:
+			dayMatch = isWeekday
+		case DayTypeWeekend:
+			dayMatch = !isWeekday
+		}
+
+		if !dayMatch {
+			continue
+		}
+
+		// 检查时间是否在范围内
+		if slot.StartTime <= currentTime && currentTime < slot.EndTime {
+			return true
+		}
+
+		// 处理跨天的情况（如 22:00 - 09:00）
+		if slot.StartTime > slot.EndTime {
+			if currentTime >= slot.StartTime || currentTime < slot.EndTime {
+				return true
+			}
+		}
+	}
+
+	return false
 }
 
 // CreateSipUser 创建SIP用户（代接方案）
@@ -260,4 +366,64 @@ func GetSipUserByPhoneNumber(db *gorm.DB, phoneNumber string) (*SipUser, error) 
 		return nil, err
 	}
 	return &sipUser, nil
+}
+
+// GetAutoActivatableSipUser 根据当前时间获取应该自动激活的方案
+// 返回优先级最高且时间匹配的方案
+func GetAutoActivatableSipUser(db *gorm.DB, userID uint, now time.Time) (*SipUser, error) {
+	var sipUsers []SipUser
+	// 获取所有启用的自动激活方案
+	err := db.Where("user_id = ? AND enabled = ? AND activation_mode = ?", 
+		userID, true, ActivationModeAuto).
+		Order("priority DESC").
+		Find(&sipUsers).Error
+	
+	if err != nil {
+		return nil, err
+	}
+
+	// 找到第一个时间匹配的方案（已按优先级排序）
+	for i := range sipUsers {
+		if sipUsers[i].IsInTimeSlot(now) {
+			return &sipUsers[i], nil
+		}
+	}
+
+	return nil, gorm.ErrRecordNotFound
+}
+
+// AutoSwitchScheme 自动切换方案（根据时间）
+func AutoSwitchScheme(db *gorm.DB, userID uint) error {
+	now := time.Now()
+	
+	// 获取当前应该激活的方案
+	targetScheme, err := GetAutoActivatableSipUser(db, userID, now)
+	if err != nil {
+		if err == gorm.ErrRecordNotFound {
+			// 没有匹配的自动方案，检查是否需要停用当前方案
+			currentScheme, err := GetActiveSipUserByUserID(db, userID)
+			if err == nil && currentScheme.ActivationMode == ActivationModeAuto {
+				// 当前激活的是自动方案，但已不在时间段内，应该停用
+				return db.Model(&SipUser{}).
+					Where("id = ?", currentScheme.ID).
+					Update("is_active", false).Error
+			}
+			return nil
+		}
+		return err
+	}
+
+	// 获取当前激活的方案
+	currentScheme, err := GetActiveSipUserByUserID(db, userID)
+	if err != nil && err != gorm.ErrRecordNotFound {
+		return err
+	}
+
+	// 如果目标方案已经是激活状态，无需切换
+	if currentScheme != nil && currentScheme.ID == targetScheme.ID {
+		return nil
+	}
+
+	// 执行切换
+	return ActivateSipUser(db, userID, targetScheme.ID)
 }

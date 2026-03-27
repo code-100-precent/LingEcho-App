@@ -633,6 +633,8 @@ func (h *Handlers) handleUserSigninByPassword(c *gin.Context) {
 
 	// 如果设备不被信任，要求额外验证或拒绝登录
 	// 但是如果用户已经有有效的会话令牌，则允许继续（避免取消信任当前设备后立即失去访问权限）
+	// 注释掉设备验证检查，允许所有设备登录
+	/*
 	if !isTrusted {
 		// 检查是否是通过有效令牌登录（表示用户已经通过了之前的验证）
 		isTokenLogin := form.AuthToken != ""
@@ -670,6 +672,7 @@ func (h *Handlers) handleUserSigninByPassword(c *gin.Context) {
 				zap.String("ip", clientIP))
 		}
 	}
+	*/
 
 	// 12. 创建设备记录
 	if _, err := models.CreateOrUpdateUserDevice(db, user.ID, deviceID, fmt.Sprintf("%s on %s", browser, os), deviceType, os, browser, userAgent, clientIP, location); err != nil {

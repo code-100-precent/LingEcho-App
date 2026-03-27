@@ -24,9 +24,22 @@ type VolcengineTTSResponse struct {
 	URL string `json:"url"`
 }
 
+// VolcengineCreateTaskRequest represents create task request
+type VolcengineCreateTaskRequest struct {
+	TaskName string `json:"taskName" binding:"required"`
+	Language string `json:"language"`
+}
+
+// VolcengineCreateTaskResponse represents create task response
+type VolcengineCreateTaskResponse struct {
+	TaskID    string `json:"taskId"`    // 自动生成的 speaker_id
+	SpeakerID string `json:"speakerId"` // 同 taskId
+}
+
 // VolcengineSubmitAudioRequest represents submit audio request
 type VolcengineSubmitAudioRequest struct {
-	SpeakerID string `form:"speakerId" binding:"required"` // speaker_id from console
+	TaskID   string `form:"taskId"`   // 使用 CreateTask 返回的 taskId，可选（如果为空则需要 speakerId）
+	SpeakerID string `form:"speakerId"` // speaker_id，可选（优先使用 taskId）
 	Language  string `form:"language" binding:"required"`
 }
 
@@ -43,6 +56,73 @@ type VolcengineQueryTaskResponse struct {
 	AssetID    string `json:"assetId"`    // Voice ID (same as speaker_id)
 	FailedDesc string `json:"failedDesc"` // Failure reason
 	CreateTime int64  `json:"createTime"` // Creation time
+}
+
+// VolcengineCreateTask 创建训练任务（自动生成 Speaker ID）
+func (h *Handlers) VolcengineCreateTask(c *gin.Context) {
+	var req VolcengineCreateTaskRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		response.Fail(c, "参数错误", err.Error())
+		return
+	}
+
+	user := models.CurrentUser(c)
+	if user == nil {
+		response.Fail(c, "未授权", "用户未登录")
+		return
+	}
+
+	// 设置默认语言
+	if req.Language == "" {
+		req.Language = "zh"
+	}
+
+	// 创建任务（使用 voiceclone，自动生成 speaker_id）
+	factory := voiceclone.NewFactory()
+	service, err := factory.CreateServiceFromEnv(voiceclone.ProviderVolcengine)
+	if err != nil {
+		response.Fail(c, "初始化火山引擎服务失败", err.Error())
+		return
+	}
+
+	createReq := &voiceclone.CreateTaskRequest{
+		TaskName: req.TaskName,
+		Language: req.Language,
+	}
+	createResp, err := service.CreateTask(c.Request.Context(), createReq)
+	if err != nil {
+		response.Fail(c, "创建训练任务失败", err.Error())
+		return
+	}
+
+	speakerID := createResp.TaskID
+
+	// 保存到数据库
+	task := models.VoiceTrainingTask{
+		UserID:   user.ID,
+		TaskID:   speakerID,
+		TaskName: req.TaskName,
+		Language: req.Language,
+		Status:   models.TrainingStatusQueued, // 排队中
+	}
+	if err := h.db.Create(&task).Error; err != nil {
+		response.Fail(c, "保存训练任务失败", err.Error())
+		return
+	}
+
+	// 保存配置到数据库
+	h.saveVoiceCloneConfig("volcengine")
+
+	logrus.WithFields(logrus.Fields{
+		"user_id":    user.ID,
+		"task_id":    speakerID,
+		"task_name":  req.TaskName,
+	}).Info("Volcengine training task created with auto-generated speaker_id")
+
+	response.Success(c, "创建训练任务成功", VolcengineCreateTaskResponse{
+		TaskID:    speakerID,
+		SpeakerID: speakerID,
+	})
 }
 
 // VolcengineSynthesize handles Volcengine voice synthesis
@@ -128,17 +208,40 @@ func (h *Handlers) VolcengineSubmitAudio(c *gin.Context) {
 		return
 	}
 
+	user := models.CurrentUser(c)
+	if user == nil {
+		response.Fail(c, "未授权", "用户未登录")
+		return
+	}
+
+	// 确定使用的 speaker_id（优先使用 taskId）
+	speakerID := req.TaskID
+	if speakerID == "" {
+		speakerID = req.SpeakerID
+	}
+	if speakerID == "" {
+		response.Fail(c, "参数错误", "taskId 或 speakerId 至少需要提供一个")
+		return
+	}
+
+	// 验证任务是否属于当前用户
+	var task models.VoiceTrainingTask
+	if err := h.db.Where("user_id = ? AND task_id = ?", user.ID, speakerID).First(&task).Error; err != nil {
+		response.Fail(c, "任务不存在或无权访问", err.Error())
+		return
+	}
+
 	// Get uploaded file
 	file, err := c.FormFile("audio")
 	if err != nil {
-		response.Fail(c, "Failed to get audio file", err.Error())
+		response.Fail(c, "获取音频文件失败", err.Error())
 		return
 	}
 
 	// Open file
 	src, err := file.Open()
 	if err != nil {
-		response.Fail(c, "Failed to open audio file", err.Error())
+		response.Fail(c, "打开音频文件失败", err.Error())
 		return
 	}
 	defer src.Close()
@@ -147,29 +250,42 @@ func (h *Handlers) VolcengineSubmitAudio(c *gin.Context) {
 	factory := voiceclone.NewFactory()
 	service, err := factory.CreateServiceFromEnv(voiceclone.ProviderVolcengine)
 	if err != nil {
-		response.Fail(c, "Failed to initialize Volcengine service", err.Error())
+		response.Fail(c, "初始化火山引擎服务失败", err.Error())
 		return
 	}
 
 	submitReq := &voiceclone.SubmitAudioRequest{
-		TaskID:    req.SpeakerID, // Use speaker_id as TaskID
-		TextID:    0,             // Not needed for Volcengine
-		TextSegID: 0,             // Not needed for Volcengine
+		TaskID:    speakerID,
+		TextID:    0,
+		TextSegID: 0,
 		AudioFile: src,
 		Language:  req.Language,
 	}
 	err = service.SubmitAudio(c.Request.Context(), submitReq)
 	if err != nil {
-		response.Fail(c, "Failed to submit audio", err.Error())
+		response.Fail(c, "提交音频失败", err.Error())
 		return
 	}
 
-	// Save configuration to database (if configured)
+	// 更新任务状态为训练中
+	task.Status = models.TrainingStatusInProgress
+	if err := h.db.Save(&task).Error; err != nil {
+		logrus.WithError(err).Warn("Failed to update task status")
+	}
+
+	// Save configuration to database
 	h.saveVoiceCloneConfig("volcengine")
 
-	response.Success(c, "Audio submitted successfully", map[string]interface{}{
-		"speakerId": req.SpeakerID,
-		"message":   "Audio submitted, please use speaker_id to query training status",
+	logrus.WithFields(logrus.Fields{
+		"user_id":    user.ID,
+		"speaker_id": speakerID,
+		"task_name":  task.TaskName,
+	}).Info("Volcengine audio submitted successfully")
+
+	response.Success(c, "音频提交成功", map[string]interface{}{
+		"taskId":    speakerID,
+		"speakerId": speakerID,
+		"message":   "音频已提交，请使用 taskId 查询训练状态",
 	})
 }
 

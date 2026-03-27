@@ -207,6 +207,8 @@ func (h *Handlers) Register(engine *gin.Engine) {
 	h.registerNodePluginRoutes(r)     // Add node plugin routes
 	h.registerVoicemailRoutes(r)      // Add voicemail routes
 	h.registerPhoneNumberRoutes(r)    // Add phone number routes
+	h.registerEmergencyCallRoutes(r)  // Add emergency call routes
+	h.registerCallSelectionRoutes(r)  // Add call selection routes
 	// Register public workflow routes (no auth required)
 	h.RegisterPublicWorkflowRoutes(r)
 	objs := h.GetObjs()
@@ -690,9 +692,8 @@ func (h *Handlers) registerVolcengineTTSRoutes(r *gin.RouterGroup) {
 		volcengine.POST("/synthesize", h.VolcengineSynthesize)
 
 		// 训练任务管理
-		// 注意：火山引擎不需要 create task，speaker_id 从控制台获取
+		volcengine.POST("/task/create", h.VolcengineCreateTask) // 创建任务，自动生成 speaker_id
 		volcengine.POST("/task/submit-audio", h.VolcengineSubmitAudio)
-
 		volcengine.POST("/task/query", h.VolcengineQueryTask)
 	}
 }
@@ -851,6 +852,8 @@ func (h *Handlers) registerSchemeRoutes(r *gin.RouterGroup) {
 	{
 		// 获取当前激活的方案（放在前面避免被 /:id 匹配）
 		schemes.GET("/active", schemeHandler.GetActiveScheme)
+		// 初始化默认方案
+		schemes.POST("/init-defaults", schemeHandler.InitDefaultSchemes)
 
 		// 方案管理
 		schemes.GET("", schemeHandler.ListSchemes)
@@ -922,5 +925,55 @@ func (h *Handlers) registerPhoneNumberRoutes(r *gin.RouterGroup) {
 		callForward.POST("/:id/verify", callForwardHandler.VerifyStatus)                         // 验证状态
 		callForward.POST("/:id/test", callForwardHandler.TestCallForward)                        // 测试呼叫转移
 		callForward.GET("/carrier-codes", callForwardHandler.GetCarrierCodes)                    // 获取运营商代码
+	}
+}
+
+// registerEmergencyCallRoutes 紧急呼叫模块
+func (h *Handlers) registerEmergencyCallRoutes(r *gin.RouterGroup) {
+	emergencyHandler := NewEmergencyCallHandler(h.db)
+
+	emergency := r.Group("emergency-calls")
+	emergency.Use(models.AuthRequired)
+	{
+		// 紧急呼叫方案管理
+		emergency.POST("/plans", emergencyHandler.CreateEmergencyCallPlan)       // 创建方案
+		emergency.GET("/plans", emergencyHandler.ListEmergencyCallPlans)         // 获取方案列表
+		emergency.GET("/plans/:id", emergencyHandler.GetEmergencyCallPlan)       // 获取方案详情
+		emergency.PUT("/plans/:id", emergencyHandler.UpdateEmergencyCallPlan)    // 更新方案
+		emergency.DELETE("/plans/:id", emergencyHandler.DeleteEmergencyCallPlan) // 删除方案
+
+		// 闹铃音频上传
+		emergency.POST("/plans/:id/alarm-sound", emergencyHandler.UploadAlarmSound) // 上传闹铃音频
+
+		// 告警管理
+		emergency.GET("/alarms", emergencyHandler.GetEmergencyCallAlarms)                      // 获取告警列表
+		emergency.POST("/alarms/:id/acknowledge", emergencyHandler.AcknowledgeEmergencyCallAlarm) // 确认告警
+		emergency.POST("/alarms/:id/resolve", emergencyHandler.ResolveEmergencyCallAlarm)         // 解决告警
+	}
+
+	// 闹铃音频文件访问（无需认证）
+	r.GET("/emergency-calls/alarm-sounds/*filepath", emergencyHandler.ServeAlarmSound)
+}
+
+// registerCallSelectionRoutes 来电方案选择模块
+func (h *Handlers) registerCallSelectionRoutes(r *gin.RouterGroup) {
+	callSelectionHandler := NewCallSelectionHandler(h.db)
+
+	callSelection := r.Group("call-selections")
+	callSelection.Use(models.AuthRequired)
+	{
+		// 获取待选择的来电列表
+		callSelection.GET("/pending", callSelectionHandler.GetPendingCallSelections)
+		
+		// 获取用户的来电选择设置
+		callSelection.GET("/settings", callSelectionHandler.GetUserCallSelectionSettings)
+		callSelection.PUT("/settings", callSelectionHandler.UpdateCallSelectionSettings)
+		
+		// 来电详情和操作
+		callSelection.GET("/:callId", callSelectionHandler.GetPendingCallSelection)
+		callSelection.GET("/:callId/status", callSelectionHandler.GetCallSelectionStatus)
+		callSelection.GET("/:callId/available-schemes", callSelectionHandler.GetAvailableSchemesForCall)
+		callSelection.POST("/:callId/select", callSelectionHandler.SelectSchemeForCall)
+		callSelection.POST("/:callId/cancel", callSelectionHandler.CancelCallSelection)
 	}
 }

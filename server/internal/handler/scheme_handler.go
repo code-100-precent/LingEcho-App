@@ -38,6 +38,10 @@ type CreateSchemeRequest struct {
 	MessageDuration  int                       `json:"messageDuration"`
 	MessagePrompt    string                    `json:"messagePrompt"`
 	BoundPhoneNumber string                    `json:"boundPhoneNumber"`
+	ActivationMode     models.ActivationMode     `json:"activationMode"`
+	TimeSlots          models.TimeSlots          `json:"timeSlots"`
+	Priority           int                       `json:"priority"`
+	EnablePreSelection bool                      `json:"enablePreSelection"`
 }
 
 // UpdateSchemeRequest 更新方案请求
@@ -58,6 +62,10 @@ type UpdateSchemeRequest struct {
 	MessagePrompt    *string                   `json:"messagePrompt"`
 	BoundPhoneNumber *string                   `json:"boundPhoneNumber"`
 	Enabled          *bool                     `json:"enabled"`
+	ActivationMode     *models.ActivationMode    `json:"activationMode"`
+	TimeSlots          *models.TimeSlots         `json:"timeSlots"`
+	Priority           *int                      `json:"priority"`
+	EnablePreSelection *bool                     `json:"enablePreSelection"`
 }
 
 // ListSchemes 获取方案列表
@@ -165,6 +173,10 @@ func (h *SchemeHandler) CreateScheme(c *gin.Context) {
 		MessagePrompt:    req.MessagePrompt,
 		BoundPhoneNumber: req.BoundPhoneNumber,
 		Enabled:          true,
+		ActivationMode:     req.ActivationMode,
+		TimeSlots:          req.TimeSlots,
+		Priority:           req.Priority,
+		EnablePreSelection: req.EnablePreSelection,
 	}
 
 	// 设置默认值
@@ -173,6 +185,9 @@ func (h *SchemeHandler) CreateScheme(c *gin.Context) {
 	}
 	if scheme.RecordingMode == "" {
 		scheme.RecordingMode = models.RecordingModeFull
+	}
+	if scheme.ActivationMode == "" {
+		scheme.ActivationMode = models.ActivationModeManual
 	}
 
 	if err := models.CreateSipUser(h.db, scheme); err != nil {
@@ -272,6 +287,18 @@ func (h *SchemeHandler) UpdateScheme(c *gin.Context) {
 	}
 	if req.Enabled != nil {
 		scheme.Enabled = *req.Enabled
+	}
+	if req.ActivationMode != nil {
+		scheme.ActivationMode = *req.ActivationMode
+	}
+	if req.TimeSlots != nil {
+		scheme.TimeSlots = *req.TimeSlots
+	}
+	if req.Priority != nil {
+		scheme.Priority = *req.Priority
+	}
+	if req.EnablePreSelection != nil {
+		scheme.EnablePreSelection = *req.EnablePreSelection
 	}
 
 	if err := models.UpdateSipUser(h.db, scheme); err != nil {
@@ -413,6 +440,121 @@ func (h *SchemeHandler) DeactivateScheme(c *gin.Context) {
 	response.Success(c, "方案已停用", map[string]interface{}{
 		"id": schemeID,
 	})
+}
+
+// InitDefaultSchemes 初始化默认的三个代接方案
+// @Summary 初始化默认代接方案（工作模式、休闲模式、休息模式）
+// @Tags Scheme
+// @Accept json
+// @Produce json
+// @Security BearerAuth
+// @Success 200 {object} response.Response{data=[]models.SipUser}
+// @Router /api/schemes/init-defaults [post]
+func (h *SchemeHandler) InitDefaultSchemes(c *gin.Context) {
+	user := models.CurrentUser(c)
+	if user == nil {
+		response.Fail(c, "未授权", "请先登录")
+		return
+	}
+
+	// 检查用户是否已有方案
+	existingSchemes, err := models.GetSipUsersByUserID(h.db, user.ID)
+	if err == nil && len(existingSchemes) > 0 {
+		response.Fail(c, "已存在方案", "您已经创建了代接方案，无需初始化")
+		return
+	}
+
+	// 创建默认方案
+	defaultSchemes := []models.SipUser{
+		{
+			SchemeName:       "工作模式",
+			Description:      "工作日的9点-18点自动启用",
+			Username:         generateSchemeUsername(user.ID),
+			UserID:           &user.ID,
+			AutoAnswer:       true,
+			AutoAnswerDelay:  0,
+			RecordingEnabled: true,
+			RecordingMode:    models.RecordingModeFull,
+			MessageEnabled:   true,
+			MessageDuration:  20,
+			Enabled:          true,
+			ActivationMode:   models.ActivationModeAuto,
+			Priority:         3,
+			TimeSlots: models.TimeSlots{
+				{
+					DayType:   models.DayTypeWeekday,
+					StartTime: "09:00",
+					EndTime:   "18:00",
+				},
+			},
+		},
+		{
+			SchemeName:       "休闲模式",
+			Description:      "工作日的18点-22点和休息日的9点-18点自动启用",
+			Username:         generateSchemeUsername(user.ID),
+			UserID:           &user.ID,
+			AutoAnswer:       true,
+			AutoAnswerDelay:  0,
+			RecordingEnabled: true,
+			RecordingMode:    models.RecordingModeFull,
+			MessageEnabled:   true,
+			MessageDuration:  20,
+			Enabled:          true,
+			ActivationMode:   models.ActivationModeAuto,
+			Priority:         2,
+			TimeSlots: models.TimeSlots{
+				{
+					DayType:   models.DayTypeWeekday,
+					StartTime: "18:00",
+					EndTime:   "22:00",
+				},
+				{
+					DayType:   models.DayTypeWeekend,
+					StartTime: "09:00",
+					EndTime:   "18:00",
+				},
+			},
+		},
+		{
+			SchemeName:       "休息模式",
+			Description:      "所有天的22点-24点和0点-9点自动启用",
+			Username:         generateSchemeUsername(user.ID),
+			UserID:           &user.ID,
+			AutoAnswer:       true,
+			AutoAnswerDelay:  0,
+			RecordingEnabled: true,
+			RecordingMode:    models.RecordingModeFull,
+			MessageEnabled:   true,
+			MessageDuration:  20,
+			Enabled:          true,
+			ActivationMode:   models.ActivationModeAuto,
+			Priority:         1,
+			TimeSlots: models.TimeSlots{
+				{
+					DayType:   models.DayTypeAll,
+					StartTime: "22:00",
+					EndTime:   "23:59",
+				},
+				{
+					DayType:   models.DayTypeAll,
+					StartTime: "00:00",
+					EndTime:   "09:00",
+				},
+			},
+		},
+	}
+
+	// 批量创建方案
+	createdSchemes := make([]models.SipUser, 0, len(defaultSchemes))
+	for i := range defaultSchemes {
+		if err := models.CreateSipUser(h.db, &defaultSchemes[i]); err != nil {
+			response.Fail(c, "创建默认方案失败", err.Error())
+			return
+		}
+		createdSchemes = append(createdSchemes, defaultSchemes[i])
+	}
+
+	response.Success(c, "默认方案创建成功", createdSchemes)
 }
 
 // GetActiveScheme 获取当前激活的方案
