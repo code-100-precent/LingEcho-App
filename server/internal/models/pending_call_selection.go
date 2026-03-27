@@ -79,9 +79,26 @@ func GetPendingCallSelectionsByUserID(db *gorm.DB, userID uint, status string) (
 	return selections, err
 }
 
+// GetPendingCallSelectionByID 根据ID获取待选择记录
+func GetPendingCallSelectionByID(db *gorm.DB, id uint) (*PendingCallSelection, error) {
+	var selection PendingCallSelection
+	err := db.First(&selection, id).Error
+	if err != nil {
+		return nil, err
+	}
+	return &selection, nil
+}
+
 // UpdatePendingCallSelection 更新待选择记录
 func UpdatePendingCallSelection(db *gorm.DB, selection *PendingCallSelection) error {
 	return db.Save(selection).Error
+}
+
+// UpdatePendingCallSelectionStatus 更新待选择记录状态
+func UpdatePendingCallSelectionStatus(db *gorm.DB, id uint, status string) error {
+	return db.Model(&PendingCallSelection{}).
+		Where("id = ?", id).
+		Update("status", status).Error
 }
 
 // SelectSchemeForCall 为来电选择方案

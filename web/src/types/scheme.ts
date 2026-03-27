@@ -31,6 +31,9 @@ export interface Scheme {
   // 绑定号码
   boundPhoneNumber?: string
   
+  // 接通前方案选择
+  enablePreSelection?: boolean
+  
   // 状态
   isActive: boolean
   enabled: boolean
@@ -64,6 +67,7 @@ export interface CreateSchemeRequest {
   messageDuration: number
   messagePrompt?: string
   boundPhoneNumber?: string
+  enablePreSelection?: boolean
 }
 
 export interface UpdateSchemeRequest extends Partial<CreateSchemeRequest> {

@@ -268,6 +268,29 @@ const SchemeForm = ({ scheme, onSuccess, onCancel }: SchemeFormProps) => {
         )}
       </div>
 
+      {/* Call Handling Configuration */}
+      <div className="space-y-4">
+        <h3 className="text-lg font-semibold text-foreground">来电处理</h3>
+        
+        <div className="flex items-start gap-3">
+          <input
+            type="checkbox"
+            id="enablePreSelection"
+            className="w-4 h-4 mt-0.5 rounded border-input text-primary focus:ring-2 focus:ring-ring"
+            checked={formData.enablePreSelection || false}
+            onChange={(e) => setFormData({ ...formData, enablePreSelection: e.target.checked })}
+          />
+          <div className="flex-1">
+            <label htmlFor="enablePreSelection" className="text-sm font-medium text-foreground cursor-pointer">
+              启用接通前方案选择
+            </label>
+            <p className="mt-1 text-xs text-muted-foreground">
+              启用后，来电时会弹窗让您选择使用哪个方案代接（8秒内选择）
+            </p>
+          </div>
+        </div>
+      </div>
+
       {/* AI Response Configuration */}
       <div className="space-y-4">
         <h3 className="text-lg font-semibold text-foreground">AI回复配置</h3>

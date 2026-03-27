@@ -3,6 +3,7 @@ package sip
 import (
 	"context"
 	"encoding/binary"
+	"encoding/json"
 	"fmt"
 	"log"
 	"net"
@@ -1149,6 +1150,91 @@ func (as *SipServer) handleInvite(req *sip.Request, tx sip.ServerTransaction) {
 			"call_id": callID,
 			"error":   err,
 		}).Warn("Failed to check AI auto-answer")
+	}
+
+	// 检查是否启用了接通前方案选择
+	if sipUser != nil && sipUser.EnablePreSelection {
+		logrus.WithFields(logrus.Fields{
+			"call_id":     callID,
+			"sip_user_id": sipUser.ID,
+			"scheme_name": sipUser.SchemeName,
+		}).Info("🔔 接通前方案选择已启用，创建待选择记录")
+
+		// 获取主叫和被叫信息
+		var callerNumber, calledNumber, callerIP, callerURI string
+		if from := req.From(); from != nil {
+			callerNumber = from.Address.User
+			callerURI = from.Address.String()
+		}
+		if to := req.To(); to != nil {
+			calledNumber = to.Address.User
+		}
+		if via := req.Via(); via != nil {
+			callerIP = via.Host
+		}
+
+		// 查询该号码绑定的所有可用方案
+		// 支持多种号码格式：原始号码、+86前缀、86前缀
+		var availableSchemes []models.SipUser
+		phoneVariants := []string{
+			calledNumber,                // 原始号码，如 18358932557
+			"+86" + calledNumber,        // +86前缀，如 +8618358932557
+			"86" + calledNumber,         // 86前缀，如 8618358932557
+		}
+		
+		if err := as.db.Where("bound_phone_number IN (?) AND enabled = ?", phoneVariants, true).Find(&availableSchemes).Error; err != nil {
+			logrus.WithError(err).Error("Failed to query available schemes")
+		}
+		
+		logrus.WithFields(logrus.Fields{
+			"called_number":     calledNumber,
+			"phone_variants":    phoneVariants,
+			"schemes_found":     len(availableSchemes),
+		}).Info("查询绑定号码的可用方案")
+
+		// 构建可用方案ID列表
+		var schemeIDs []uint
+		for _, scheme := range availableSchemes {
+			schemeIDs = append(schemeIDs, scheme.ID)
+		}
+		availableSchemeIDsJSON, _ := json.Marshal(schemeIDs)
+
+		// 创建待选择记录
+		pendingSelection := &models.PendingCallSelection{
+			CallID:             callID,
+			CallerNumber:       callerNumber,
+			CalledNumber:       calledNumber,
+			CallerIP:           callerIP,
+			CallerURI:          callerURI,
+			UserID:             *sipUser.UserID,
+			Status:             "pending",
+			SelectTimeout:      time.Now().Add(8 * time.Second),
+			AvailableSchemeIDs: string(availableSchemeIDsJSON),
+		}
+
+		if err := models.CreatePendingCallSelection(as.db, pendingSelection); err != nil {
+			logrus.WithError(err).Error("Failed to create pending call selection")
+			// 如果创建失败，继续正常流程
+		} else {
+			logrus.WithFields(logrus.Fields{
+				"call_id":           callID,
+				"pending_selection": pendingSelection.ID,
+				"timeout":           pendingSelection.SelectTimeout,
+			}).Info("✅ 待选择记录已创建")
+
+			// 发送 180 Ringing 而不是 200 OK
+			// 给用户 8 秒时间选择方案
+			ringingRes := sip.NewResponseFromRequest(req, sip.StatusRinging, "Ringing", nil)
+			if err := tx.Respond(ringingRes); err != nil {
+				logrus.WithError(err).Error("Failed to send 180 Ringing")
+			} else {
+				logrus.WithField("call_id", callID).Info("📞 已发送 180 Ringing，等待用户选择方案")
+			}
+
+			// 启动轮询机制监听用户选择
+			go as.monitorCallSelection(req, tx, callID, pendingSelection.ID, clientRTPAddr, serverIP)
+			return
+		}
 	}
 
 	// 根据 AI 检查结果决定保存的地址格式

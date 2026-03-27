@@ -27,6 +27,7 @@ interface IncomingCallModalProps {
   calledNumber: string;
   onClose: () => void;
   onSchemeSelected: (schemeId: number) => void;
+  mockSchemes?: Scheme[]; // 可选的模拟方案数据，用于测试
 }
 
 const IncomingCallModal: React.FC<IncomingCallModalProps> = ({
@@ -36,6 +37,7 @@ const IncomingCallModal: React.FC<IncomingCallModalProps> = ({
   calledNumber,
   onClose,
   onSchemeSelected,
+  mockSchemes,
 }) => {
   const [schemes, setSchemes] = useState<Scheme[]>([]);
   const [selectedSchemeId, setSelectedSchemeId] = useState<number | null>(null);
@@ -46,19 +48,31 @@ const IncomingCallModal: React.FC<IncomingCallModalProps> = ({
   // 加载可用方案
   useEffect(() => {
     if (visible && callId) {
-      loadSchemes();
+      // 如果提供了模拟数据，直接使用
+      if (mockSchemes && mockSchemes.length > 0) {
+        setSchemes(mockSchemes);
+        const activeScheme = mockSchemes.find((s) => s.isActive);
+        if (activeScheme) {
+          setSelectedSchemeId(activeScheme.id);
+        }
+      } else {
+        loadSchemes();
+      }
     }
-  }, [visible, callId]);
+  }, [visible, callId, mockSchemes]);
 
   const loadSchemes = async () => {
     try {
       const response = await getAvailableSchemesForCall(callId);
-      if (response.code === 0) {
+      console.log('加载方案列表响应:', response);
+      if (response.code === 200) {
         setSchemes(response.data || []);
+        console.log('设置方案列表:', response.data);
         // 默认选中当前激活的方案
         const activeScheme = response.data?.find((s) => s.isActive);
         if (activeScheme) {
           setSelectedSchemeId(activeScheme.id);
+          console.log('默认选中方案:', activeScheme.id);
         }
       }
     } catch (error: any) {
@@ -70,10 +84,28 @@ const IncomingCallModal: React.FC<IncomingCallModalProps> = ({
   useEffect(() => {
     if (!visible || !callId) return;
 
+    // 如果使用模拟数据，只做倒计时，不调用 API
+    if (mockSchemes && mockSchemes.length > 0) {
+      let seconds = 8;
+      const timer = setInterval(() => {
+        seconds -= 1;
+        setRemainingSeconds(seconds);
+        
+        if (seconds <= 0) {
+          clearInterval(timer);
+          setIsTimeout(true);
+          console.log('模拟倒计时结束');
+        }
+      }, 1000);
+      
+      return () => clearInterval(timer);
+    }
+
+    // 真实模式：调用 API 轮询状态
     const timer = setInterval(async () => {
       try {
         const response = await getCallSelectionStatus(callId);
-        if (response.code === 0) {
+        if (response.code === 200) {
           const { remainingSeconds: remaining, isTimeout: timeout, status } = response.data;
 
           setRemainingSeconds(remaining);
@@ -94,7 +126,7 @@ const IncomingCallModal: React.FC<IncomingCallModalProps> = ({
     }, 1000);
 
     return () => clearInterval(timer);
-  }, [visible, callId, onClose]);
+  }, [visible, callId, onClose, mockSchemes]);
 
   // 选择方案
   const handleSelectScheme = async () => {
@@ -105,7 +137,7 @@ const IncomingCallModal: React.FC<IncomingCallModalProps> = ({
     setLoading(true);
     try {
       const response = await selectSchemeForCall(callId, selectedSchemeId);
-      if (response.code === 0) {
+      if (response.code === 200) {
         onSchemeSelected(selectedSchemeId);
         onClose();
       }
@@ -137,16 +169,14 @@ const IncomingCallModal: React.FC<IncomingCallModalProps> = ({
         <View style={styles.container}>
           {/* 头部 */}
           <View style={styles.header}>
-            <View style={styles.headerContent}>
-              <View style={styles.iconContainer}>
-                <Feather name="phone-call" size={24} color="#fff" />
-              </View>
-              <View style={styles.headerText}>
+            <View style={styles.headerLeft}>
+              <Feather name="phone-call" size={24} color="#fff" style={styles.headerIcon} />
+              <View>
                 <Text style={styles.title}>来电提醒</Text>
                 <Text style={styles.subtitle}>请选择代接方案</Text>
               </View>
             </View>
-            <TouchableOpacity onPress={handleCancel} style={styles.closeButton}>
+            <TouchableOpacity onPress={handleCancel}>
               <Feather name="x" size={24} color="#fff" />
             </TouchableOpacity>
           </View>
@@ -167,74 +197,64 @@ const IncomingCallModal: React.FC<IncomingCallModalProps> = ({
           <View style={[styles.countdown, remainingSeconds <= 3 && styles.countdownUrgent]}>
             <Feather
               name="clock"
-              size={20}
+              size={18}
               color={remainingSeconds <= 3 ? '#ef4444' : '#f59e0b'}
             />
-            <Text
-              style={[
-                styles.countdownText,
-                remainingSeconds <= 3 && styles.countdownTextUrgent,
-              ]}
-            >
-              剩余时间: {remainingSeconds} 秒
+            <Text style={[styles.countdownText, remainingSeconds <= 3 && styles.countdownTextUrgent]}>
+              剩余 {remainingSeconds} 秒
             </Text>
           </View>
-          {remainingSeconds <= 3 && (
-            <Text style={styles.urgentHint}>请尽快选择方案！</Text>
-          )}
 
-          {/* 方案列表 */}
-          <View style={styles.schemesContainer}>
-            <Text style={styles.schemesTitle}>选择代接方案:</Text>
-            <ScrollView style={styles.schemesList} showsVerticalScrollIndicator={false}>
-              {schemes.length === 0 ? (
-                <View style={styles.emptyState}>
-                  <Text style={styles.emptyText}>暂无可用方案</Text>
-                </View>
-              ) : (
-                schemes.map((scheme) => (
+          {/* 方案列表标题 */}
+          <View style={styles.schemesHeader}>
+            <Text style={styles.schemesTitle}>选择方案 ({schemes.length})</Text>
+          </View>
+
+          {/* 方案列表 - 使用固定高度的ScrollView */}
+          <View style={styles.schemesWrapper}>
+            {schemes.length === 0 ? (
+              <View style={styles.emptyState}>
+                <Text style={styles.emptyText}>暂无可用方案</Text>
+              </View>
+            ) : (
+              <ScrollView 
+                style={styles.schemesList}
+                contentContainerStyle={styles.schemesContent}
+                showsVerticalScrollIndicator={true}
+              >
+                {schemes.map((scheme) => (
                   <TouchableOpacity
                     key={scheme.id}
-                    onPress={() => setSelectedSchemeId(scheme.id)}
+                    onPress={() => {
+                      console.log('选择方案:', scheme.id, scheme.schemeName);
+                      setSelectedSchemeId(scheme.id);
+                    }}
                     style={[
                       styles.schemeCard,
                       selectedSchemeId === scheme.id && styles.schemeCardSelected,
                     ]}
+                    activeOpacity={0.7}
                   >
                     <View style={styles.schemeContent}>
                       <View style={styles.schemeInfo}>
-                        <View style={styles.schemeHeader}>
-                          <Text style={styles.schemeName}>{scheme.schemeName}</Text>
-                          {scheme.isActive && (
-                            <View style={styles.activeBadge}>
-                              <Text style={styles.activeBadgeText}>当前激活</Text>
-                            </View>
-                          )}
-                        </View>
+                        <Text style={styles.schemeName}>{scheme.schemeName}</Text>
                         {scheme.description && (
                           <Text style={styles.schemeDescription}>{scheme.description}</Text>
                         )}
-                        {scheme.boundPhoneNumber && (
-                          <Text style={styles.schemePhone}>
-                            绑定号码: {scheme.boundPhoneNumber}
-                          </Text>
-                        )}
                       </View>
-                      <View
-                        style={[
-                          styles.radio,
-                          selectedSchemeId === scheme.id && styles.radioSelected,
-                        ]}
-                      >
+                      <View style={[
+                        styles.radio,
+                        selectedSchemeId === scheme.id && styles.radioSelected,
+                      ]}>
                         {selectedSchemeId === scheme.id && (
                           <View style={styles.radioDot} />
                         )}
                       </View>
                     </View>
                   </TouchableOpacity>
-                ))
-              )}
-            </ScrollView>
+                ))}
+              </ScrollView>
+            )}
           </View>
 
           {/* 底部按钮 */}
@@ -271,71 +291,59 @@ const IncomingCallModal: React.FC<IncomingCallModalProps> = ({
 const styles = StyleSheet.create({
   overlay: {
     flex: 1,
-    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    backgroundColor: 'rgba(0, 0, 0, 0.6)',
     justifyContent: 'center',
     alignItems: 'center',
-    padding: 16,
+    padding: 20,
   },
   container: {
     backgroundColor: '#fff',
-    borderRadius: 12,
+    borderRadius: 16,
     width: '100%',
-    maxWidth: 400,
-    maxHeight: '90%',
+    maxWidth: 420,
+    overflow: 'hidden',
   },
   header: {
     backgroundColor: '#3b82f6',
-    borderTopLeftRadius: 12,
-    borderTopRightRadius: 12,
     padding: 20,
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
   },
-  headerContent: {
+  headerLeft: {
     flexDirection: 'row',
     alignItems: 'center',
     flex: 1,
   },
-  iconContainer: {
-    backgroundColor: 'rgba(255, 255, 255, 0.2)',
-    padding: 12,
-    borderRadius: 50,
+  headerIcon: {
     marginRight: 12,
-  },
-  headerText: {
-    flex: 1,
   },
   title: {
     fontSize: 18,
-    fontWeight: '600',
+    fontWeight: '700',
     color: '#fff',
   },
   subtitle: {
-    fontSize: 14,
-    color: 'rgba(255, 255, 255, 0.8)',
+    fontSize: 13,
+    color: 'rgba(255, 255, 255, 0.9)',
     marginTop: 2,
   },
-  closeButton: {
-    padding: 8,
-  },
   callInfo: {
-    padding: 20,
-    borderBottomWidth: 1,
-    borderBottomColor: '#e5e7eb',
+    padding: 16,
+    backgroundColor: '#f9fafb',
   },
   infoRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: 8,
+    marginBottom: 6,
   },
   infoLabel: {
-    fontSize: 14,
+    fontSize: 13,
     color: '#6b7280',
   },
   infoValue: {
-    fontSize: 16,
+    fontSize: 15,
     fontWeight: '600',
     color: '#111827',
   },
@@ -343,58 +351,60 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    padding: 12,
+    padding: 10,
     backgroundColor: '#fef3c7',
-    borderBottomWidth: 1,
-    borderBottomColor: '#fde68a',
   },
   countdownUrgent: {
     backgroundColor: '#fee2e2',
-    borderBottomColor: '#fecaca',
   },
   countdownText: {
-    fontSize: 14,
+    fontSize: 13,
     fontWeight: '600',
     color: '#92400e',
-    marginLeft: 8,
+    marginLeft: 6,
   },
   countdownTextUrgent: {
     color: '#991b1b',
   },
-  urgentHint: {
-    textAlign: 'center',
-    fontSize: 12,
-    color: '#ef4444',
-    paddingVertical: 4,
-    backgroundColor: '#fee2e2',
-  },
-  schemesContainer: {
-    padding: 20,
-    flex: 1,
+  schemesHeader: {
+    paddingHorizontal: 16,
+    paddingTop: 16,
+    paddingBottom: 8,
+    backgroundColor: '#fff',
   },
   schemesTitle: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: '#374151',
-    marginBottom: 12,
+    fontSize: 15,
+    fontWeight: '700',
+    color: '#111827',
+  },
+  schemesWrapper: {
+    height: 240,
+    backgroundColor: '#fff',
   },
   schemesList: {
-    maxHeight: 300,
+    flex: 1,
+    paddingHorizontal: 16,
+  },
+  schemesContent: {
+    paddingBottom: 8,
   },
   emptyState: {
-    paddingVertical: 40,
+    flex: 1,
+    justifyContent: 'center',
     alignItems: 'center',
+    paddingVertical: 60,
   },
   emptyText: {
     fontSize: 14,
     color: '#9ca3af',
   },
   schemeCard: {
+    backgroundColor: '#fff',
     borderWidth: 2,
     borderColor: '#e5e7eb',
-    borderRadius: 8,
-    padding: 16,
-    marginBottom: 12,
+    borderRadius: 10,
+    padding: 14,
+    marginBottom: 10,
   },
   schemeCardSelected: {
     borderColor: '#3b82f6',
@@ -409,37 +419,15 @@ const styles = StyleSheet.create({
     flex: 1,
     marginRight: 12,
   },
-  schemeHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginBottom: 4,
-  },
   schemeName: {
     fontSize: 16,
     fontWeight: '600',
     color: '#111827',
-    marginRight: 8,
-  },
-  activeBadge: {
-    backgroundColor: '#d1fae5',
-    paddingHorizontal: 8,
-    paddingVertical: 2,
-    borderRadius: 12,
-  },
-  activeBadgeText: {
-    fontSize: 11,
-    color: '#065f46',
-    fontWeight: '500',
+    marginBottom: 4,
   },
   schemeDescription: {
-    fontSize: 14,
+    fontSize: 13,
     color: '#6b7280',
-    marginTop: 4,
-  },
-  schemePhone: {
-    fontSize: 12,
-    color: '#9ca3af',
-    marginTop: 4,
   },
   radio: {
     width: 20,
@@ -462,10 +450,8 @@ const styles = StyleSheet.create({
   },
   footer: {
     flexDirection: 'row',
-    padding: 20,
+    padding: 16,
     backgroundColor: '#f9fafb',
-    borderBottomLeftRadius: 12,
-    borderBottomRightRadius: 12,
     gap: 12,
   },
   button: {

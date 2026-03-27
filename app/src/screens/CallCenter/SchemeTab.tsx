@@ -471,6 +471,28 @@ const SchemeTab: React.FC = () => {
                 </View>
               )}
 
+              {/* 接通前方案选择 */}
+              <Text style={styles.sectionTitle}>来电处理</Text>
+              
+              <TouchableOpacity
+                style={styles.checkboxContainer}
+                onPress={() =>
+                  setFormData({ ...formData, enablePreSelection: !formData.enablePreSelection })
+                }
+              >
+                <View
+                  style={[styles.checkbox, formData.enablePreSelection && styles.checkboxChecked]}
+                >
+                  {formData.enablePreSelection && <Feather name="check" size={14} color="#ffffff" />}
+                </View>
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.checkboxLabel}>启用接通前方案选择</Text>
+                  <Text style={styles.hint}>
+                    启用后，来电时会弹窗让您选择使用哪个方案代接（8秒内选择）
+                  </Text>
+                </View>
+              </TouchableOpacity>
+
               {/* AI回复配置 */}
               <Text style={styles.sectionTitle}>AI回复配置</Text>
               
